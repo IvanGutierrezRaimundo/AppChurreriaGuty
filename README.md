@@ -1,6 +1,6 @@
 # App Churrería Guty
 
-Formulario y gestion de pedidos , junto con otras herramientas, HTML/JS con servidor Express y persistencia en MySQL.
+Gestion de pedidos (formulario) y otras herramientas, HTML/JS con servidor Express y persistencia en MySQL.
 
 ## Requisitos
 
