@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Iniciar sesión</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 0; padding: 2rem; background: #f5f6f8; }
+    .card { max-width: 360px; margin: 10vh auto; background: #fff; border-radius: 12px; padding: 1.5rem; box-shadow: 0 6px 24px rgba(0,0,0,.08); }
+    h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+    label { display: block; font-size: .9rem; margin: .5rem 0 .25rem; }
+    input { width: 100%; padding: .6rem .7rem; border: 1px solid #ccd; border-radius: 8px; }
+    button { margin-top: 1rem; width: 100%; padding: .7rem; border: 0; border-radius: 8px; background: #111827; color: #fff; font-weight: 600; cursor: pointer; }
+    .error { color: #b91c1c; margin-top: .5rem; min-height: 1.2rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Panel de administrador</h1>
+    <form id="loginForm">
+      <label>Usuario</label>
+      <input name="username" autocomplete="username" />
+      <label>Contraseña</label>
+      <input name="password" type="password" autocomplete="current-password" />
+      <button type="submit">Entrar</button>
+      <div id="error" class="error"></div>
+    </form>
+  </div>
+  <script>
+    const form = document.getElementById('loginForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const payload = {
+        username: fd.get('username'),
+        password: fd.get('password'),
+      };
+      const res = await fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.ok) {
+        location.href = '/admin';
+      } else {
+        document.getElementById('error').textContent = data.error || 'Error';
+      }
+    });
+  </script>
+</body>
+</html>

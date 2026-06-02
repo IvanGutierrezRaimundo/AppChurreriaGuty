@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Detalle Pedido</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .admin-bar{ max-width: 1200px; margin: 0 auto var(--space-lg); display:flex; flex-direction:column; align-items:center; gap:16px; }
+    .admin-title{ display:flex; flex-direction:column; flex:1; align-items:center; justify-content:flex-start; gap:12px; text-align:center; }
+    .admin-title h1{ max-width:none; margin:0; }
+    .pedido-subtitle{
+      font-size: clamp(1.05rem, 1.7vw, 1.3rem);
+      font-weight: 600;
+      color: var(--color-muted);
+      margin-top: 4px;
+      white-space: nowrap;
+    }
+    .doc-wide{ max-width: 1200px; margin: 0 auto; }
+    .value{ font-weight: 400; color: var(--color-brown); }
+    .kv{ display:grid; gap: 12px; }
+    @media (min-width: 680px){
+      .admin-bar{ flex-direction:row; align-items:center; justify-content: space-between; gap:0; }
+      .admin-title{ flex-direction:row; align-items:center; justify-content:flex-start; gap:48px; text-align:left; }
+      .back-mobile{ display:none; }
+      .kv.grid-2{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 24px;
+        row-gap: 12px;
+      }
+    }
+    @media (min-width: 1024px){
+      .kv.grid-2{
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    .back-actions{ display:none; gap:12px; }
+    .back-mobile{
+      align-self:flex-start;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 4px 8px;
+      font-size: 1.4rem;
+      line-height: 1;
+      color: var(--color-brown);
+    }
+    @media (min-width: 680px){
+      .back-actions{ display:flex; gap:12px; }
+    }
+    .actions-row{ display:flex; gap:12px; align-items:center; }
+    fieldset > .actions-row{ margin-top: 8px; }
+    .field {
+      border: 1px solid var(--color-border);
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      background: #FFF;
+    }
+    .field > label {
+      font-weight: 700;
+      display: block;
+      margin-bottom: 8px;
+    }
+    .pedido-estado-badge{
+      display:inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      border: 1px solid transparent;
+    }
+    .pedido-estado-pendiente{
+      background: var(--color-primary);
+      border-color: var(--color-primary);
+      color: var(--color-brown);
+    }
+    .pedido-estado-realizado{
+      background: #DCFCE7;
+      border-color: #16A34A;
+      color: #166534;
+    }
+    .pedido-estado-cobrado{
+      background: #DBEAFE;
+      border-color: #2563EB;
+      color: #1D4ED8;
+    }
+    .pedido-estado-cancelado{
+      background: #FEE2E2;
+      border-color: #DC2626;
+      color: #B91C1C;
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-bar">
+    <button type="button" id="backBtnMobile" class="back-mobile" aria-label="Volver">←</button>
+    <div class="admin-title">
+      <h1 id="title">Pedido</h1>
+      <span id="pedidoNombre" class="pedido-subtitle"></span>
+      <span id="estadoHeader" class="pedido-subtitle"></span>
+    </div>
+    <div class="back-actions">
+        <button type="button" id="backBtn" class="back-desktop">Volver</button>
+        <button type="button" id="exportOne" title="Exportar CSV de todos">Exportar CSV</button>
+    </div>
+  </div>
+
+  <div class="doc doc-wide">
+    <fieldset>
+      <legend>Estado</legend>
+      <div class="kv grid-2">
+        <div class="field"><label>Estado</label><div id="f_estado"></div></div>
+        <div class="actions-row">
+          <button id="editEstado">Editar</button>
+        </div>
+        <div id="estadoEditor" class="kv" style="display:none;">
+          <div class="field">
+            <label>Cambiar estado</label>
+            <select id="estado_input">
+              <option value="Pendiente">Pendiente</option>
+              <option value="Realizado">Realizado</option>
+              <option value="Cobrado">Cobrado</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+          </div>
+          <div class="actions-row">
+            <button id="saveEstado">Guardar</button>
+            <button id="cancelEstado">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Resumen</legend>
+      <div class="kv grid-2">
+        <div class="field"><label>ID</label><div id="f_id" class="mono"></div></div>
+        <div class="field"><label>Total presupuesto</label><div id="f_presupuesto_total" class="value"></div></div>
+        <div class="field"><label>Fecha</label><div id="f_fecha"></div></div>
+        <div class="field"><label>Hora</label><div id="f_hora"></div></div>
+      </div>
+      <div class="actions-row">
+        <button id="editResumen">Editar</button>
+      </div>
+      <div id="resumenEditor" class="kv grid-2" style="display:none;">
+        <div class="field"><label>Fecha</label><input id="fecha_input" type="date" /></div>
+        <div class="field"><label>Hora</label><input id="hora_input" type="time" /></div>
+        <div class="actions-row">
+          <button id="saveResumen">Guardar</button>
+          <button id="cancelResumen">Cancelar</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cliente</legend>
+      <div class="kv grid-2">
+        <div class="field"><label>Nombre / Razón social</label><div id="f_nombre" class="value"></div></div>
+        <div class="field"><label>Teléfono</label><div id="f_telefono"></div></div>
+        <div class="field"><label>E-mail</label><div id="f_email"></div></div>
+        <div class="field"><label>Código Postal</label><div id="f_cp"></div></div>
+        <div class="field"><label>Dirección</label><div id="f_direccion"></div></div>
+        <div class="field"><label>Ciudad</label><div id="f_ciudad"></div></div>
+        <div class="field"><label>Provincia</label><div id="f_provincia"></div></div>
+        <div class="field"><label>NIF</label><div id="f_nif" class="mono"></div></div>
+        <div class="field"><label>¿Factura?</label><div id="f_solicita_factura"></div></div>
+      </div>
+      <div class="actions-row"><button id="editCliente">Editar</button></div>
+      <div id="clienteEditor" class="kv grid-2" style="display:none;">
+        <div class="field"><label>Nombre / Razón social</label><input id="nombre_input" /></div>
+        <div class="field"><label>Teléfono</label><input id="telefono_input" /></div>
+        <div class="field"><label>E-mail</label><input id="email_input" /></div>
+        <div class="field"><label>Código Postal</label><input id="cp_input" /></div>
+        <div class="field"><label>Dirección</label><input id="direccion_input" /></div>
+        <div class="field"><label>Ciudad</label><input id="ciudad_input" /></div>
+        <div class="field"><label>Provincia</label><input id="provincia_input" /></div>
+        <div class="field"><label>NIF</label><input id="nif_input" /></div>
+        <div class="field"><label>¿Factura?</label><input id="solicita_factura_input" type="checkbox" /></div>
+        <div class="actions-row">
+          <button id="saveCliente">Guardar</button>
+          <button id="cancelCliente">Cancelar</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cantidad</legend>
+      <div class="kv grid-2">
+        <div class="field"><label>Nº de personas</label><div id="f_personas"></div></div>
+        <div class="field"><label>Churros por persona</label><div id="f_churros_por_persona"></div></div>
+        <div class="field"><label>Chocolates</label><div id="f_chocolates"></div></div>
+      </div>
+      <div class="actions-row"><button id="editPedido">Editar</button></div>
+      <div id="pedidoEditor" class="kv grid-2" style="display:none;">
+        <div class="field"><label>Nº de personas</label><input id="personas_input" type="number" min="0" /></div>
+        <div class="field"><label>Churros por persona</label><input id="churros_input" type="number" min="2" max="12" /></div>
+        <div class="field"><label>Chocolates</label><input id="chocolates_input" type="number" min="0" /></div>
+        <div class="actions-row">
+          <button id="savePedido">Guardar</button>
+          <button id="cancelPedido">Cancelar</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Envío y pago</legend>
+      <div class="kv grid-2">
+        <div class="field"><label>¿Requiere envío?</label><div id="f_requiere_envio"></div></div>
+        <div class="field"><label>Dirección de entrega</label><div id="f_direccion_entrega"></div></div>
+        <div class="field"><label>Método de pago</label><div id="f_metodo_pago"></div></div>
+      </div>
+      <div class="actions-row"><button id="editEnvio">Editar</button></div>
+      <div id="envioEditor" class="kv grid-2" style="display:none;">
+        <div class="field"><label>¿Requiere envío?</label><input id="requiere_envio_input" type="checkbox" /></div>
+        <div class="field"><label>Dirección de entrega</label><input id="direccion_entrega_input" /></div>
+        <div class="field"><label>Método de pago</label><input id="metodo_pago_input" /></div>
+        <div class="actions-row">
+          <button id="saveEnvio">Guardar</button>
+          <button id="cancelEnvio">Cancelar</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Comentarios</legend>
+      <div class="kv">
+        <div class="field"><label>Notas</label><div id="f_comentarios"></div></div>
+        <div class="actions-row">
+          <button id="editComentarios">Editar</button>
+        </div>
+        <div id="comentariosEditor" class="kv" style="display:none;">
+          <div class="field"><label>Editar comentarios</label><textarea id="comentarios_edit" rows="4"></textarea></div>
+          <div class="actions-row">
+            <button id="saveComentarios">Guardar</button>
+            <button id="cancelEdit">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+    <div id="errorBox" class="mono" style="margin-top:12px;color:#b91c1c;"></div>
+
+    <fieldset>
+      <legend>Datos crudos (Debug)</legend>
+      <div class="kv">
+        <div class="field"><label>Fuente de datos</label><div id="data_source" class="mono"></div></div>
+        <div class="field"><label>JSON recibido</label><pre id="debug_json" class="mono" style="white-space: pre-wrap; word-break: break-all; background: #f4f4f4; padding: 8px; border-radius: 4px;"></pre></div>
+      </div>
+    </fieldset>
+
+  </div>
+
+  <script>
+    function getIdFromPath(){
+      const sp = new URLSearchParams(location.search);
+      const qs = sp.get('id');
+      if(qs && /^\d+$/.test(qs)) return Number(qs);
+      const parts = location.pathname.split('/').filter(Boolean);
+      const last = parts[parts.length - 1] || '';
+      if(/^\d+$/.test(last)) return Number(last);
+      return NaN;
+    }
+    function formatDate(value){
+      if(!value) return '';
+      try{
+        if(typeof value === 'string'){
+          let s = value; if(s.includes('T')) s = s.slice(0,10);
+          if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
+            const [y,m,d] = s.split('-');
+            return `${d}/${m}/${y}`;
+          }
+          const dt = new Date(value); if(!isNaN(dt)) return dt.toLocaleDateString('es-ES');
+        } else { const dt = new Date(value); if(!isNaN(dt)) return dt.toLocaleDateString('es-ES'); }
+      } catch(_){ }
+      return String(value);
+    }
+    function formatTime(value){
+      if(!value) return '';
+      const m = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(String(value));
+      return m ? `${m[1]}:${m[2]}` : String(value);
+    }
+    function applyEstadoHeader(estadoRaw){
+      const header = document.getElementById('estadoHeader');
+      if(!header) return;
+      const estado = estadoRaw || 'Pendiente';
+      header.textContent = estado;
+      header.classList.remove(
+        'pedido-estado-badge',
+        'pedido-estado-pendiente',
+        'pedido-estado-realizado',
+        'pedido-estado-cobrado',
+        'pedido-estado-cancelado'
+      );
+      header.classList.add('pedido-estado-badge');
+      switch(estado){
+        case 'Realizado':
+          header.classList.add('pedido-estado-realizado');
+          break;
+        case 'Cobrado':
+          header.classList.add('pedido-estado-cobrado');
+          break;
+        case 'Cancelado':
+          header.classList.add('pedido-estado-cancelado');
+          break;
+        case 'Pendiente':
+        default:
+          header.classList.add('pedido-estado-pendiente');
+          break;
+      }
+    }
+    const nf = new Intl.NumberFormat('es-ES', { style:'currency', currency:'EUR' });
+    async function fetchPedido(id){
+      try {
+        const r1 = await fetch(`/admin/api/pedidos/${id}`, { credentials: 'same-origin' });
+        if (r1.status === 401) { throw new Error('SESSION'); }
+        if (!r1.ok) { throw new Error(`HTTP ${r1.status}`); }
+        const d1 = await r1.json();
+        if (d1 && d1.ok && d1.data) return { data: d1.data, source: 'detalle' };
+        throw new Error(d1.error || 'Respuesta no válida desde API detalle');
+      } catch(e) {
+        const errorBox = document.getElementById('errorBox');
+        if(errorBox) errorBox.textContent = `Fallo al obtener detalle: ${e.message}. Usando fallback de listado.`;
+      }
+      const params = new URLSearchParams({ page: '1', pageSize: '500', sort: 'fecha', dir: 'desc' });
+      const rList = await fetch(`/admin/api/pedidos?${params.toString()}`, { credentials: 'same-origin' });
+      if(rList.status === 401){ throw new Error('SESSION'); }
+      const dList = await rList.json();
+      if(dList && dList.ok && Array.isArray(dList.data)){
+        const row = dList.data.find(x => Number(x.id) === Number(id));
+        if(row) return { data: row, source: 'listado' };
+      }
+      throw new Error('No encontrado');
+    }
+    let currentPedido = null;
+    async function load(){
+      const id = getIdFromPath();
+      if(!Number.isFinite(id)) { alert('ID inválido'); return; }
+      const errorBox = document.getElementById('errorBox');
+      errorBox.textContent = '';
+      try{
+        const res = await fetchPedido(id);
+        const r = res.data;
+        currentPedido = r;
+        document.getElementById('title').textContent = `Pedido #${r.id}`;
+        const headerNombre = document.getElementById('pedidoNombre');
+        if(headerNombre) headerNombre.textContent = r.nombre || '';
+        applyEstadoHeader(r.estado);
+        document.getElementById('f_id').textContent = String(r.id);
+        document.getElementById('f_presupuesto_total').textContent = typeof r.presupuesto_total !== 'undefined' ? nf.format(Number(r.presupuesto_total)) : '';
+        document.getElementById('f_fecha').textContent = formatDate(r.fecha);
+        document.getElementById('f_hora').textContent = formatTime(r.hora);
+        document.getElementById('f_estado').textContent = r.estado || 'Pendiente';
+        document.getElementById('f_nombre').textContent = r.nombre || '';
+        document.getElementById('f_telefono').textContent = r.telefono || '';
+        document.getElementById('f_email').textContent = r.email || '';
+        document.getElementById('f_cp').textContent = r.cp ?? '';
+        document.getElementById('f_direccion').textContent = r.direccion ?? '';
+        document.getElementById('f_ciudad').textContent = r.ciudad ?? '';
+        document.getElementById('f_provincia').textContent = r.provincia ?? '';
+        document.getElementById('f_nif').textContent = r.nif ?? '';
+        document.getElementById('f_solicita_factura').textContent = r.solicita_factura ? 'Sí' : 'No';
+        document.getElementById('data_source').textContent = res.source;
+        document.getElementById('debug_json').textContent = JSON.stringify(r, null, 2);
+        document.getElementById('f_personas').textContent = (typeof r.personas !== 'undefined' && r.personas !== null) ? String(r.personas) : '';
+        document.getElementById('f_churros_por_persona').textContent = (typeof r.churros_por_persona !== 'undefined' && r.churros_por_persona !== null) ? String(r.churros_por_persona) : '';
+        document.getElementById('f_chocolates').textContent = (typeof r.chocolates !== 'undefined' && r.chocolates !== null) ? String(r.chocolates) : '';
+        document.getElementById('f_requiere_envio').textContent = r.requiere_envio ? 'Sí' : 'No';
+        document.getElementById('f_direccion_entrega').textContent = r.direccion_entrega || '';
+        document.getElementById('f_metodo_pago').textContent = r.metodo_pago || '';
+        document.getElementById('f_comentarios').textContent = r.comentarios || '';
+      }catch(e){
+        if(e && e.message === 'SESSION'){
+          errorBox.textContent = 'Sesión inválida o caducada. Vuelve a iniciar sesión.';
+          setTimeout(() => { location.href = '/admin'; }, 1500);
+        } else {
+          errorBox.textContent = 'No encontrado o error cargando el pedido.';
+        }
+      }
+    }
+    document.getElementById('backBtn').addEventListener('click', () => { location.href = '/admin'; });
+    const backBtnMobile = document.getElementById('backBtnMobile');
+    if(backBtnMobile){ backBtnMobile.addEventListener('click', () => { location.href = '/admin'; }); }
+    document.getElementById('exportOne').addEventListener('click', () => { location.href = '/admin/api/export.csv'; });
+
+    const editEstado = document.getElementById('editEstado');
+    const estadoEditor = document.getElementById('estadoEditor');
+    const estadoInput = document.getElementById('estado_input');
+    const saveEstado = document.getElementById('saveEstado');
+    const cancelEstado = document.getElementById('cancelEstado');
+    editEstado.addEventListener('click', () => {
+      const current = (currentPedido?.estado || 'Pendiente');
+      estadoInput.value = current;
+      estadoEditor.style.display = 'grid';
+      editEstado.disabled = true;
+    });
+    cancelEstado.addEventListener('click', () => {
+      estadoEditor.style.display = 'none';
+      editEstado.disabled = false;
+    });
+    saveEstado.addEventListener('click', async () => {
+      const idText = document.getElementById('f_id').textContent || '';
+      const id = Number(idText);
+      if (!Number.isFinite(id)) return;
+      const estado = estadoInput.value;
+      saveEstado.disabled = true; cancelEstado.disabled = true;
+      try {
+        const resp = await fetch(`/admin/api/pedidos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ estado })
+        });
+        if (resp.status === 401) { throw new Error('SESSION'); }
+        const data = await resp.json();
+        if (data && data.ok) {
+          const r = data.data || { estado };
+          currentPedido.estado = r.estado || estado;
+          document.getElementById('f_estado').textContent = currentPedido.estado || 'Pendiente';
+          applyEstadoHeader(currentPedido.estado);
+          estadoEditor.style.display = 'none';
+          editEstado.disabled = false;
+          if ((data.changedRows ?? 1) === 0) {
+            document.getElementById('errorBox').textContent = 'Guardado sin cambios (mismo valor que en BD).';
+          }
+        } else {
+          document.getElementById('errorBox').textContent = data.error || 'No se pudo guardar el estado.';
+        }
+      } catch (e) {
+        if (e && e.message === 'SESSION') {
+          document.getElementById('errorBox').textContent = 'Sesión inválida o caducada. Vuelve a iniciar sesión.';
+          setTimeout(() => { location.href = '/admin'; }, 1200);
+        } else {
+          document.getElementById('errorBox').textContent = 'Error guardando estado.';
+        }
+      } finally {
+        saveEstado.disabled = false; cancelEstado.disabled = false;
+      }
+    });
+
+    const editBtn = document.getElementById('editComentarios');
+    const editorWrap = document.getElementById('comentariosEditor');
+    const ta = document.getElementById('comentarios_edit');
+    const saveBtn = document.getElementById('saveComentarios');
+    const cancelBtn = document.getElementById('cancelEdit');
+    editBtn.addEventListener('click', () => {
+      ta.value = (currentPedido?.comentarios || '');
+      editorWrap.style.display = 'grid';
+      editBtn.disabled = true;
+    });
+    cancelBtn.addEventListener('click', () => {
+      editorWrap.style.display = 'none';
+      editBtn.disabled = false;
+    });
+    saveBtn.addEventListener('click', async () => {
+      const idText = document.getElementById('f_id').textContent || '';
+      const id = Number(idText);
+      if(!Number.isFinite(id)) return;
+      const comentarios = ta.value;
+      saveBtn.disabled = true; cancelBtn.disabled = true;
+      try{
+        const resp = await fetch(`/admin/api/pedidos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ comentarios })
+        });
+        if(resp.status === 401){ throw new Error('SESSION'); }
+        const data = await resp.json();
+        if(data && data.ok){
+          const r = data.data || { comentarios };
+          currentPedido.comentarios = r.comentarios ?? comentarios;
+          document.getElementById('f_comentarios').textContent = currentPedido.comentarios || '';
+          editorWrap.style.display = 'none';
+          editBtn.disabled = false;
+          if((data.changedRows ?? 1) === 0){ document.getElementById('errorBox').textContent = 'Guardado sin cambios (mismo valor que en BD).'; }
+        } else {
+          document.getElementById('errorBox').textContent = data.error || 'No se pudo guardar los comentarios.';
+        }
+      } catch(e){
+        if(e && e.message === 'SESSION'){
+          document.getElementById('errorBox').textContent = 'Sesión inválida o caducada. Vuelve a iniciar sesión.';
+          setTimeout(() => { location.href = '/admin'; }, 1200);
+        } else {
+          document.getElementById('errorBox').textContent = 'Error guardando comentarios.';
+        }
+      } finally {
+        saveBtn.disabled = false; cancelBtn.disabled = false;
+      }
+    });
+
+    const editResumen = document.getElementById('editResumen');
+    const resumenEditor = document.getElementById('resumenEditor');
+    const fechaInput = document.getElementById('fecha_input');
+    const horaInput = document.getElementById('hora_input');
+    const saveResumen = document.getElementById('saveResumen');
+    const cancelResumen = document.getElementById('cancelResumen');
+    editResumen.addEventListener('click', () => {
+      fechaInput.value = (currentPedido?.fecha || '').toString().slice(0,10);
+      horaInput.value = (currentPedido?.hora || '');
+      resumenEditor.style.display = 'grid';
+      editResumen.disabled = true;
+    });
+    cancelResumen.addEventListener('click', () => { resumenEditor.style.display='none'; editResumen.disabled=false; });
+    saveResumen.addEventListener('click', async () => {
+      const id = Number(document.getElementById('f_id').textContent || ''); if(!Number.isFinite(id)) return;
+      const payload = {
+        fecha: (fechaInput.value || '').trim() || (currentPedido?.fecha || null),
+        hora: (horaInput.value || '').trim() || (currentPedido?.hora || null)
+      };
+      saveResumen.disabled = true; cancelResumen.disabled = true;
+      try{
+        const resp = await fetch(`/admin/api/pedidos/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify(payload) });
+        if(resp.status===401) throw new Error('SESSION');
+        const data = await resp.json();
+        if(data && data.ok){
+          const r = data.data || payload;
+          currentPedido.fecha = r.fecha ?? payload.fecha; currentPedido.hora = r.hora ?? payload.hora;
+          document.getElementById('f_fecha').textContent = formatDate(currentPedido.fecha);
+          document.getElementById('f_hora').textContent = formatTime(currentPedido.hora);
+          resumenEditor.style.display='none'; editResumen.disabled=false;
+          if((data.changedRows ?? 1) === 0){ document.getElementById('errorBox').textContent = 'Guardado sin cambios (mismo valor que en BD).'; }
+        } else { document.getElementById('errorBox').textContent = data.error || 'No se pudo guardar.'; }
+      } catch(e){ document.getElementById('errorBox').textContent = e.message==='SESSION' ? 'Sesión inválida.' : 'Error guardando.'; }
+      finally { saveResumen.disabled=false; cancelResumen.disabled=false; }
+    });
+
+    const editCliente = document.getElementById('editCliente');
+    const clienteEditor = document.getElementById('clienteEditor');
+    const nombreIn = document.getElementById('nombre_input');
+    const telefonoIn = document.getElementById('telefono_input');
+    const emailIn = document.getElementById('email_input');
+    const cpIn = document.getElementById('cp_input');
+    const direccionIn = document.getElementById('direccion_input');
+    const ciudadIn = document.getElementById('ciudad_input');
+    const provinciaIn = document.getElementById('provincia_input');
+    const nifIn = document.getElementById('nif_input');
+    const facturaIn = document.getElementById('solicita_factura_input');
+    const saveCliente = document.getElementById('saveCliente');
+    const cancelCliente = document.getElementById('cancelCliente');
+    editCliente.addEventListener('click', () => {
+      nombreIn.value = currentPedido?.nombre || '';
+      telefonoIn.value = currentPedido?.telefono || '';
+      emailIn.value = currentPedido?.email || '';
+      cpIn.value = currentPedido?.cp || '';
+      direccionIn.value = currentPedido?.direccion || '';
+      ciudadIn.value = currentPedido?.ciudad || '';
+      provinciaIn.value = currentPedido?.provincia || '';
+      nifIn.value = (currentPedido?.nif || '').toString().toUpperCase();
+      facturaIn.checked = !!currentPedido?.solicita_factura;
+      clienteEditor.style.display = 'grid';
+      editCliente.disabled = true;
+    });
+    cancelCliente.addEventListener('click', () => { clienteEditor.style.display='none'; editCliente.disabled=false; });
+    saveCliente.addEventListener('click', async () => {
+      const id = Number(document.getElementById('f_id').textContent || ''); if(!Number.isFinite(id)) return;
+      const payload = {
+        nombre: (nombreIn.value || '').trim() || (currentPedido?.nombre || null),
+        telefono: (telefonoIn.value || '').trim() || (currentPedido?.telefono || null),
+        email: emailIn.value || null,
+        cp: cpIn.value || null,
+        direccion: direccionIn.value || null,
+        ciudad: ciudadIn.value || null,
+        provincia: provinciaIn.value || null,
+        nif: (nifIn.value || '').toString().toUpperCase() || null,
+        solicita_factura: facturaIn.checked
+      };
+      saveCliente.disabled = true; cancelCliente.disabled = true;
+      try{
+        const resp = await fetch(`/admin/api/pedidos/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify(payload) });
+        if(resp.status===401) throw new Error('SESSION');
+        const data = await resp.json();
+        if(data && data.ok){
+          const r = data.data || payload;
+          Object.assign(currentPedido, r);
+          document.getElementById('f_nombre').textContent = currentPedido.nombre || '';
+          document.getElementById('f_telefono').textContent = currentPedido.telefono || '';
+          document.getElementById('f_email').textContent = currentPedido.email || '';
+          document.getElementById('f_cp').textContent = currentPedido.cp || '';
+          document.getElementById('f_direccion').textContent = currentPedido.direccion || '';
+          document.getElementById('f_ciudad').textContent = currentPedido.ciudad || '';
+          document.getElementById('f_provincia').textContent = currentPedido.provincia || '';
+          document.getElementById('f_nif').textContent = currentPedido.nif || '';
+          document.getElementById('f_solicita_factura').textContent = currentPedido.solicita_factura ? 'Sí' : 'No';
+          clienteEditor.style.display='none'; editCliente.disabled=false;
+          if((data.changedRows ?? 1) === 0){ document.getElementById('errorBox').textContent = 'Guardado sin cambios (mismo valor que en BD).'; }
+        } else { document.getElementById('errorBox').textContent = data.error || 'No se pudo guardar.'; }
+      } catch(e){ document.getElementById('errorBox').textContent = e.message==='SESSION' ? 'Sesión inválida.' : 'Error guardando.'; }
+      finally { saveCliente.disabled=false; cancelCliente.disabled=false; }
+    });
+
+    const editPedido = document.getElementById('editPedido');
+    const pedidoEditor = document.getElementById('pedidoEditor');
+    const personasIn = document.getElementById('personas_input');
+    const churrosIn = document.getElementById('churros_input');
+    const chocolatesIn = document.getElementById('chocolates_input');
+    const savePedido = document.getElementById('savePedido');
+    const cancelPedido = document.getElementById('cancelPedido');
+    editPedido.addEventListener('click', () => {
+      personasIn.value = (currentPedido?.personas ?? '') === null ? '' : String(currentPedido?.personas ?? '');
+      churrosIn.value = (currentPedido?.churros_por_persona ?? '') === null ? '' : String(currentPedido?.churros_por_persona ?? '');
+      chocolatesIn.value = (currentPedido?.chocolates ?? '') === null ? '' : String(currentPedido?.chocolates ?? '');
+      pedidoEditor.style.display='grid'; editPedido.disabled=true;
+    });
+    cancelPedido.addEventListener('click', () => { pedidoEditor.style.display='none'; editPedido.disabled=false; });
+    savePedido.addEventListener('click', async () => {
+      const id = Number(document.getElementById('f_id').textContent || ''); if(!Number.isFinite(id)) return;
+      const toNumOrNull = (v) => { const s = (v ?? '').toString().trim(); if(s==='') return null; const n = Number(s); return Number.isFinite(n) ? n : null; };
+      const payload = {
+        personas: toNumOrNull(personasIn.value),
+        churros_por_persona: toNumOrNull(churrosIn.value),
+        chocolates: toNumOrNull(chocolatesIn.value)
+      };
+      savePedido.disabled = true; cancelPedido.disabled = true;
+      try{
+        const resp = await fetch(`/admin/api/pedidos/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify(payload) });
+        if(resp.status===401) throw new Error('SESSION');
+        const data = await resp.json();
+        if(data && data.ok){
+          const r = data.data || payload;
+          Object.assign(currentPedido, r);
+          document.getElementById('f_personas').textContent = r.personas ?? '';
+          document.getElementById('f_churros_por_persona').textContent = r.churros_por_persona ?? '';
+          document.getElementById('f_chocolates').textContent = r.chocolates ?? '';
+          if (typeof r.presupuesto_total !== 'undefined' || typeof currentPedido.presupuesto_total !== 'undefined') {
+            const total = typeof r.presupuesto_total !== 'undefined' ? r.presupuesto_total : currentPedido.presupuesto_total;
+            const elTotal = document.getElementById('f_presupuesto_total');
+            if (elTotal && total != null) {
+              elTotal.textContent = nf.format(Number(total));
+            }
+          }
+          pedidoEditor.style.display='none'; editPedido.disabled=false;
+          if((data.changedRows ?? 1) === 0){ document.getElementById('errorBox').textContent = 'Guardado sin cambios (mismo valor que en BD).'; }
+        } else { document.getElementById('errorBox').textContent = data.error || 'No se pudo guardar.'; }
+      } catch(e){ document.getElementById('errorBox').textContent = e.message==='SESSION' ? 'Sesión inválida.' : 'Error guardando.'; }
+      finally { savePedido.disabled=false; cancelPedido.disabled=false; }
+    });
+
+    const editEnvio = document.getElementById('editEnvio');
+    const envioEditor = document.getElementById('envioEditor');
+    const requiereEnvioIn = document.getElementById('requiere_envio_input');
+    const dirEntregaIn = document.getElementById('direccion_entrega_input');
+    const metodoPagoIn = document.getElementById('metodo_pago_input');
+    const saveEnvio = document.getElementById('saveEnvio');
+    const cancelEnvio = document.getElementById('cancelEnvio');
+    editEnvio.addEventListener('click', () => {
+      requiereEnvioIn.checked = !!currentPedido?.requiere_envio;
+      dirEntregaIn.value = currentPedido?.direccion_entrega || '';
+      metodoPagoIn.value = currentPedido?.metodo_pago || '';
+      envioEditor.style.display='grid'; editEnvio.disabled=true;
+    });
+    cancelEnvio.addEventListener('click', () => { envioEditor.style.display='none'; editEnvio.disabled=false; });
+    saveEnvio.addEventListener('click', async () => {
+      const id = Number(document.getElementById('f_id').textContent || ''); if(!Number.isFinite(id)) return;
+      const payload = {
+        requiere_envio: !!requiereEnvioIn.checked,
+        direccion_entrega: dirEntregaIn.value || null,
+        metodo_pago: (metodoPagoIn.value || '').trim() || (currentPedido?.metodo_pago || null)
+      };
+      saveEnvio.disabled = true; cancelEnvio.disabled = true;
+      try{
+        const resp = await fetch(`/admin/api/pedidos/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify(payload) });
+        if(resp.status===401) throw new Error('SESSION');
+        const data = await resp.json();
+        if(data && data.ok){
+          const r = data.data || payload;
+          Object.assign(currentPedido, r);
+          document.getElementById('f_requiere_envio').textContent = currentPedido.requiere_envio ? 'Sí' : 'No';
+          document.getElementById('f_direccion_entrega').textContent = currentPedido.direccion_entrega || '';
+          document.getElementById('f_metodo_pago').textContent = currentPedido.metodo_pago || '';
+          envioEditor.style.display='none'; editEnvio.disabled=false;
+          if((data.changedRows ?? 1) === 0){ document.getElementById('errorBox').textContent = 'Guardado sin cambios (mismo valor que en BD).'; }
+        } else { document.getElementById('errorBox').textContent = data.error || 'No se pudo guardar.'; }
+      } catch(e){ document.getElementById('errorBox').textContent = e.message==='SESSION' ? 'Sesión inválida.' : 'Error guardando.'; }
+      finally { saveEnvio.disabled=false; cancelEnvio.disabled=false; }
+    });
+    load();
+  </script>
+</body>
+</html>

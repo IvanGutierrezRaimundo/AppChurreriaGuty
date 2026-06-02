@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Pedidos</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    /* Ajustes mínimos específicos del panel admin para usar el tema corporativo */
+    .admin-bar{ max-width: 1200px; margin: 0 auto var(--space-lg); display:flex; align-items:center; justify-content: space-between; }
+    .admin-grid{ display:grid; grid-template-columns: 2.5fr 1fr 1fr 1fr auto; gap: 12px; align-items:end; }
+    .admin-table-wrap{ max-width: 1200px; margin: 0 auto; }
+    .admin-doc{ max-width: 1200px; margin: 0 auto; }
+    th.sortable{ cursor: pointer; user-select: none; }
+    th .sort-icons{ margin-left: 6px; font-size: 0.82rem; color: var(--color-muted); display:inline-flex; gap:2px; }
+    th[data-dir="asc"] .arrow-up{ color: var(--color-brown); }
+    th[data-dir="desc"] .arrow-down{ color: var(--color-brown); }
+    /* (Revert) Usar estilos corporativos por defecto para tablas y acciones */
+    .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div class="admin-bar">
+    <h1>Panel de administración</h1>
+    <div class="actions">
+      <button type="button" id="exportBtn" title="Exportar CSV">Exportar</button>
+      <button type="button" id="logoutBtn" title="Salir">Salir</button>
+    </div>
+  </div>
+
+  <div class="doc admin-doc">
+  <section class="admin-grid">
+    <div class="field">
+      <label for="q">Buscar</label>
+      <input id="q" placeholder="nombre, email, teléfono, ciudad, provincia" />
+    </div>
+    <div class="field">
+      <label for="desde">Desde</label>
+      <input id="desde" type="date" />
+    </div>
+    <div class="field">
+      <label for="hasta">Hasta</label>
+      <input id="hasta" type="date" />
+    </div>
+    <div class="field">
+      <label for="pageSize">Resultados</label>
+      <select id="pageSize">
+        <option>20</option>
+        <option>50</option>
+        <option>100</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button id="searchBtn">Buscar</button>
+    </div>
+  </section>
+  <div class="admin-table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th class="sortable" data-sort="id">ID <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="nombre">Cliente <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="telefono">Teléfono <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="email">E-mail <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="fecha">Fecha <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="hora">Hora <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="presupuesto_total">Total (€) <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="estado">Estado <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  </div>
+  </div>
+
+  <script>
+    const tbody = document.getElementById('tbody');
+    const pageSizeSel = document.getElementById('pageSize');
+    function formatDate(value){
+      if(!value) return '';
+      try{
+        if(typeof value === 'string'){
+          let s = value;
+          if(s.includes('T')) s = s.slice(0,10); // recorta YYYY-MM-DD de ISO
+          if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
+            const [y,m,d] = s.split('-');
+            return `${d}/${m}/${y}`;
+          }
+          const dt = new Date(value);
+          if(!isNaN(dt)) return dt.toLocaleDateString('es-ES');
+        } else {
+          const dt = new Date(value);
+          if(!isNaN(dt)) return dt.toLocaleDateString('es-ES');
+        }
+      } catch(_){ /* noop */ }
+      return String(value);
+    }
+    function formatTime(value){
+      if(!value) return '';
+      try{
+        if(typeof value === 'string'){
+          const m = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value);
+          if(m) return `${m[1]}:${m[2]}`;
+        } else {
+          const dt = new Date(value);
+          if(!isNaN(dt)){
+            const hh = String(dt.getHours()).padStart(2,'0');
+            const mm = String(dt.getMinutes()).padStart(2,'0');
+            return `${hh}:${mm}`;
+          }
+        }
+      } catch(_){ /* noop */ }
+      return String(value);
+    }
+    let currentSort = 'fecha';
+    let currentDir = 'desc';
+    function updateSortIndicators(){
+      document.querySelectorAll('th.sortable').forEach(th => {
+        if(th.getAttribute('data-sort') === currentSort){ th.setAttribute('data-dir', currentDir); }
+        else { th.removeAttribute('data-dir'); }
+      });
+    }
+    async function load() {
+      const q = document.getElementById('q').value.trim();
+      const desde = document.getElementById('desde').value;
+      const hasta = document.getElementById('hasta').value;
+      const pageSize = Number(pageSizeSel.value);
+      const params = new URLSearchParams({ page: '1', pageSize, sort: currentSort, dir: currentDir });
+      if (q) params.set('q', q);
+      if (desde) params.set('desde', desde);
+      if (hasta) params.set('hasta', hasta);
+      const res = await fetch(`/admin/api/pedidos?${params.toString()}`);
+      const data = await res.json();
+      if (!data.ok) { alert(data.error || 'Error'); return; }
+      // Client-side fallback sort to ensure visible reordering
+      const rows = Array.isArray(data.data) ? data.data.slice() : [];
+      const dirFactor = currentDir === 'asc' ? 1 : -1;
+      function toNumber(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
+      function toDate(v){
+        if(!v) return 0;
+        if(typeof v === 'string'){
+          let s = v; if(s.includes('T')) s = s.slice(0,10);
+          if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s).getTime();
+        }
+        const d = new Date(v); return isNaN(d) ? 0 : d.getTime();
+      }
+      function toMinutes(v){
+        if(typeof v === 'string'){
+          const m = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(v);
+          if(m){ return Number(m[1])*60 + Number(m[2]); }
+        }
+        return 0;
+      }
+      rows.sort((a,b) => {
+        let cmp = 0;
+        switch(currentSort){
+          case 'id': cmp = toNumber(a.id) - toNumber(b.id); break;
+          case 'presupuesto_total': cmp = toNumber(a.presupuesto_total) - toNumber(b.presupuesto_total); break;
+          case 'fecha': cmp = toDate(a.fecha) - toDate(b.fecha); break;
+          case 'hora': cmp = toMinutes(a.hora) - toMinutes(b.hora); break;
+          case 'estado': {
+            const av = (a.estado||'').toString().toLowerCase();
+            const bv = (b.estado||'').toString().toLowerCase();
+            cmp = av.localeCompare(bv, 'es');
+            break;
+          }
+          case 'telefono': {
+            const av = (a.telefono||'').toString().toLowerCase();
+            const bv = (b.telefono||'').toString().toLowerCase();
+            cmp = av.localeCompare(bv, 'es');
+            break;
+          }
+          case 'email': {
+            const av = (a.email||'').toString().toLowerCase();
+            const bv = (b.email||'').toString().toLowerCase();
+            cmp = av.localeCompare(bv, 'es');
+            break;
+          }
+          case 'nombre':
+          default: {
+            const av = (a.nombre||'').toString().toLowerCase();
+            const bv = (b.nombre||'').toString().toLowerCase();
+            cmp = av.localeCompare(bv, 'es');
+            break;
+          }
+        }
+        return dirFactor * cmp;
+      });
+      tbody.innerHTML = '';
+      for (const r of rows) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.id}</td>
+          <td>${r.nombre}</td>
+          <td>${r.telefono || ''}</td>
+          <td>${r.email || ''}</td>
+          <td>${formatDate(r.fecha)}</td>
+          <td>${formatTime(r.hora)}</td>
+          <td>${r.presupuesto_total}</td>
+          <td>${r.estado || 'Pendiente'}</td>
+          <td>
+            <span class="btn-row">
+              <button data-id="${r.id}" class="open">Abrir</button>
+              <button data-id="${r.id}" class="del">Eliminar</button>
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+      bindActions();
+      updateSortIndicators();
+    }
+    // Interacciones de ordenación en cabecera (delegadas)
+    const thead = document.querySelector('table thead');
+    if(thead){
+      thead.addEventListener('click', (ev) => {
+        const th = ev.target.closest('th.sortable');
+        if(!th) return;
+        const col = th.getAttribute('data-sort');
+        if(col === currentSort){ currentDir = currentDir === 'asc' ? 'desc' : 'asc'; }
+        else { currentSort = col; currentDir = 'asc'; }
+        load();
+      });
+    }
+
+    function bindActions() {
+      document.querySelectorAll('button.del').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          if (!confirm('¿Eliminar pedido #' + id + '?')) return;
+          const res = await fetch(`/admin/api/pedidos/${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.ok) load(); else alert(data.error || 'Error');
+        });
+      });
+      document.querySelectorAll('button.open').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          if(!id) return;
+          location.href = `/admin/pedido/${id}`;
+        });
+      });
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', load);
+    pageSizeSel.addEventListener('change', load);
+    load();
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      location.href = '/admin/api/export.csv';
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/admin/logout', { method: 'POST' });
+      location.href = '/admin';
+    });
+  </script>
+</body>
+</html>
