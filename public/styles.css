@@ -118,7 +118,8 @@ fieldset > .grid{ margin-top: 8px; }
 .field{ margin-bottom: 12px; }
 .label, label{ display: block; font-weight: 600; margin-bottom: 8px; color: var(--color-brown); }
 .hint{ color: var(--color-muted); font-size: 0.92rem; }
-.note{ color: var(--color-muted); font-size: 0.92rem; }
+.note{ color: var(--color-muted); font-size: 0.92rem; line-height: 1.45; }
+.field .note{ margin-top: 10px; }
 .section-label{ display:block; font-weight: 800; margin: 4px 0 6px; color: var(--color-brown); }
 .error{ color: #B00020; font-size: 0.92rem; }
 .status{ margin-top: 12px; font-weight: 700; color: var(--color-brown); }
