@@ -282,6 +282,8 @@ th, td{ border: 1px solid var(--color-border); padding: 10px 12px; }
 .confirm-budget li{ justify-content:space-between; }
 .confirm-total{ border-top:1px solid var(--color-border); padding-top:8px; margin-top:4px; }
 .confirm-order{ margin-top:10px; color: var(--color-brown); }
+.confirm-status{ margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(255, 210, 0, 0.16); border: 1px solid rgba(255, 210, 0, 0.45); color: var(--color-brown); font-weight: 700; }
+.confirm-status.error{ background: rgba(255, 236, 236, 0.9); border-color: #E5A3A3; color: #8A3D3D; }
 .confirm-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top: 16px; }
 .confirm-actions .ghost{ background: #FFF; color: var(--color-brown); border: 1px solid var(--color-border); }
 .confirm-actions button{ min-width: 120px; }

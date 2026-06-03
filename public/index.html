@@ -86,8 +86,31 @@
 
     function closeConfirmModal(){
       const modal = document.getElementById('confirm-modal');
+      const status = document.getElementById('confirm-status');
+      const accept = document.getElementById('confirm-accept');
+      const cancel = document.getElementById('confirm-cancel');
+      const back = document.getElementById('confirm-back');
+      if(status){ status.textContent=''; status.classList.add('hidden'); }
+      if(accept){ accept.disabled = false; accept.textContent = 'Aceptar'; accept.classList.remove('hidden'); }
+      if(cancel){ cancel.classList.remove('hidden'); cancel.textContent = 'Cancelar'; }
+      if(back){ back.classList.add('hidden'); }
       modal?.classList.add('hidden');
       modal?.setAttribute('aria-hidden', 'true');
+    }
+
+    function showConfirmMessage(text, { isError = false } = {}){
+      const status = document.getElementById('confirm-status');
+      const accept = document.getElementById('confirm-accept');
+      const cancel = document.getElementById('confirm-cancel');
+      const back = document.getElementById('confirm-back');
+      if(status){
+        status.textContent = text;
+        status.classList.toggle('error', isError);
+        status.classList.remove('hidden');
+      }
+      if(accept){ accept.classList.toggle('hidden', isError); }
+      if(cancel){ cancel.classList.toggle('hidden', isError); }
+      if(back){ back.classList.toggle('hidden', !isError); }
     }
 
     function showSuccessModal(){
@@ -143,9 +166,12 @@
     }
 
     async function submitPedido(payload){
-      const status = document.getElementById('status');
+      const accept = document.getElementById('confirm-accept');
+      const cancel = document.getElementById('confirm-cancel');
       try {
-        status.classList.remove('hidden');
+        if(accept) accept.disabled = true;
+        if(cancel) cancel.disabled = true;
+        showConfirmMessage('Procesando formulario...');
         const resp = await fetch('/api/pedidos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -154,22 +180,22 @@
         const data = await resp.json().catch(() => ({}));
         if(!resp.ok || data.ok === false){
           const msg = data.error || 'No se pudo guardar el pedido.';
-          status.textContent = msg;
+          showConfirmMessage(`Lo sentimos, ha habido un problema al enviar el pedido. ${msg} Puede volver al formulario e intentarlo de nuevo.`, { isError: true });
           return;
         }
         closeConfirmModal();
         showSuccessModal();
       } catch (err) {
         console.error('Error enviando pedido:', err);
-        status.textContent = 'Error de conexión. Inténtalo de nuevo.';
+        showConfirmMessage('Lo sentimos, ha habido un error de conexión. Disculpe las molestias. Puede volver al formulario e intentarlo de nuevo.', { isError: true });
+      } finally {
+        if(document.getElementById('confirm-accept')) document.getElementById('confirm-accept').disabled = false;
+        if(document.getElementById('confirm-cancel')) document.getElementById('confirm-cancel').disabled = false;
       }
     }
 
     async function onSubmit(e) {
       e.preventDefault();
-      const status = document.getElementById('status');
-      status.classList.remove('hidden');
-      status.textContent = 'Procesando formulario...';
 
       const nombre = document.getElementById('nombre').value.trim();
       const email = document.getElementById('email').value.trim();
@@ -347,6 +373,7 @@
       const successClose = document.getElementById('success-close');
       const successModal = document.getElementById('success-modal');
       const modal = document.getElementById('confirm-modal');
+      const confirmBack = document.getElementById('confirm-back');
 
       confirmAccept?.addEventListener('click', async () => {
         const payload = JSON.parse(document.getElementById('confirm-data')?.dataset.payload || 'null');
@@ -359,6 +386,7 @@
         confirmAccept.textContent = 'Aceptar';
       });
       confirmCancel?.addEventListener('click', closeConfirmModal);
+      confirmBack?.addEventListener('click', closeConfirmModal);
       confirmClose?.addEventListener('click', closeConfirmModal);
       successClose?.addEventListener('click', closeSuccessModal);
       successModal?.addEventListener('click', (e) => {
@@ -775,6 +803,7 @@
       <h2 id="confirm-title">Revisa tu pedido</h2>
       <p class="confirm-intro">Comprueba los datos antes de enviarlo.</p>
       <div id="confirm-data" hidden></div>
+      <p id="confirm-status" class="confirm-status hidden" aria-live="polite"></p>
       <div class="confirm-grid">
         <section>
           <h3>Datos del pedido</h3>
@@ -788,6 +817,7 @@
       </div>
       <div class="confirm-actions">
         <button type="button" id="confirm-cancel" class="ghost">Cancelar</button>
+        <button type="button" id="confirm-back" class="ghost hidden">Volver al formulario</button>
         <button type="button" id="confirm-accept">Aceptar</button>
       </div>
     </div>
