@@ -156,7 +156,17 @@ label input[type="checkbox"]{ margin-left: 8px; vertical-align: middle; }
 
 /* Input with icon */
 .input-with-icon{ position: relative; max-width: 520px; }
+.input-with-icon #fecha_picker{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
 .input-with-icon .icon-btn{
+  z-index: 2;
   position:absolute; right:8px; top:50%; transform: translateY(-50%);
   background: #FFF; border: 1px solid var(--color-border); border-radius: 10px;
   padding: 6px 8px; cursor: pointer; color: var(--color-brown);
@@ -201,6 +211,17 @@ th, td{ border: 1px solid var(--color-border); padding: 10px 12px; }
 
 /* Accessibility helpers */
 .visually-hidden { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+.input-with-icon #fecha_picker.visually-hidden {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  opacity: 0 !important;
+  clip: auto !important;
+  overflow: visible !important;
+  margin: 0 !important;
+  z-index: 1;
+}
 
 /* Honeypot */
 #hp-wrap{ position:absolute; left:-5000px; top:-5000px; }

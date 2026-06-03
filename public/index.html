@@ -36,6 +36,13 @@
       return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
     }
 
+    function formatISODate(dt){
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
     function showConfirmModal(payload, totalPresupuesto, provisionalId){
       const modal = document.getElementById('confirm-modal');
       const confirmData = document.getElementById('confirm-data');
@@ -209,6 +216,12 @@
         if(dt.getFullYear()!==y || dt.getMonth()!==mo || dt.getDate()!==d) return null;
         return dt;
       }
+      function formatISODate(dt){
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth()+1).padStart(2,'0');
+        const d = String(dt.getDate()).padStart(2,'0');
+        return `${y}-${m}-${d}`;
+      }
       function startOfDay(dt){ const t=new Date(dt); t.setHours(0,0,0,0); return t; }
       const hoy = startOfDay(new Date());
       let fechaISO = '';
@@ -218,7 +231,7 @@
           status.textContent = 'Fecha inválida. Usa dd/mm/aa y debe ser hoy o posterior.';
           return;
         }
-        fechaISO = f.toISOString().slice(0,10);
+        fechaISO = formatISODate(f);
       } else {
         status.textContent = 'Indica una fecha en formato dd/mm/aa.';
         return;
@@ -325,7 +338,6 @@
         confirmAccept.disabled = false;
         confirmAccept.textContent = 'Aceptar';
       });
-s
       confirmCancel?.addEventListener('click', closeConfirmModal);
       confirmClose?.addEventListener('click', closeConfirmModal);
       successClose?.addEventListener('click', closeSuccessModal);
@@ -397,8 +409,8 @@ s
       const calBtn = document.getElementById('open-cal');
       if(fechaPicker){
         const today = new Date();
-        const ymd = today.toISOString().slice(0,10);
-        fechaPicker.min = ymd;
+        today.setHours(0, 0, 0, 0);
+        fechaPicker.min = formatISODate(today);
         fechaPicker.addEventListener('change', () => {
           if(fechaPicker.value){
             const [yy,mm,dd] = fechaPicker.value.split('-');
