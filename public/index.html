@@ -32,6 +32,111 @@
       }
       return false;
     }
+    function formatCurrency(value){
+      return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+    }
+
+    function showConfirmModal(payload, totalPresupuesto, provisionalId){
+      const modal = document.getElementById('confirm-modal');
+      const confirmData = document.getElementById('confirm-data');
+      const summary = document.getElementById('confirm-summary');
+      const budget = document.getElementById('confirm-budget');
+      const order = document.getElementById('confirm-order');
+      if(!modal || !summary || !budget || !order) return;
+
+      const lines = [
+        ['Nombre', payload.nombre],
+        ['Teléfono', payload.telefono],
+        ['E-mail', payload.email],
+        ['Dirección', payload.direccion || '—'],
+        ['CP / Ciudad / Provincia', [payload.cp, payload.ciudad, payload.provincia].filter(Boolean).join(' · ') || '—'],
+        ['NIF', payload.nif || '—'],
+        ['Fecha', payload.fecha || '—'],
+        ['Hora', payload.hora || '—'],
+        ['Personas', payload.personas || 0],
+        ['Churros por persona', Number.isFinite(payload.churros_por_persona) ? payload.churros_por_persona : '—'],
+        ['Chocolates', payload.chocolates || 0],
+        ['Envío', payload.requiere_envio ? 'Sí' : 'No'],
+        ['Método de pago', payload.metodo_pago || '—'],
+        ['Comentarios', payload.comentarios || 'Sin comentarios.']
+      ];
+
+      if(confirmData){
+        confirmData.dataset.payload = JSON.stringify(payload);
+        confirmData.dataset.total = String(totalPresupuesto);
+      }
+
+      summary.innerHTML = lines.map(([label, value]) => `<li><strong>${label}:</strong> ${value}</li>`).join('');
+      budget.innerHTML = `
+        <li><span>Churros</span><strong>${formatCurrency(Math.max(0, (payload.personas || 0) * (Number.isFinite(payload.churros_por_persona) ? payload.churros_por_persona : 0) * 0.25))}</strong></li>
+        <li><span>Chocolate</span><strong>${formatCurrency((payload.chocolates || 0) * 1.5)}</strong></li>
+        <li><span>Envío</span><strong>${formatCurrency(payload.requiere_envio ? 25 : 0)}</strong></li>
+        <li class="confirm-total"><span>Total</span><strong>${formatCurrency(totalPresupuesto)}</strong></li>`;
+      order.textContent = provisionalId;
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeConfirmModal(){
+      const modal = document.getElementById('confirm-modal');
+      modal?.classList.add('hidden');
+      modal?.setAttribute('aria-hidden', 'true');
+    }
+
+    function showSuccessModal(){
+      const modal = document.getElementById('success-modal');
+      if(!modal) return;
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeSuccessModal(){
+      const modal = document.getElementById('success-modal');
+      const form = document.getElementById('pedido-form');
+      const status = document.getElementById('status');
+      if(modal){
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+      if(status){ status.textContent=''; status.classList.add('hidden'); }
+      if(form){
+        form.reset();
+        const personasInput = document.getElementById('personas');
+        const churrosInput = document.getElementById('churros_por_persona');
+        if(personasInput && churrosInput){
+          churrosInput.disabled = true;
+          churrosInput.value = '';
+          churrosInput.required = false;
+        }
+        if(typeof updateBudget === 'function') updateBudget();
+        if(typeof updateFacturaRequirement === 'function') updateFacturaRequirement();
+        if(typeof updateEnvioUI === 'function') updateEnvioUI();
+      }
+    }
+
+    async function submitPedido(payload){
+      const status = document.getElementById('status');
+      try {
+        status.classList.remove('hidden');
+        const resp = await fetch('/api/pedidos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if(!resp.ok || data.ok === false){
+          const msg = data.error || 'No se pudo guardar el pedido.';
+          status.textContent = msg;
+          return;
+        }
+        closeConfirmModal();
+        showSuccessModal();
+      } catch (err) {
+        console.error('Error enviando pedido:', err);
+        status.textContent = 'Error de conexión. Inténtalo de nuevo.';
+      }
+    }
+
     async function onSubmit(e) {
       e.preventDefault();
       const status = document.getElementById('status');
@@ -151,7 +256,14 @@
       const okChurros = !requireChurros ? true : (Number.isFinite(churrosPorPersona) && churrosPorPersona >= 2 && churrosPorPersona <= 12);
       const okChocolates = chocolates >= 0 && chocolates <= 1000;
       if(!okPersonas){ personasEl?.reportValidity(); status.textContent = 'Número de personas debe ser entre 0 y 1000.'; return; }
-      if(requireChurros && !okChurros){ churrosEl?.reportValidity(); status.textContent = 'Churros por persona debe ser entre 2 y 12.'; return; }
+      if(requireChurros && !okChurros){
+        const msg = 'Si indicas personas, rellena Número de churros por persona (entre 2 y 12).';
+        churrosEl?.setCustomValidity(msg);
+        churrosEl?.reportValidity();
+        status.textContent = msg;
+        return;
+      }
+      churrosEl?.setCustomValidity('');
       if(!okChocolates){ chocolatesEl?.reportValidity(); status.textContent = 'Chocolates debe ser entre 0 y 1000.'; return; }
 
       // Validación de presupuesto mínimo
@@ -187,29 +299,44 @@
         metodo_pago: metodoPago,
         comentarios
       };
-      console.log('Enviando pedido al backend:', payload);
-      try {
-        status.textContent = 'Enviando pedido...';
-        const resp = await fetch('/api/pedidos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await resp.json().catch(() => ({}));
-        if(!resp.ok || data.ok === false){
-          const msg = data.error || 'No se pudo guardar el pedido.';
-          status.textContent = msg;
-          return;
-        }
-        status.textContent = `Pedido guardado correctamente. Nº: ${data.id} · Total: ${data.presupuesto_total?.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }) ?? ''}`;
-      } catch (err) {
-        console.error('Error enviando pedido:', err);
-        status.textContent = 'Error de conexión. Inténtalo de nuevo.';
-      }
+
+      const provisionalId = `PED-${Date.now().toString().slice(-6)}`;
+      showConfirmModal(payload, totalPresupuesto, provisionalId);
     }
 
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('pedido-form').addEventListener('submit', onSubmit);
+
+      const confirmAccept = document.getElementById('confirm-accept');
+      const confirmCancel = document.getElementById('confirm-cancel');
+      const confirmClose = document.getElementById('confirm-close');
+      const successClose = document.getElementById('success-close');
+      const successBack = document.getElementById('success-back');
+      const successModal = document.getElementById('success-modal');
+      const modal = document.getElementById('confirm-modal');
+
+      confirmAccept?.addEventListener('click', async () => {
+        const payload = JSON.parse(document.getElementById('confirm-data')?.dataset.payload || 'null');
+        const total = Number(document.getElementById('confirm-data')?.dataset.total || 0);
+        if(!payload){ return; }
+        confirmAccept.disabled = true;
+        confirmAccept.textContent = 'Enviando...';
+        await submitPedido({ ...payload, presupuesto_total: total });
+        confirmAccept.disabled = false;
+        confirmAccept.textContent = 'Aceptar';
+      });
+s
+      confirmCancel?.addEventListener('click', closeConfirmModal);
+      confirmClose?.addEventListener('click', closeConfirmModal);
+      successClose?.addEventListener('click', closeSuccessModal);
+      successBack?.addEventListener('click', closeSuccessModal);
+      successModal?.addEventListener('click', (e) => {
+        if(e.target === successModal) closeSuccessModal();
+      });
+      modal?.addEventListener('click', (e) => {
+        if(e.target === modal) closeConfirmModal();
+      });
+
       // Requerimientos dinámicos de Datos personales según "¿Necesita factura?"
       const facturaChk = document.getElementById('factura');
       const nombreEl = document.getElementById('nombre');
@@ -391,6 +518,8 @@
           const form = document.getElementById('pedido-form');
           const statusEl = document.getElementById('status');
           form.reset();
+          updateChurrosRequirement();
+          updateBudget();
           // Ocultar estado
           if(statusEl){ statusEl.textContent=''; statusEl.classList.add('hidden'); }
           // Limpiar validaciones personalizadas
@@ -398,6 +527,10 @@
             const el = document.getElementById(id);
             if(el) el.setCustomValidity('');
           });
+          const warn = document.getElementById('budget-warning');
+          const box = document.querySelector('.budget-lines');
+          warn?.classList.add('hidden');
+          box?.classList.remove('invalid');
           // Radios de método de pago se limpian con reset; no se requiere manejo adicional
           // Reaplicar reglas de factura (por defecto desmarcado)
           updateFacturaRequirement();
@@ -625,5 +758,40 @@
 
     <div id="status" class="status hidden" aria-live="polite"></div>
   </form>
+
+  <div id="confirm-modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <button type="button" id="confirm-close" class="confirm-close" aria-label="Cerrar">×</button>
+      <h2 id="confirm-title">Revisa tu pedido</h2>
+      <p class="confirm-intro">Comprueba los datos antes de enviarlo.</p>
+      <div id="confirm-data" hidden></div>
+      <div class="confirm-grid">
+        <section>
+          <h3>Datos del pedido</h3>
+          <ul id="confirm-summary" class="confirm-list"></ul>
+        </section>
+        <section>
+          <h3>Presupuesto</h3>
+          <ul id="confirm-budget" class="confirm-list confirm-budget"></ul>
+          <p class="confirm-order">N.º de pedido provisional: <strong id="confirm-order"></strong></p>
+        </section>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" id="confirm-cancel" class="ghost">Cancelar</button>
+        <button type="button" id="confirm-accept">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="success-modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal success-modal" role="dialog" aria-modal="true" aria-labelledby="success-title">
+      <button type="button" id="success-close" class="confirm-close" aria-label="Cerrar">×</button>
+      <h2 id="success-title">Pedido enviado</h2>
+      <p class="confirm-intro">Su solicitud de pedido ha sido enviada, espere a que sea confirmada. Nos pondremos en contacto con usted por teléfono, Whatsapp o E-mail, gracias por su confianza.</p>
+      <div class="confirm-actions">
+        <button type="button" id="success-back">Volver al formulario</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
