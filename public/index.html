@@ -219,6 +219,7 @@
       const honeypot = document.getElementById('hp').value;
       const facturaOn = document.getElementById('factura')?.checked || false;
       const metodoPago = document.querySelector('input[name="pago"]:checked')?.value || '';
+      const MAX_DIRECCION = 50;
 
       // Reglas de obligatoriedad para Datos personales según factura
       const nombreEl = document.getElementById('nombre');
@@ -253,6 +254,15 @@
           return;
         }
       }
+
+      if(direccion.length > MAX_DIRECCION){
+        const msg = `La dirección no puede superar ${MAX_DIRECCION} caracteres.`;
+        status.textContent = msg;
+        document.getElementById('direccion')?.setCustomValidity(msg);
+        document.getElementById('direccion')?.reportValidity();
+        return;
+      }
+      document.getElementById('direccion')?.setCustomValidity('');
 
       // Validación fecha dd/mm/aa y que sea hoy o posterior
       function parseDDMMYY(s){
@@ -374,6 +384,18 @@
       const successModal = document.getElementById('success-modal');
       const modal = document.getElementById('confirm-modal');
       const confirmBack = document.getElementById('confirm-back');
+      const comentariosInput = document.getElementById('comentarios');
+      const comentariosCounter = document.getElementById('comentarios-counter');
+      const MAX_COMENTARIOS = 200;
+
+      function updateComentariosCounter(){
+        if(!comentariosInput || !comentariosCounter) return;
+        const length = comentariosInput.value.length;
+        comentariosCounter.textContent = `${length} / ${MAX_COMENTARIOS} caracteres`;
+        comentariosCounter.classList.toggle('is-limit', length >= MAX_COMENTARIOS);
+      }
+      comentariosInput?.addEventListener('input', updateComentariosCounter);
+      updateComentariosCounter();
 
       confirmAccept?.addEventListener('click', async () => {
         const payload = JSON.parse(document.getElementById('confirm-data')?.dataset.payload || 'null');
@@ -387,7 +409,6 @@
       });
       confirmCancel?.addEventListener('click', closeConfirmModal);
       confirmBack?.addEventListener('click', closeConfirmModal);
-      confirmClose?.addEventListener('click', closeConfirmModal);
       successClose?.addEventListener('click', closeSuccessModal);
       successModal?.addEventListener('click', (e) => {
         if(e.target === successModal) closeSuccessModal();
@@ -643,7 +664,7 @@
         </div>
         <div class="field">
           <label for="direccion">Dirección</label>
-          <input id="direccion" name="direccion" autocomplete="address-line1" placeholder="Calle, número, piso">
+          <input id="direccion" name="direccion" autocomplete="address-line1" maxlength="50" placeholder="Calle, número, piso">
         </div>
         <div class="field">
           <label for="ciudad">Ciudad</label>
@@ -769,7 +790,8 @@
 
     <div class="field">
       <label for="comentarios">Comentarios (opcional)</label>
-      <textarea id="comentarios" name="comentarios" rows="4"></textarea>
+      <textarea id="comentarios" name="comentarios" rows="4" maxlength="200"></textarea>
+      <div id="comentarios-counter" class="char-counter" aria-live="polite">0 / 200 caracteres</div>
       <div class="note">Los churros vienen con <strong>azúcar</strong>, si quiere algunos o todos sin azúcar, déjelo reflejado en la sección de comentarios.</div>
     </div>
     <div class="field">
@@ -799,9 +821,10 @@
 
   <div id="confirm-modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
     <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-      <button type="button" id="confirm-close" class="confirm-close" aria-label="Cerrar">×</button>
-      <h2 id="confirm-title">Revisa tu pedido</h2>
-      <p class="confirm-intro">Comprueba los datos antes de enviarlo.</p>
+      <div class="confirm-header">
+        <h2 id="confirm-title" class="confirm-title">Revisa tu pedido</h2>
+        <p class="confirm-intro">Comprueba los datos antes de enviarlo.</p>
+      </div>
       <div id="confirm-data" hidden></div>
       <p id="confirm-status" class="confirm-status hidden" aria-live="polite"></p>
       <div class="confirm-grid">

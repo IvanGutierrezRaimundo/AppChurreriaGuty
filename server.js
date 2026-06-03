@@ -115,6 +115,8 @@ app.post('/api/pedidos', async (req, res) => {
     const chocolatesNum = Number(chocolates);
     const envioBool = !!requiere_envio;
     const facturaBool = !!solicita_factura;
+    const MAX_DIRECCION = 50;
+    const MAX_COMENTARIOS = 200;
 
     const churrosOk = Number.isFinite(personasNum) && personasNum > 0 && Number.isFinite(churrosPorNum) && churrosPorNum >= 2 && churrosPorNum <= 12;
     const priceChurros = churrosOk ? personasNum * churrosPorNum * 0.25 : 0;
@@ -128,6 +130,14 @@ app.post('/api/pedidos', async (req, res) => {
 
     if (facturaBool && (!provincia || !nif)) {
       return res.status(400).json({ ok: false, error: 'Provincia y NIF son obligatorios si se solicita factura.' });
+    }
+
+    if (typeof direccion === 'string' && direccion.length > MAX_DIRECCION) {
+      return res.status(400).json({ ok: false, error: `La dirección no puede superar ${MAX_DIRECCION} caracteres.` });
+    }
+
+    if (typeof comentarios === 'string' && comentarios.length > MAX_COMENTARIOS) {
+      return res.status(400).json({ ok: false, error: `Los comentarios no pueden superar ${MAX_COMENTARIOS} caracteres.` });
     }
 
     const sql = `
