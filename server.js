@@ -316,7 +316,7 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     const churrosPorNum = Number(merged.churros_por_persona);
     const chocolatesNum = Number(merged.chocolates);
     const envioBool = !!merged.requiere_envio;
-    const churrosOk = Number.isFinite(personasNum) && personasNum > 0 && Number.isFinite(churrosPorNum) && churrosPorNum >= 2 && churrosPorNum <= 12;
+    const churrosOk = Number.isFinite(personasNum) && personasNum > 0 && Number.isFinite(churrosPorNum) && churrosPorNum >= 4 && churrosPorNum <= 12;
     const priceChurros = churrosOk ? personasNum * churrosPorNum * 0.25 : 0;
     const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * 1.5 : 0;
     const priceEnvio = envioBool ? 25 : 0;

@@ -382,11 +382,11 @@
       const okPersonas = personas >= 0 && personas <= 1000;
       const personasVal = Number(personasRaw);
       const requireChurros = Number.isFinite(personasVal) && personasVal > 0;
-      const okChurros = !requireChurros ? true : (Number.isFinite(churrosPorPersona) && churrosPorPersona >= 2 && churrosPorPersona <= 12);
+      const okChurros = !requireChurros ? true : (Number.isFinite(churrosPorPersona) && churrosPorPersona >= 4 && churrosPorPersona <= 12);
       const okChocolates = chocolates >= 0 && chocolates <= 1000;
       if(!okPersonas){ personasEl?.reportValidity(); status.textContent = 'Número de personas debe ser entre 0 y 1000.'; return; }
       if(requireChurros && !okChurros){
-        const msg = 'Si indicas personas, rellena Número de churros por persona (entre 2 y 12).';
+        const msg = 'Si indicas personas, rellena Número de churros por persona (entre 4 y 12).';
         churrosEl?.setCustomValidity(msg);
         churrosEl?.reportValidity();
         status.textContent = msg;
@@ -583,7 +583,7 @@
         check();
       }
       setRangeValidation(document.getElementById('personas'), 0, 1000, 'Introduce un número entre 0 y 1000');
-      setRangeValidation(document.getElementById('churros_por_persona'), 2, 12, 'Introduce un número entre 2 y 12');
+      setRangeValidation(document.getElementById('churros_por_persona'), 4, 12, 'Introduce un número entre 4 y 12');
       setRangeValidation(document.getElementById('chocolates'), 0, 1000, 'Introduce un número entre 0 y 1000');
 
       // Requerir churros si personas tiene valor
@@ -619,7 +619,7 @@
         const chocolatesVal = safeNumber(document.getElementById('chocolates'));
         const envioSi = document.querySelector('input[name="envio"]:checked')?.value === 'si';
 
-        const churrosOk = Number.isFinite(personasVal) && personasVal > 0 && Number.isFinite(churrosPorVal) && churrosPorVal >= 2 && churrosPorVal <= 12;
+        const churrosOk = Number.isFinite(personasVal) && personasVal > 0 && Number.isFinite(churrosPorVal) && churrosPorVal >= 4 && churrosPorVal <= 12;
         const priceChurros = churrosOk ? personasVal * churrosPorVal * 0.25 : 0;
         const priceChoco = Number.isFinite(chocolatesVal) && chocolatesVal >= 0 ? chocolatesVal * 1.5 : 0;
         const priceEnvio = envioSi ? 25 : 0;
@@ -749,7 +749,7 @@
             </div>
             <div class="field">
               <label for="churros_por_persona">Número de churros por persona</label>
-              <input id="churros_por_persona" name="churros_por_persona" type="number" min="2" max="12" placeholder="Introduce un número entre 2 y 12" autocomplete="off" disabled>
+              <input id="churros_por_persona" name="churros_por_persona" type="number" min="4" max="12" placeholder="Introduce un número entre 4 y 12" autocomplete="off" disabled>
               
             </div>
           </div>
@@ -821,6 +821,7 @@
           <div class="options" role="radiogroup" aria-label="Método de pago">
             <label>Transferencia bancaria <input type="radio" name="pago" value="transferencia" required></label>
             <label>Pago en el local <input type="radio" name="pago" value="local"></label>
+            <label>Pago en la entrega <input type="radio" name="pago" value="entrega"></label>
           </div>
         </div>
         <div class="note">A particulares y a clientes nuevos se les podría exigir una fianza inicial.</div>
