@@ -545,7 +545,9 @@
         });
       }
       if(calBtn && fechaPicker){
-        calBtn.addEventListener('click', () => {
+        calBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          fechaPicker.focus({ preventScroll: true });
           if(typeof fechaPicker.showPicker === 'function') fechaPicker.showPicker();
           else fechaPicker.click();
         });
