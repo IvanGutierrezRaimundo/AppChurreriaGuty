@@ -115,7 +115,7 @@ app.post('/api/pedidos', async (req, res) => {
     const chocolatesNum = Number(chocolates);
     const envioBool = !!requiere_envio;
     const facturaBool = !!solicita_factura;
-    const MAX_DIRECCION = 50;
+    const MAX_DIRECCION = 100;
     const MAX_COMENTARIOS = 200;
 
     const churrosOk = Number.isFinite(personasNum) && personasNum > 0 && Number.isFinite(churrosPorNum) && churrosPorNum >= 2 && churrosPorNum <= 12;
@@ -134,6 +134,10 @@ app.post('/api/pedidos', async (req, res) => {
 
     if (typeof direccion === 'string' && direccion.length > MAX_DIRECCION) {
       return res.status(400).json({ ok: false, error: `La dirección no puede superar ${MAX_DIRECCION} caracteres.` });
+    }
+
+    if (typeof direccion_entrega === 'string' && direccion_entrega.length > MAX_DIRECCION) {
+      return res.status(400).json({ ok: false, error: `La dirección de entrega no puede superar ${MAX_DIRECCION} caracteres.` });
     }
 
     if (typeof comentarios === 'string' && comentarios.length > MAX_COMENTARIOS) {

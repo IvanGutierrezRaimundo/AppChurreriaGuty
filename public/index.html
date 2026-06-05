@@ -51,21 +51,59 @@
       const order = document.getElementById('confirm-order');
       if(!modal || !summary || !budget || !order) return;
 
-      const lines = [
-        ['Nombre', payload.nombre],
-        ['Teléfono', payload.telefono],
-        ['E-mail', payload.email],
-        ['Dirección', payload.direccion || '—'],
-        ['CP / Ciudad / Provincia', [payload.cp, payload.ciudad, payload.provincia].filter(Boolean).join(' · ') || '—'],
-        ['NIF', payload.nif || '—'],
-        ['Fecha', payload.fecha || '—'],
-        ['Hora', payload.hora || '—'],
-        ['Personas', payload.personas || 0],
-        ['Churros por persona', Number.isFinite(payload.churros_por_persona) ? payload.churros_por_persona : '—'],
-        ['Chocolates', payload.chocolates || 0],
-        ['Envío', payload.requiere_envio ? 'Sí' : 'No'],
-        ['Método de pago', payload.metodo_pago || '—'],
-        ['Comentarios', payload.comentarios || 'Sin comentarios.']
+      const envioSi = payload?.requiere_envio === true
+        || payload?.requiere_envio === 1
+        || String(payload?.requiere_envio || '').toLowerCase() === 'si'
+        || String(payload?.requiere_envio || '').toLowerCase() === 'sí';
+
+      const fechaResumen = (() => {
+        const raw = String(payload?.fecha || '').trim();
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+        if(!m) return raw || '—';
+        return `${m[3]}/${m[2]}/${m[1].slice(2)}`;
+      })();
+
+      const sections = [
+        {
+          title: 'Datos personales',
+          lines: [
+            ['Nombre', payload.nombre],
+            ['Teléfono', payload.telefono],
+            ['E-mail', payload.email || '—'],
+            ['Dirección', payload.direccion || '—'],
+            ['CP / Ciudad / Provincia', [payload.cp, payload.ciudad, payload.provincia].filter(Boolean).join(' · ') || '—'],
+            ['NIF', payload.nif || '—']
+          ]
+        },
+        {
+          title: 'Cantidad',
+          lines: [
+            ['Personas', payload.personas || 0],
+            ['Churros por persona', Number.isFinite(payload.churros_por_persona) ? payload.churros_por_persona : '—'],
+            ['Chocolates', payload.chocolates || 0]
+          ]
+        },
+        {
+          title: 'Fecha y hora',
+          lines: [
+            ['Fecha', fechaResumen],
+            ['Hora', payload.hora || '—']
+          ]
+        },
+        {
+          title: 'Envío',
+          lines: [
+            ['Envío', envioSi ? 'Sí' : 'No'],
+            ['Dirección de entrega', envioSi ? (payload.direccion_entrega || '—') : 'No aplica']
+          ]
+        },
+        {
+          title: 'Pago y comentarios',
+          lines: [
+            ['Método de pago', payload.metodo_pago || '—'],
+            ['Comentarios', payload.comentarios || 'Sin comentarios.']
+          ]
+        }
       ];
 
       if(confirmData){
@@ -73,11 +111,21 @@
         confirmData.dataset.total = String(totalPresupuesto);
       }
 
-      summary.innerHTML = lines.map(([label, value]) => `<li><strong>${label}:</strong> ${value}</li>`).join('');
+      summary.innerHTML = sections.map((section) => {
+        const items = section.lines
+          .map(([label, value]) => `<li><strong>${label}:</strong><span class="confirm-value">${value}</span></li>`)
+          .join('');
+        return `
+          <article class="confirm-fieldset">
+            <h4>${section.title}</h4>
+            <ul class="confirm-list confirm-summary-list">${items}</ul>
+          </article>
+        `;
+      }).join('');
       budget.innerHTML = `
         <li><span>Churros</span><strong>${formatCurrency(Math.max(0, (payload.personas || 0) * (Number.isFinite(payload.churros_por_persona) ? payload.churros_por_persona : 0) * 0.25))}</strong></li>
         <li><span>Chocolate</span><strong>${formatCurrency((payload.chocolates || 0) * 1.5)}</strong></li>
-        <li><span>Envío</span><strong>${formatCurrency(payload.requiere_envio ? 25 : 0)}</strong></li>
+        <li><span>Envío</span><strong>${formatCurrency(envioSi ? 25 : 0)}</strong></li>
         <li class="confirm-total"><span>Total</span><strong>${formatCurrency(totalPresupuesto)}</strong></li>`;
       order.textContent = provisionalId;
       modal.classList.remove('hidden');
@@ -113,9 +161,11 @@
       if(back){ back.classList.toggle('hidden', !isError); }
     }
 
-    function showSuccessModal(){
+    function showSuccessModal(orderId){
       const modal = document.getElementById('success-modal');
+      const successOrder = document.getElementById('success-order');
       if(!modal) return;
+      if(successOrder) successOrder.textContent = orderId ? `PED-${orderId}` : '—';
       modal.classList.remove('hidden');
       modal.setAttribute('aria-hidden', 'false');
     }
@@ -184,7 +234,7 @@
           return;
         }
         closeConfirmModal();
-        showSuccessModal();
+        showSuccessModal(data.id);
       } catch (err) {
         console.error('Error enviando pedido:', err);
         showConfirmMessage('Lo sentimos, ha habido un error de conexión. Disculpe las molestias. Puede volver al formulario e intentarlo de nuevo.', { isError: true });
@@ -219,7 +269,7 @@
       const honeypot = document.getElementById('hp').value;
       const facturaOn = document.getElementById('factura')?.checked || false;
       const metodoPago = document.querySelector('input[name="pago"]:checked')?.value || '';
-      const MAX_DIRECCION = 50;
+      const MAX_DIRECCION = 100;
 
       // Reglas de obligatoriedad para Datos personales según factura
       const nombreEl = document.getElementById('nombre');
@@ -263,6 +313,15 @@
         return;
       }
       document.getElementById('direccion')?.setCustomValidity('');
+
+      if(direccionEntrega.length > MAX_DIRECCION){
+        const msg = `La dirección de entrega no puede superar ${MAX_DIRECCION} caracteres.`;
+        status.textContent = msg;
+        document.getElementById('direccion_entrega')?.setCustomValidity(msg);
+        document.getElementById('direccion_entrega')?.reportValidity();
+        return;
+      }
+      document.getElementById('direccion_entrega')?.setCustomValidity('');
 
       // Validación fecha dd/mm/aa y que sea hoy o posterior
       function parseDDMMYY(s){
@@ -370,8 +429,7 @@
         comentarios
       };
 
-      const provisionalId = `PED-${Date.now().toString().slice(-6)}`;
-      showConfirmModal(payload, totalPresupuesto, provisionalId);
+      showConfirmModal(payload, totalPresupuesto, 'Se asignará al confirmar');
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -664,7 +722,7 @@
         </div>
         <div class="field">
           <label for="direccion">Dirección</label>
-          <input id="direccion" name="direccion" autocomplete="address-line1" maxlength="50" placeholder="Calle, número, piso">
+          <input id="direccion" name="direccion" autocomplete="address-line1" maxlength="100" placeholder="Calle, número, piso">
         </div>
         <div class="field">
           <label for="ciudad">Ciudad</label>
@@ -747,7 +805,7 @@
         </div>
         <div class="field hidden" id="direccion-entrega-wrap">
           <label for="direccion_entrega">Dirección de entrega</label>
-          <input id="direccion_entrega" name="direccion_entrega" placeholder="Calle, número, piso">
+          <input id="direccion_entrega" name="direccion_entrega" maxlength="100" placeholder="Calle, número, piso">
         </div>
         <div class="field hidden" id="envio-supl-msg">
           <div class="note">Este servicio tendrá un suplemento de 25 €; incluye entrega de los churros, bidones y termos de chocolate, así como su recogida.
@@ -830,12 +888,12 @@
       <div class="confirm-grid">
         <section>
           <h3>Datos del pedido</h3>
-          <ul id="confirm-summary" class="confirm-list"></ul>
+          <div id="confirm-summary" class="confirm-summary"></div>
         </section>
-        <section>
+        <section class="confirm-fieldset confirm-budget-panel">
           <h3>Presupuesto</h3>
           <ul id="confirm-budget" class="confirm-list confirm-budget"></ul>
-          <p class="confirm-order">N.º de pedido provisional: <strong id="confirm-order"></strong></p>
+          <p class="confirm-order">N.º de pedido: <strong id="confirm-order"></strong></p>
         </section>
       </div>
       <div class="confirm-actions">
@@ -851,6 +909,7 @@
       <button type="button" id="success-close" class="confirm-close" aria-label="Cerrar">×</button>
       <h2 id="success-title">Pedido enviado</h2>
       <p class="confirm-intro">Su solicitud de pedido ha sido enviada, espere a que sea confirmada. Nos pondremos en contacto con usted por teléfono, Whatsapp o E-mail, gracias por su confianza.</p>
+      <p class="confirm-order">N.º de pedido: <strong id="success-order"></strong></p>
     </div>
   </div>
 </body>
