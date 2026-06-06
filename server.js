@@ -177,8 +177,9 @@ app.get('/admin/api/pedidos', ensureAdmin, async (req, res) => {
     const sortMap = {
       id: 'id',
       nombre: 'nombre',
-      telefono: 'telefono',
-      email: 'email',
+      personas: 'personas',
+      churros_por_persona: 'churros_por_persona',
+      chocolates: 'chocolates',
       fecha: 'fecha',
       hora: 'hora',
       presupuesto_total: 'presupuesto_total',
@@ -200,7 +201,7 @@ app.get('/admin/api/pedidos', ensureAdmin, async (req, res) => {
     const safePageSize = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 500);
     const safePage = Math.max(parseInt(page, 10) || 1, 1);
     const offset = (safePage - 1) * safePageSize;
-    const sql = `SELECT id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, fecha, hora, presupuesto_total, estado
+    const sql = `SELECT id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, personas, churros_por_persona, chocolates, fecha, hora, presupuesto_total, estado
            FROM pedidos
            ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
            ORDER BY ${sortCol} ${sortDir}, id DESC

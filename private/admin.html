@@ -17,6 +17,28 @@
     th[data-dir="desc"] .arrow-down{ color: var(--color-brown); }
     /* (Revert) Usar estilos corporativos por defecto para tablas y acciones */
     .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
+    .view-switch{ display: flex; justify-content: flex-start; gap: 8px; margin: 0 0 10px; }
+    .view-toggle{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 96px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--color-border);
+      background: var(--color-primary);
+      color: var(--color-brown);
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease;
+    }
+    .view-toggle:hover{ border-color: var(--color-brown); }
+    .view-toggle.is-active{
+      background: #E5E7EB;
+      border-color: #D1D5DB;
+      color: #374151;
+    }
     .estado-cell{ cursor: pointer; }
     .estado-cell .pedido-estado-badge{ pointer-events: none; }
     .estado-modal-backdrop{
@@ -81,13 +103,19 @@
     </div>
   </section>
   <div class="admin-table-wrap">
+  <div class="view-switch" aria-label="Cambiar vista de pedidos">
+    <a class="view-toggle is-active" href="/admin" aria-current="page">Tabla</a>
+    <button type="button" class="view-toggle">Fichas</button>
+    <button type="button" class="view-toggle">Calendario</button>
+  </div>
   <table>
     <thead>
       <tr>
         <th class="sortable" data-sort="id">ID <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="nombre">Cliente <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-        <th class="sortable" data-sort="telefono">Teléfono <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-        <th class="sortable" data-sort="email">E-mail <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="personas">Personas <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="churros_por_persona">Churros por persona <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="chocolates">Chocolates <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="fecha">Fecha <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="hora">Hora <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="presupuesto_total">Total (€) <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
@@ -293,16 +321,16 @@
             cmp = av.localeCompare(bv, 'es');
             break;
           }
-          case 'telefono': {
-            const av = (a.telefono||'').toString().toLowerCase();
-            const bv = (b.telefono||'').toString().toLowerCase();
-            cmp = av.localeCompare(bv, 'es');
+          case 'personas': {
+            cmp = toNumber(a.personas) - toNumber(b.personas);
             break;
           }
-          case 'email': {
-            const av = (a.email||'').toString().toLowerCase();
-            const bv = (b.email||'').toString().toLowerCase();
-            cmp = av.localeCompare(bv, 'es');
+          case 'churros_por_persona': {
+            cmp = toNumber(a.churros_por_persona) - toNumber(b.churros_por_persona);
+            break;
+          }
+          case 'chocolates': {
+            cmp = toNumber(a.chocolates) - toNumber(b.chocolates);
             break;
           }
           case 'nombre':
@@ -321,8 +349,9 @@
         tr.innerHTML = `
           <td>${r.id}</td>
           <td>${r.nombre}</td>
-          <td>${r.telefono || ''}</td>
-          <td>${r.email || ''}</td>
+          <td>${r.personas ?? ''}</td>
+          <td>${r.churros_por_persona ?? ''}</td>
+          <td>${r.chocolates ?? ''}</td>
           <td>${formatDate(r.fecha)}</td>
           <td>${formatTime(r.hora)}</td>
           <td>${r.presupuesto_total}</td>
