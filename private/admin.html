@@ -39,6 +39,45 @@
       border-color: #D1D5DB;
       color: #374151;
     }
+    .cards-grid{
+      display: none;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .cards-grid.is-visible{ display: grid; }
+    .pedido-card{
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      background: #FFF;
+      padding: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .pedido-card-head{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .pedido-card-id{ font-weight: 800; color: var(--color-brown); }
+    .pedido-card-grid{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .pedido-card-row{
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+    }
+    .pedido-card-label{ color: var(--color-muted); font-size: 0.9rem; }
+    .pedido-card-value{ font-weight: 700; text-align: right; }
+    @media (max-width: 560px){
+      .cards-grid{ grid-template-columns: 1fr; }
+    }
     .estado-cell{ cursor: pointer; }
     .estado-cell .pedido-estado-badge{ pointer-events: none; }
     .estado-modal-backdrop{
@@ -104,11 +143,11 @@
   </section>
   <div class="admin-table-wrap">
   <div class="view-switch" aria-label="Cambiar vista de pedidos">
-    <a class="view-toggle is-active" href="/admin" aria-current="page">Tabla</a>
-    <button type="button" class="view-toggle">Fichas</button>
-    <button type="button" class="view-toggle">Calendario</button>
+    <button type="button" id="viewTablaBtn" class="view-toggle is-active" aria-current="page">Tabla</button>
+    <button type="button" id="viewFichasBtn" class="view-toggle">Fichas</button>
+    <button type="button" id="viewCalendarioBtn" class="view-toggle">Calendario</button>
   </div>
-  <table>
+  <table id="pedidosTable">
     <thead>
       <tr>
         <th class="sortable" data-sort="id">ID <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
@@ -125,6 +164,7 @@
     </thead>
     <tbody id="tbody"></tbody>
   </table>
+  <div id="cardsGrid" class="cards-grid"></div>
   </div>
   </div>
 
@@ -152,6 +192,11 @@
   <script>
     const tbody = document.getElementById('tbody');
     const pageSizeSel = document.getElementById('pageSize');
+    const pedidosTable = document.getElementById('pedidosTable');
+    const cardsGrid = document.getElementById('cardsGrid');
+    const viewTablaBtn = document.getElementById('viewTablaBtn');
+    const viewFichasBtn = document.getElementById('viewFichasBtn');
+    const viewCalendarioBtn = document.getElementById('viewCalendarioBtn');
     const estadoModalBackdrop = document.getElementById('estadoModalBackdrop');
     const estadoModalText = document.getElementById('estadoModalText');
     const estadoModalSelect = document.getElementById('estadoModalSelect');
@@ -159,6 +204,7 @@
     const estadoModalCancel = document.getElementById('estadoModalCancel');
     const estadoModalSave = document.getElementById('estadoModalSave');
     let editingEstadoId = null;
+    let currentView = 'tabla';
     function formatDate(value){
       if(!value) return '';
       try{
@@ -213,6 +259,44 @@
       const estado = estadoRaw || 'Pendiente';
       return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${estado}</span>`;
     }
+    function updateViewButtons(){
+      const isTabla = currentView === 'tabla';
+      const isFichas = currentView === 'fichas';
+      viewTablaBtn.classList.toggle('is-active', isTabla);
+      viewFichasBtn.classList.toggle('is-active', isFichas);
+      viewCalendarioBtn.classList.remove('is-active');
+      if(isTabla) viewTablaBtn.setAttribute('aria-current', 'page');
+      else viewTablaBtn.removeAttribute('aria-current');
+    }
+    function applyCurrentView(){
+      const showTabla = currentView === 'tabla';
+      pedidosTable.style.display = showTabla ? 'table' : 'none';
+      cardsGrid.classList.toggle('is-visible', !showTabla);
+      updateViewButtons();
+    }
+    function renderCard(r){
+      return `
+        <article class="pedido-card">
+          <div class="pedido-card-head">
+            <span class="pedido-card-id">#${r.id}</span>
+            <span class="estado-cell" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="Cambiar estado">${renderEstadoBadge(r.estado)}</span>
+          </div>
+          <div class="pedido-card-grid">
+            <div class="pedido-card-row"><span class="pedido-card-label">Cliente</span><span class="pedido-card-value">${r.nombre || ''}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Personas</span><span class="pedido-card-value">${r.personas ?? ''}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Churros/persona</span><span class="pedido-card-value">${r.churros_por_persona ?? ''}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Chocolates</span><span class="pedido-card-value">${r.chocolates ?? ''}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Fecha</span><span class="pedido-card-value">${formatDate(r.fecha)}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Hora</span><span class="pedido-card-value">${formatTime(r.hora)}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Total</span><span class="pedido-card-value">${r.presupuesto_total}</span></div>
+          </div>
+          <span class="btn-row">
+            <button data-id="${r.id}" class="open">Abrir</button>
+            <button data-id="${r.id}" class="del">Eliminar</button>
+          </span>
+        </article>
+      `;
+    }
     function openEstadoModal(id, estadoRaw, nombre){
       editingEstadoId = Number(id);
       estadoModalSelect.value = estadoRaw || 'Pendiente';
@@ -254,11 +338,10 @@
           return;
         }
         const finalEstado = data.data?.estado || estado;
-        const cell = tbody.querySelector(`td.estado-cell[data-id="${id}"]`);
-        if(cell){
+        document.querySelectorAll(`.estado-cell[data-id="${id}"]`).forEach((cell) => {
           cell.dataset.estado = finalEstado;
           cell.innerHTML = renderEstadoBadge(finalEstado);
-        }
+        });
         closeEstadoModal();
       } catch (_error) {
         estadoModalError.textContent = 'Error guardando estado.';
@@ -344,6 +427,7 @@
         return dirFactor * cmp;
       });
       tbody.innerHTML = '';
+      cardsGrid.innerHTML = '';
       for (const r of rows) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -364,9 +448,11 @@
           </td>
         `;
         tbody.appendChild(tr);
+        cardsGrid.insertAdjacentHTML('beforeend', renderCard(r));
       }
       bindActions();
       updateSortIndicators();
+      applyCurrentView();
     }
     // Interacciones de ordenación en cabecera (delegadas)
     const thead = document.querySelector('table thead');
@@ -404,6 +490,18 @@
         });
       });
     }
+
+    viewTablaBtn.addEventListener('click', () => {
+      currentView = 'tabla';
+      applyCurrentView();
+    });
+    viewFichasBtn.addEventListener('click', () => {
+      currentView = 'fichas';
+      applyCurrentView();
+    });
+    viewCalendarioBtn.addEventListener('click', () => {
+      alert('Vista Calendario en construcción.');
+    });
 
     estadoModalCancel.addEventListener('click', closeEstadoModal);
     estadoModalSave.addEventListener('click', saveEstadoFromModal);
