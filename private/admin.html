@@ -114,6 +114,24 @@
       } catch(_){ /* noop */ }
       return String(value);
     }
+    function getEstadoBadgeClass(estadoRaw){
+      const estado = estadoRaw || 'Pendiente';
+      switch(estado){
+        case 'Realizado':
+          return 'pedido-estado-realizado';
+        case 'Cobrado':
+          return 'pedido-estado-cobrado';
+        case 'Cancelado':
+          return 'pedido-estado-cancelado';
+        case 'Pendiente':
+        default:
+          return 'pedido-estado-pendiente';
+      }
+    }
+    function renderEstadoBadge(estadoRaw){
+      const estado = estadoRaw || 'Pendiente';
+      return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${estado}</span>`;
+    }
     let currentSort = 'fecha';
     let currentDir = 'desc';
     function updateSortIndicators(){
@@ -199,7 +217,7 @@
           <td>${formatDate(r.fecha)}</td>
           <td>${formatTime(r.hora)}</td>
           <td>${r.presupuesto_total}</td>
-          <td>${r.estado || 'Pendiente'}</td>
+          <td>${renderEstadoBadge(r.estado)}</td>
           <td>
             <span class="btn-row">
               <button data-id="${r.id}" class="open">Abrir</button>

@@ -279,34 +279,38 @@
       const m = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(String(value));
       return m ? `${m[1]}:${m[2]}` : String(value);
     }
-    function applyEstadoHeader(estadoRaw){
-      const header = document.getElementById('estadoHeader');
-      if(!header) return;
+    function getEstadoBadgeClass(estadoRaw){
       const estado = estadoRaw || 'Pendiente';
-      header.textContent = estado;
-      header.classList.remove(
+      switch(estado){
+        case 'Realizado':
+          return 'pedido-estado-realizado';
+        case 'Cobrado':
+          return 'pedido-estado-cobrado';
+        case 'Cancelado':
+          return 'pedido-estado-cancelado';
+        case 'Pendiente':
+        default:
+          return 'pedido-estado-pendiente';
+      }
+    }
+    function renderEstadoBadge(target, estadoRaw){
+      if(!target) return;
+      const estado = estadoRaw || 'Pendiente';
+      target.textContent = estado;
+      target.classList.remove(
         'pedido-estado-badge',
         'pedido-estado-pendiente',
         'pedido-estado-realizado',
         'pedido-estado-cobrado',
         'pedido-estado-cancelado'
       );
-      header.classList.add('pedido-estado-badge');
-      switch(estado){
-        case 'Realizado':
-          header.classList.add('pedido-estado-realizado');
-          break;
-        case 'Cobrado':
-          header.classList.add('pedido-estado-cobrado');
-          break;
-        case 'Cancelado':
-          header.classList.add('pedido-estado-cancelado');
-          break;
-        case 'Pendiente':
-        default:
-          header.classList.add('pedido-estado-pendiente');
-          break;
-      }
+      target.classList.add('pedido-estado-badge', getEstadoBadgeClass(estado));
+    }
+    function applyEstadoHeader(estadoRaw){
+      renderEstadoBadge(document.getElementById('estadoHeader'), estadoRaw);
+    }
+    function applyEstadoField(estadoRaw){
+      renderEstadoBadge(document.getElementById('f_estado'), estadoRaw);
     }
     const nf = new Intl.NumberFormat('es-ES', { style:'currency', currency:'EUR' });
     async function fetchPedido(id){
@@ -349,7 +353,7 @@
         document.getElementById('f_presupuesto_total').textContent = typeof r.presupuesto_total !== 'undefined' ? nf.format(Number(r.presupuesto_total)) : '';
         document.getElementById('f_fecha').textContent = formatDate(r.fecha);
         document.getElementById('f_hora').textContent = formatTime(r.hora);
-        document.getElementById('f_estado').textContent = r.estado || 'Pendiente';
+        applyEstadoField(r.estado);
         document.getElementById('f_nombre').textContent = r.nombre || '';
         document.getElementById('f_telefono').textContent = r.telefono || '';
         document.getElementById('f_email').textContent = r.email || '';
@@ -415,7 +419,7 @@
         if (data && data.ok) {
           const r = data.data || { estado };
           currentPedido.estado = r.estado || estado;
-          document.getElementById('f_estado').textContent = currentPedido.estado || 'Pendiente';
+          applyEstadoField(currentPedido.estado);
           applyEstadoHeader(currentPedido.estado);
           estadoEditor.style.display = 'none';
           editEstado.disabled = false;
