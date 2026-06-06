@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Admin - Pedidos</title>
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" />
   <style>
     /* Ajustes mínimos específicos del panel admin para usar el tema corporativo */
     .admin-bar{ max-width: 1200px; margin: 0 auto var(--space-lg); display:flex; align-items:center; justify-content: space-between; }
@@ -46,6 +47,67 @@
       margin-top: 8px;
     }
     .cards-grid.is-visible{ display: grid; }
+    .calendar-view{
+      display: none;
+      margin-top: 8px;
+      background: #FFF;
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: var(--shadow-sm);
+    }
+    .calendar-view.is-visible{ display: block; }
+    .calendar-empty{
+      color: var(--color-muted);
+      text-align: center;
+      padding: 28px 10px;
+      font-weight: 600;
+      display: none;
+    }
+    .calendar-empty.is-visible{ display: block; }
+    .fc .fc-button-primary{
+      background: var(--color-primary);
+      border-color: var(--color-primary);
+      color: var(--color-brown);
+      font-weight: 700;
+    }
+    .fc .fc-button-primary:not(:disabled):hover{
+      background: #F5C600;
+      border-color: #F5C600;
+      color: var(--color-brown);
+    }
+    .fc .fc-button-primary:disabled{
+      background: #E5E7EB;
+      border-color: #E5E7EB;
+      color: #6B7280;
+    }
+    .fc .fc-toolbar-title{ color: var(--color-brown); font-size: 1.1rem; }
+    .fc .fc-daygrid-event{ border-radius: 8px; padding: 2px 4px; }
+    .fc .fc-daygrid-day-frame{ min-height: 170px; }
+    .fc .fc-daygrid-day-events{
+      max-height: 150px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+    .cal-event-main{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+    .cal-event-cliente{
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1;
+    }
+    .cal-event-hora{
+      font-weight: 800;
+      flex-shrink: 0;
+    }
     .pedido-card{
       border: 1px solid var(--color-border);
       border-radius: 12px;
@@ -165,6 +227,8 @@
     <tbody id="tbody"></tbody>
   </table>
   <div id="cardsGrid" class="cards-grid"></div>
+  <div id="calendarView" class="calendar-view"></div>
+  <div id="calendarEmpty" class="calendar-empty"></div>
   </div>
   </div>
 
@@ -189,11 +253,14 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   <script>
     const tbody = document.getElementById('tbody');
     const pageSizeSel = document.getElementById('pageSize');
     const pedidosTable = document.getElementById('pedidosTable');
     const cardsGrid = document.getElementById('cardsGrid');
+    const calendarView = document.getElementById('calendarView');
+    const calendarEmpty = document.getElementById('calendarEmpty');
     const viewTablaBtn = document.getElementById('viewTablaBtn');
     const viewFichasBtn = document.getElementById('viewFichasBtn');
     const viewCalendarioBtn = document.getElementById('viewCalendarioBtn');
@@ -205,6 +272,8 @@
     const estadoModalSave = document.getElementById('estadoModalSave');
     let editingEstadoId = null;
     let currentView = 'tabla';
+    let calendar = null;
+    let currentRows = [];
     function formatDate(value){
       if(!value) return '';
       try{
@@ -262,16 +331,138 @@
     function updateViewButtons(){
       const isTabla = currentView === 'tabla';
       const isFichas = currentView === 'fichas';
+      const isCalendario = currentView === 'calendario';
       viewTablaBtn.classList.toggle('is-active', isTabla);
       viewFichasBtn.classList.toggle('is-active', isFichas);
-      viewCalendarioBtn.classList.remove('is-active');
+      viewCalendarioBtn.classList.toggle('is-active', isCalendario);
       if(isTabla) viewTablaBtn.setAttribute('aria-current', 'page');
       else viewTablaBtn.removeAttribute('aria-current');
+      if(isFichas) viewFichasBtn.setAttribute('aria-current', 'page');
+      else viewFichasBtn.removeAttribute('aria-current');
+      if(isCalendario) viewCalendarioBtn.setAttribute('aria-current', 'page');
+      else viewCalendarioBtn.removeAttribute('aria-current');
+    }
+    function getEstadoCalendarColors(estadoRaw){
+      const estado = estadoRaw || 'Pendiente';
+      switch(estado){
+        case 'Realizado':
+          return { backgroundColor: '#DCFCE7', borderColor: '#16A34A', textColor: '#166534' };
+        case 'Cobrado':
+          return { backgroundColor: '#DBEAFE', borderColor: '#2563EB', textColor: '#1D4ED8' };
+        case 'Cancelado':
+          return { backgroundColor: '#FEE2E2', borderColor: '#DC2626', textColor: '#B91C1C' };
+        case 'Pendiente':
+        default:
+          return { backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)', textColor: 'var(--color-brown)' };
+      }
+    }
+    function buildCalendarEvents(rows){
+      return rows
+        .filter((r) => r && r.fecha)
+        .map((r) => {
+          const fecha = String(r.fecha).includes('T') ? String(r.fecha).slice(0, 10) : String(r.fecha).slice(0, 10);
+          const horaMatch = /^(\d{2}):(\d{2})/.exec(String(r.hora || ''));
+          const start = horaMatch ? `${fecha}T${horaMatch[1]}:${horaMatch[2]}:00` : fecha;
+          const allDay = !horaMatch;
+          const colors = getEstadoCalendarColors(r.estado);
+          return {
+            id: String(r.id),
+            title: `${r.nombre || 'Cliente'}`,
+            start,
+            allDay,
+            backgroundColor: colors.backgroundColor,
+            borderColor: colors.borderColor,
+            textColor: colors.textColor,
+            extendedProps: {
+              pedidoId: r.id,
+              estado: r.estado || 'Pendiente',
+              nombre: r.nombre || '',
+              hora: horaMatch ? `${horaMatch[1]}:${horaMatch[2]}` : '',
+              total: r.presupuesto_total
+            }
+          };
+        });
+    }
+    function ensureCalendar(){
+      if(calendar || !window.FullCalendar) return;
+      calendar = new FullCalendar.Calendar(calendarView, {
+        initialView: 'dayGridMonth',
+        locale: 'es',
+        height: 'auto',
+        dayMaxEventRows: false,
+        dayMaxEvents: false,
+        displayEventTime: false,
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        buttonText: {
+          today: 'Hoy',
+          month: 'Mes',
+          week: 'Semana',
+          day: 'Dia'
+        },
+        eventClick: (info) => {
+          const id = info.event.extendedProps.pedidoId;
+          if(id) location.href = `/admin/pedido/${id}`;
+        },
+        eventContent: (arg) => {
+          const ex = arg.event.extendedProps;
+          const wrap = document.createElement('div');
+          wrap.className = 'cal-event-main';
+
+          const cliente = document.createElement('span');
+          cliente.className = 'cal-event-cliente';
+          cliente.textContent = ex.nombre || arg.event.title || 'Cliente';
+
+          wrap.appendChild(cliente);
+
+          if(ex.hora){
+            const hora = document.createElement('span');
+            hora.className = 'cal-event-hora';
+            hora.textContent = ex.hora;
+            wrap.appendChild(hora);
+          }
+
+          return { domNodes: [wrap] };
+        },
+        eventDidMount: (info) => {
+          const ex = info.event.extendedProps;
+          const hora = ex.hora ? ` ${ex.hora}` : '';
+          info.el.title = `${ex.nombre || 'Cliente'}${hora}`;
+        }
+      });
+      calendar.render();
+    }
+    function renderCalendar(rows){
+      if(!window.FullCalendar){
+        calendarEmpty.textContent = 'No se pudo cargar la libreria de calendario.';
+        calendarEmpty.classList.add('is-visible');
+        return;
+      }
+      ensureCalendar();
+      if(!calendar) return;
+      calendar.removeAllEvents();
+      const events = buildCalendarEvents(rows);
+      if(events.length){
+        calendar.addEventSource(events);
+        calendarEmpty.classList.remove('is-visible');
+        calendarEmpty.textContent = '';
+      } else {
+        calendarEmpty.textContent = 'No hay pedidos para mostrar en el calendario con los filtros actuales.';
+        calendarEmpty.classList.add('is-visible');
+      }
+      calendar.updateSize();
     }
     function applyCurrentView(){
       const showTabla = currentView === 'tabla';
+      const showFichas = currentView === 'fichas';
+      const showCalendario = currentView === 'calendario';
       pedidosTable.style.display = showTabla ? 'table' : 'none';
-      cardsGrid.classList.toggle('is-visible', !showTabla);
+      cardsGrid.classList.toggle('is-visible', showFichas);
+      calendarView.classList.toggle('is-visible', showCalendario);
+      if(showCalendario) renderCalendar(currentRows);
       updateViewButtons();
     }
     function renderCard(r){
@@ -342,6 +533,8 @@
           cell.dataset.estado = finalEstado;
           cell.innerHTML = renderEstadoBadge(finalEstado);
         });
+        currentRows = currentRows.map((r) => (Number(r.id) === id ? { ...r, estado: finalEstado } : r));
+        if(currentView === 'calendario') renderCalendar(currentRows);
         closeEstadoModal();
       } catch (_error) {
         estadoModalError.textContent = 'Error guardando estado.';
@@ -426,6 +619,7 @@
         }
         return dirFactor * cmp;
       });
+      currentRows = rows;
       tbody.innerHTML = '';
       cardsGrid.innerHTML = '';
       for (const r of rows) {
@@ -484,7 +678,7 @@
           location.href = `/admin/pedido/${id}`;
         });
       });
-      document.querySelectorAll('td.estado-cell').forEach(cell => {
+      document.querySelectorAll('.estado-cell').forEach(cell => {
         cell.addEventListener('click', () => {
           openEstadoModal(cell.dataset.id, cell.dataset.estado, cell.dataset.nombre || '');
         });
@@ -500,7 +694,8 @@
       applyCurrentView();
     });
     viewCalendarioBtn.addEventListener('click', () => {
-      alert('Vista Calendario en construcción.');
+      currentView = 'calendario';
+      applyCurrentView();
     });
 
     estadoModalCancel.addEventListener('click', closeEstadoModal);
