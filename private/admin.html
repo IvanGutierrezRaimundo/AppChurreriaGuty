@@ -17,6 +17,31 @@
     th[data-dir="desc"] .arrow-down{ color: var(--color-brown); }
     /* (Revert) Usar estilos corporativos por defecto para tablas y acciones */
     .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
+    .estado-cell{ cursor: pointer; }
+    .estado-cell .pedido-estado-badge{ pointer-events: none; }
+    .estado-modal-backdrop{
+      position: fixed;
+      inset: 0;
+      background: rgba(43, 30, 24, 0.42);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1000;
+    }
+    .estado-modal-backdrop.is-open{ display: flex; }
+    .estado-modal{
+      width: min(100%, 420px);
+      background: #FFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      padding: 20px;
+    }
+    .estado-modal h2{ margin: 0 0 8px; color: var(--color-brown); font-size: 1.25rem; }
+    .estado-modal p{ margin: 0 0 16px; color: var(--color-muted); }
+    .estado-modal-actions{ display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+    .estado-modal-error{ min-height: 1.5em; margin-top: 10px; color: #B91C1C; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -75,9 +100,37 @@
   </div>
   </div>
 
+  <div id="estadoModalBackdrop" class="estado-modal-backdrop" aria-hidden="true">
+    <div class="estado-modal" role="dialog" aria-modal="true" aria-labelledby="estadoModalTitle">
+      <h2 id="estadoModalTitle">Cambiar estado</h2>
+      <p id="estadoModalText"></p>
+      <div class="field">
+        <label for="estadoModalSelect">Nuevo estado</label>
+        <select id="estadoModalSelect">
+          <option value="Pendiente">Pendiente</option>
+          <option value="Realizado">Realizado</option>
+          <option value="Cobrado">Cobrado</option>
+          <option value="Cancelado">Cancelado</option>
+        </select>
+      </div>
+      <div id="estadoModalError" class="estado-modal-error"></div>
+      <div class="estado-modal-actions">
+        <button type="button" id="estadoModalCancel">Cancelar</button>
+        <button type="button" id="estadoModalSave">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const tbody = document.getElementById('tbody');
     const pageSizeSel = document.getElementById('pageSize');
+    const estadoModalBackdrop = document.getElementById('estadoModalBackdrop');
+    const estadoModalText = document.getElementById('estadoModalText');
+    const estadoModalSelect = document.getElementById('estadoModalSelect');
+    const estadoModalError = document.getElementById('estadoModalError');
+    const estadoModalCancel = document.getElementById('estadoModalCancel');
+    const estadoModalSave = document.getElementById('estadoModalSave');
+    let editingEstadoId = null;
     function formatDate(value){
       if(!value) return '';
       try{
@@ -131,6 +184,62 @@
     function renderEstadoBadge(estadoRaw){
       const estado = estadoRaw || 'Pendiente';
       return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${estado}</span>`;
+    }
+    function openEstadoModal(id, estadoRaw, nombre){
+      editingEstadoId = Number(id);
+      estadoModalSelect.value = estadoRaw || 'Pendiente';
+      estadoModalText.textContent = `Pedido #${id}${nombre ? ` · ${nombre}` : ''}`;
+      estadoModalError.textContent = '';
+      estadoModalBackdrop.classList.add('is-open');
+      estadoModalBackdrop.setAttribute('aria-hidden', 'false');
+      estadoModalSelect.focus();
+    }
+    function closeEstadoModal(){
+      editingEstadoId = null;
+      estadoModalError.textContent = '';
+      estadoModalBackdrop.classList.remove('is-open');
+      estadoModalBackdrop.setAttribute('aria-hidden', 'true');
+      estadoModalSave.disabled = false;
+      estadoModalCancel.disabled = false;
+    }
+    async function saveEstadoFromModal(){
+      const id = Number(editingEstadoId);
+      if(!Number.isFinite(id)) return;
+      const estado = estadoModalSelect.value;
+      estadoModalSave.disabled = true;
+      estadoModalCancel.disabled = true;
+      estadoModalError.textContent = '';
+      try {
+        const resp = await fetch(`/admin/api/pedidos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ estado })
+        });
+        if (resp.status === 401) {
+          location.href = '/admin';
+          return;
+        }
+        const data = await resp.json();
+        if (!data || !data.ok) {
+          estadoModalError.textContent = data?.error || 'No se pudo guardar el estado.';
+          return;
+        }
+        const finalEstado = data.data?.estado || estado;
+        const cell = tbody.querySelector(`td.estado-cell[data-id="${id}"]`);
+        if(cell){
+          cell.dataset.estado = finalEstado;
+          cell.innerHTML = renderEstadoBadge(finalEstado);
+        }
+        closeEstadoModal();
+      } catch (_error) {
+        estadoModalError.textContent = 'Error guardando estado.';
+      } finally {
+        if (estadoModalBackdrop.classList.contains('is-open')) {
+          estadoModalSave.disabled = false;
+          estadoModalCancel.disabled = false;
+        }
+      }
     }
     let currentSort = 'fecha';
     let currentDir = 'desc';
@@ -217,7 +326,7 @@
           <td>${formatDate(r.fecha)}</td>
           <td>${formatTime(r.hora)}</td>
           <td>${r.presupuesto_total}</td>
-          <td>${renderEstadoBadge(r.estado)}</td>
+          <td class="estado-cell" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="Cambiar estado">${renderEstadoBadge(r.estado)}</td>
           <td>
             <span class="btn-row">
               <button data-id="${r.id}" class="open">Abrir</button>
@@ -260,7 +369,25 @@
           location.href = `/admin/pedido/${id}`;
         });
       });
+      document.querySelectorAll('td.estado-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+          openEstadoModal(cell.dataset.id, cell.dataset.estado, cell.dataset.nombre || '');
+        });
+      });
     }
+
+    estadoModalCancel.addEventListener('click', closeEstadoModal);
+    estadoModalSave.addEventListener('click', saveEstadoFromModal);
+    estadoModalBackdrop.addEventListener('click', (ev) => {
+      if(ev.target === estadoModalBackdrop){
+        closeEstadoModal();
+      }
+    });
+    document.addEventListener('keydown', (ev) => {
+      if(ev.key === 'Escape' && estadoModalBackdrop.classList.contains('is-open')){
+        closeEstadoModal();
+      }
+    });
 
     document.getElementById('searchBtn').addEventListener('click', load);
     pageSizeSel.addEventListener('change', load);
