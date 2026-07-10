@@ -102,7 +102,7 @@
     </div>
     <div class="back-actions">
         <button type="button" id="backBtn" class="back-desktop">Volver</button>
-        <button type="button" id="exportOne" title="Exportar CSV de todos">Exportar CSV</button>
+      <button type="button" id="printOnePdf" title="Imprimir PDF">Imprimir PDF</button>
     </div>
   </div>
 
@@ -250,6 +250,7 @@
 
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script>
     function getIdFromPath(){
       const sp = new URLSearchParams(location.search);
@@ -313,6 +314,104 @@
       renderEstadoBadge(document.getElementById('f_estado'), estadoRaw);
     }
     const nf = new Intl.NumberFormat('es-ES', { style:'currency', currency:'EUR' });
+    function valueText(v){
+      if(v === null || typeof v === 'undefined' || v === '') return '-';
+      return String(v);
+    }
+    function boolText(v){ return v ? 'Sí' : 'No'; }
+    function downloadPedidoPdf(){
+      if(!currentPedido){
+        alert('Todavía no hay datos del pedido para imprimir.');
+        return;
+      }
+      if(!window.jspdf || !window.jspdf.jsPDF){
+        alert('No se pudo cargar la librería PDF. Inténtalo de nuevo.');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const margin = 40;
+      const usableWidth = doc.internal.pageSize.getWidth() - margin * 2;
+      const maxY = doc.internal.pageSize.getHeight() - 40;
+      let y = 40;
+
+      function ensureSpace(lines = 1, lineHeight = 15){
+        if(y + (lines * lineHeight) > maxY){
+          doc.addPage();
+          y = 40;
+        }
+      }
+      function addTitle(text){
+        ensureSpace(2, 20);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.text(text, margin, y);
+        y += 24;
+      }
+      function addSmall(text){
+        const lines = doc.splitTextToSize(text, usableWidth);
+        ensureSpace(lines.length, 14);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(lines, margin, y);
+        y += lines.length * 14 + 4;
+      }
+      function addSection(title){
+        ensureSpace(2, 18);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text(title, margin, y);
+        y += 18;
+      }
+      function addLine(label, value){
+        const line = `${label}: ${valueText(value)}`;
+        const lines = doc.splitTextToSize(line, usableWidth);
+        ensureSpace(lines.length, 14);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(11);
+        doc.text(lines, margin, y);
+        y += lines.length * 14 + 2;
+      }
+
+      const p = currentPedido;
+      const now = new Date();
+      addTitle(`Pedido #${valueText(p.id)}`);
+      addSmall(`Generado: ${now.toLocaleString('es-ES')}`);
+
+      addSection('Estado y resumen');
+      addLine('Estado', p.estado || 'Pendiente');
+      addLine('Fecha', formatDate(p.fecha));
+      addLine('Hora', formatTime(p.hora));
+      addLine('Total presupuesto', (typeof p.presupuesto_total !== 'undefined' && p.presupuesto_total !== null) ? nf.format(Number(p.presupuesto_total)) : '-');
+
+      addSection('Cliente');
+      addLine('Nombre / Razón social', p.nombre);
+      addLine('Teléfono', p.telefono);
+      addLine('Email', p.email);
+      addLine('Código Postal', p.cp);
+      addLine('Dirección', p.direccion);
+      addLine('Ciudad', p.ciudad);
+      addLine('Provincia', p.provincia);
+      addLine('NIF', p.nif);
+      addLine('Solicita factura', boolText(!!p.solicita_factura));
+
+      addSection('Cantidad');
+      addLine('Número de personas', p.personas);
+      addLine('Churros por persona', p.churros_por_persona);
+      addLine('Chocolates', p.chocolates);
+
+      addSection('Envío y pago');
+      addLine('Requiere envío', boolText(!!p.requiere_envio));
+      addLine('Dirección de entrega', p.direccion_entrega);
+      addLine('Método de pago', p.metodo_pago);
+
+      addSection('Comentarios');
+      addLine('Notas', p.comentarios);
+
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+      doc.save(`pedido_${valueText(p.id)}_${stamp}.pdf`);
+    }
     async function fetchPedido(id){
       try {
         const r1 = await fetch(`/admin/api/pedidos/${id}`, { credentials: 'same-origin' });
@@ -384,7 +483,8 @@
     document.getElementById('backBtn').addEventListener('click', () => { location.href = '/admin/pedidos'; });
     const backBtnMobile = document.getElementById('backBtnMobile');
     if(backBtnMobile){ backBtnMobile.addEventListener('click', () => { location.href = '/admin/pedidos'; }); }
-    document.getElementById('exportOne').addEventListener('click', () => { location.href = '/admin/api/export.csv'; });
+    const printOnePdfBtn = document.getElementById('printOnePdf');
+    if(printOnePdfBtn){ printOnePdfBtn.addEventListener('click', downloadPedidoPdf); }
 
     const editEstado = document.getElementById('editEstado');
     const estadoEditor = document.getElementById('estadoEditor');

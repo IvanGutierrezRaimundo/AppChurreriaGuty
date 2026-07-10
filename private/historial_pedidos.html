@@ -174,6 +174,7 @@
       <button type="button" id="pedidosBtn" title="Pedidos">Pedidos</button>
       <button type="button" id="createPedidoBtn" title="Crear Pedido">Crear Pedido</button>
       <button type="button" id="exportBtn" title="Exportar CSV">Exportar</button>
+      <button type="button" id="printPdfBtn" title="Imprimir PDF">Imprimir PDF</button>
       <button type="button" id="logoutBtn" title="Salir">Salir</button>
     </div>
   </div>
@@ -256,6 +257,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.min.js"></script>
   <script>
     const tbody = document.getElementById('tbody');
     const pageSizeSel = document.getElementById('pageSize');
@@ -556,6 +559,53 @@
         else { th.removeAttribute('data-dir'); }
       });
     }
+    function downloadHistorialPdf(){
+      if(!window.jspdf || !window.jspdf.jsPDF || typeof window.jspdf.jsPDF !== 'function'){
+        alert('No se pudo cargar la libreria PDF. Intentalo de nuevo.');
+        return;
+      }
+      if(!Array.isArray(currentRows) || currentRows.length === 0){
+        alert('No hay pedidos en historial para exportar en PDF.');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+
+      doc.setFontSize(16);
+      doc.text('Historial de Pedidos Cobrados', 40, 40);
+      doc.setFontSize(10);
+      doc.text(`Generado: ${now.toLocaleString('es-ES')}`, 40, 58);
+
+      const headers = [[
+        'ID', 'Cliente', 'Personas', 'Churros/persona', 'Chocolates', 'Fecha', 'Hora', 'Total (EUR)', 'Estado'
+      ]];
+      const body = currentRows.map((r) => [
+        r.id ?? '',
+        r.nombre ?? '',
+        r.personas ?? '',
+        r.churros_por_persona ?? '',
+        r.chocolates ?? '',
+        formatDate(r.fecha),
+        formatTime(r.hora),
+        (typeof r.presupuesto_total !== 'undefined' && r.presupuesto_total !== null) ? Number(r.presupuesto_total).toFixed(2) : '',
+        r.estado || 'Pendiente'
+      ]);
+
+      doc.autoTable({
+        head: headers,
+        body,
+        startY: 72,
+        styles: { fontSize: 9, cellPadding: 4 },
+        headStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46] },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+        theme: 'striped'
+      });
+
+      doc.save(`historial_pedidos_${stamp}.pdf`);
+    }
     async function load() {
       const q = document.getElementById('q').value.trim();
       const desde = document.getElementById('desde').value;
@@ -728,6 +778,11 @@
     document.getElementById('exportBtn').addEventListener('click', () => {
       location.href = '/admin/api/export.csv';
     });
+
+    const printPdfBtn = document.getElementById('printPdfBtn');
+    if (printPdfBtn) {
+      printPdfBtn.addEventListener('click', downloadHistorialPdf);
+    }
 
     const pedidosBtn = document.getElementById('pedidosBtn');
     if (pedidosBtn) {
