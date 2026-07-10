@@ -569,7 +569,9 @@
       const data = await res.json();
       if (!data.ok) { alert(data.error || 'Error'); return; }
       // Client-side fallback sort to ensure visible reordering
-      const rows = Array.isArray(data.data) ? data.data.slice() : [];
+      const rows = Array.isArray(data.data)
+        ? data.data.filter((r) => (r?.estado || 'Pendiente') !== 'Cobrado')
+        : [];
       const dirFactor = currentDir === 'asc' ? 1 : -1;
       function toNumber(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
       function toDate(v){
@@ -668,7 +670,13 @@
       document.querySelectorAll('button.del').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');
-          if (!confirm('¿Eliminar pedido #' + id + '?')) return;
+          const row = currentRows.find((r) => String(r.id) === String(id));
+          const estado = row?.estado || 'Pendiente';
+          if (estado !== 'Cancelado') {
+            alert('Solo se puede eliminar un pedido con estado Cancelado.');
+            return;
+          }
+          if (!confirm('Vas a eliminar el pedido #' + id + ' para siempre de la base de datos.\n\n¿Deseas continuar?')) return;
           const res = await fetch(`/admin/api/pedidos/${id}`, { method: 'DELETE' });
           const data = await res.json();
           if (data.ok) load(); else alert(data.error || 'Error');

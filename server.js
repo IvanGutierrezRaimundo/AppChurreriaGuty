@@ -250,6 +250,17 @@ app.delete('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'ID inválido' });
+    const [rows] = await pool.execute('SELECT estado FROM pedidos WHERE id = ? LIMIT 1', [id]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Pedido no encontrado' });
+    }
+    const estadoActual = rows[0].estado || 'Pendiente';
+    if (estadoActual !== 'Cancelado') {
+      return res.status(400).json({
+        ok: false,
+        error: 'Solo se puede eliminar un pedido con estado Cancelado.'
+      });
+    }
     const [result] = await pool.execute('DELETE FROM pedidos WHERE id = ?', [id]);
     res.json({ ok: true, affectedRows: result.affectedRows });
   } catch (err) {
