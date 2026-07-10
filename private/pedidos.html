@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Pedidos</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" />
+  <style>
+    /* Ajustes mínimos específicos del panel admin para usar el tema corporativo */
+    .admin-bar{ max-width: 1200px; margin: 0 auto var(--space-lg); display:flex; align-items:center; justify-content: space-between; }
+    .admin-grid{ display:grid; grid-template-columns: 2.5fr 1fr 1fr 1fr auto; gap: 12px; align-items:end; }
+    .admin-table-wrap{ max-width: 1200px; margin: 0 auto; }
+    .admin-doc{ max-width: 1200px; margin: 0 auto; }
+    th.sortable{ cursor: pointer; user-select: none; }
+    th .sort-icons{ margin-left: 6px; font-size: 0.82rem; color: var(--color-muted); display:inline-flex; gap:2px; }
+    th[data-dir="asc"] .arrow-up{ color: var(--color-brown); }
+    th[data-dir="desc"] .arrow-down{ color: var(--color-brown); }
+    /* (Revert) Usar estilos corporativos por defecto para tablas y acciones */
+    .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
+    .view-switch{ display: flex; justify-content: flex-start; gap: 8px; margin: 0 0 10px; }
+    .view-toggle{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 96px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--color-border);
+      background: var(--color-primary);
+      color: var(--color-brown);
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease;
+    }
+    .view-toggle:hover{ border-color: var(--color-brown); }
+    .view-toggle.is-active{
+      background: #E5E7EB;
+      border-color: #D1D5DB;
+      color: #374151;
+    }
+    .cards-grid{
+      display: none;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .cards-grid.is-visible{ display: grid; }
+    .calendar-view{
+      display: none;
+      margin-top: 8px;
+      background: #FFF;
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: var(--shadow-sm);
+    }
+    .calendar-view.is-visible{ display: block; }
+    .calendar-empty{
+      color: var(--color-muted);
+      text-align: center;
+      padding: 28px 10px;
+      font-weight: 600;
+      display: none;
+    }
+    .calendar-empty.is-visible{ display: block; }
+    .fc .fc-button-primary{
+      background: var(--color-primary);
+      border-color: var(--color-primary);
+      color: var(--color-brown);
+      font-weight: 700;
+    }
+    .fc .fc-button-primary:not(:disabled):hover{
+      background: #F5C600;
+      border-color: #F5C600;
+      color: var(--color-brown);
+    }
+    .fc .fc-button-primary:disabled{
+      background: #E5E7EB;
+      border-color: #E5E7EB;
+      color: #6B7280;
+    }
+    .fc .fc-toolbar-title{ color: var(--color-brown); font-size: 1.1rem; }
+    .fc .fc-daygrid-event{ border-radius: 8px; padding: 2px 4px; }
+    .fc .fc-daygrid-day-frame{ min-height: 170px; }
+    .fc .fc-daygrid-day-events{
+      max-height: 150px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+    .cal-event-main{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+    .cal-event-cliente{
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1;
+    }
+    .cal-event-hora{
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+    .pedido-card{
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      background: #FFF;
+      padding: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .pedido-card-head{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .pedido-card-id{ font-weight: 800; color: var(--color-brown); }
+    .pedido-card-grid{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .pedido-card-row{
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+    }
+    .pedido-card-label{ color: var(--color-muted); font-size: 0.9rem; }
+    .pedido-card-value{ font-weight: 700; text-align: right; }
+    @media (max-width: 560px){
+      .cards-grid{ grid-template-columns: 1fr; }
+    }
+    .estado-cell{ cursor: pointer; }
+    .estado-cell .pedido-estado-badge{ pointer-events: none; }
+    .estado-modal-backdrop{
+      position: fixed;
+      inset: 0;
+      background: rgba(43, 30, 24, 0.42);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1000;
+    }
+    .estado-modal-backdrop.is-open{ display: flex; }
+    .estado-modal{
+      width: min(100%, 420px);
+      background: #FFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      padding: 20px;
+    }
+    .estado-modal h2{ margin: 0 0 8px; color: var(--color-brown); font-size: 1.25rem; }
+    .estado-modal p{ margin: 0 0 16px; color: var(--color-muted); }
+    .estado-modal-actions{ display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+    .estado-modal-error{ min-height: 1.5em; margin-top: 10px; color: #B91C1C; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="admin-bar">
+    <h1>Administración de Pedidos</h1>
+    <div class="actions">
+      <button type="button" id="historialBtn" title="Historial">Historial</button>
+      <button type="button" id="createPedidoBtn" title="Crear Pedido">Crear Pedido</button>
+      <button type="button" id="exportBtn" title="Exportar CSV">Exportar</button>
+      <button type="button" id="logoutBtn" title="Salir">Salir</button>
+    </div>
+  </div>
+
+  <div class="doc admin-doc">
+  <section class="admin-grid">
+    <div class="field">
+      <label for="q">Buscar</label>
+      <input id="q" placeholder="nombre, email, teléfono, ciudad, provincia" />
+    </div>
+    <div class="field">
+      <label for="desde">Desde</label>
+      <input id="desde" type="date" />
+    </div>
+    <div class="field">
+      <label for="hasta">Hasta</label>
+      <input id="hasta" type="date" />
+    </div>
+    <div class="field">
+      <label for="pageSize">Resultados</label>
+      <select id="pageSize">
+        <option>20</option>
+        <option>50</option>
+        <option>100</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button id="searchBtn">Buscar</button>
+    </div>
+  </section>
+  <div class="admin-table-wrap">
+  <div class="view-switch" aria-label="Cambiar vista de pedidos">
+    <button type="button" id="viewTablaBtn" class="view-toggle is-active" aria-current="page">Tabla</button>
+    <button type="button" id="viewFichasBtn" class="view-toggle">Fichas</button>
+    <button type="button" id="viewCalendarioBtn" class="view-toggle">Calendario</button>
+  </div>
+  <table id="pedidosTable">
+    <thead>
+      <tr>
+        <th class="sortable" data-sort="id">ID <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="nombre">Cliente <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="personas">Personas <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="churros_por_persona">Churros por persona <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="chocolates">Chocolates <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="fecha">Fecha <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="hora">Hora <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="presupuesto_total">Total (€) <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="estado">Estado <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div id="cardsGrid" class="cards-grid"></div>
+  <div id="calendarView" class="calendar-view"></div>
+  <div id="calendarEmpty" class="calendar-empty"></div>
+  </div>
+  </div>
+
+  <div id="estadoModalBackdrop" class="estado-modal-backdrop" aria-hidden="true">
+    <div class="estado-modal" role="dialog" aria-modal="true" aria-labelledby="estadoModalTitle">
+      <h2 id="estadoModalTitle">Cambiar estado</h2>
+      <p id="estadoModalText"></p>
+      <div class="field">
+        <label for="estadoModalSelect">Nuevo estado</label>
+        <select id="estadoModalSelect">
+          <option value="Pendiente">Pendiente</option>
+          <option value="Realizado">Realizado</option>
+          <option value="Cobrado">Cobrado</option>
+          <option value="Cancelado">Cancelado</option>
+        </select>
+      </div>
+      <div id="estadoModalError" class="estado-modal-error"></div>
+      <div class="estado-modal-actions">
+        <button type="button" id="estadoModalCancel">Cancelar</button>
+        <button type="button" id="estadoModalSave">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <script>
+    const tbody = document.getElementById('tbody');
+    const pageSizeSel = document.getElementById('pageSize');
+    const pedidosTable = document.getElementById('pedidosTable');
+    const cardsGrid = document.getElementById('cardsGrid');
+    const calendarView = document.getElementById('calendarView');
+    const calendarEmpty = document.getElementById('calendarEmpty');
+    const viewTablaBtn = document.getElementById('viewTablaBtn');
+    const viewFichasBtn = document.getElementById('viewFichasBtn');
+    const viewCalendarioBtn = document.getElementById('viewCalendarioBtn');
+    const estadoModalBackdrop = document.getElementById('estadoModalBackdrop');
+    const estadoModalText = document.getElementById('estadoModalText');
+    const estadoModalSelect = document.getElementById('estadoModalSelect');
+    const estadoModalError = document.getElementById('estadoModalError');
+    const estadoModalCancel = document.getElementById('estadoModalCancel');
+    const estadoModalSave = document.getElementById('estadoModalSave');
+    let editingEstadoId = null;
+    let currentView = 'tabla';
+    let calendar = null;
+    let currentRows = [];
+    function formatDate(value){
+      if(!value) return '';
+      try{
+        if(typeof value === 'string'){
+          let s = value;
+          if(s.includes('T')) s = s.slice(0,10); // recorta YYYY-MM-DD de ISO
+          if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
+            const [y,m,d] = s.split('-');
+            return `${d}/${m}/${y}`;
+          }
+          const dt = new Date(value);
+          if(!isNaN(dt)) return dt.toLocaleDateString('es-ES');
+        } else {
+          const dt = new Date(value);
+          if(!isNaN(dt)) return dt.toLocaleDateString('es-ES');
+        }
+      } catch(_){ /* noop */ }
+      return String(value);
+    }
+    function formatTime(value){
+      if(!value) return '';
+      try{
+        if(typeof value === 'string'){
+          const m = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value);
+          if(m) return `${m[1]}:${m[2]}`;
+        } else {
+          const dt = new Date(value);
+          if(!isNaN(dt)){
+            const hh = String(dt.getHours()).padStart(2,'0');
+            const mm = String(dt.getMinutes()).padStart(2,'0');
+            return `${hh}:${mm}`;
+          }
+        }
+      } catch(_){ /* noop */ }
+      return String(value);
+    }
+    function getEstadoBadgeClass(estadoRaw){
+      const estado = estadoRaw || 'Pendiente';
+      switch(estado){
+        case 'Realizado':
+          return 'pedido-estado-realizado';
+        case 'Cobrado':
+          return 'pedido-estado-cobrado';
+        case 'Cancelado':
+          return 'pedido-estado-cancelado';
+        case 'Pendiente':
+        default:
+          return 'pedido-estado-pendiente';
+      }
+    }
+    function renderEstadoBadge(estadoRaw){
+      const estado = estadoRaw || 'Pendiente';
+      return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${estado}</span>`;
+    }
+    function updateViewButtons(){
+      const isTabla = currentView === 'tabla';
+      const isFichas = currentView === 'fichas';
+      const isCalendario = currentView === 'calendario';
+      viewTablaBtn.classList.toggle('is-active', isTabla);
+      viewFichasBtn.classList.toggle('is-active', isFichas);
+      viewCalendarioBtn.classList.toggle('is-active', isCalendario);
+      if(isTabla) viewTablaBtn.setAttribute('aria-current', 'page');
+      else viewTablaBtn.removeAttribute('aria-current');
+      if(isFichas) viewFichasBtn.setAttribute('aria-current', 'page');
+      else viewFichasBtn.removeAttribute('aria-current');
+      if(isCalendario) viewCalendarioBtn.setAttribute('aria-current', 'page');
+      else viewCalendarioBtn.removeAttribute('aria-current');
+    }
+    function getEstadoCalendarColors(estadoRaw){
+      const estado = estadoRaw || 'Pendiente';
+      switch(estado){
+        case 'Realizado':
+          return { backgroundColor: '#DCFCE7', borderColor: '#16A34A', textColor: '#166534' };
+        case 'Cobrado':
+          return { backgroundColor: '#DBEAFE', borderColor: '#2563EB', textColor: '#1D4ED8' };
+        case 'Cancelado':
+          return { backgroundColor: '#FEE2E2', borderColor: '#DC2626', textColor: '#B91C1C' };
+        case 'Pendiente':
+        default:
+          return { backgroundColor: 'var(--color-primary)', borderColor: 'var(--color-primary)', textColor: 'var(--color-brown)' };
+      }
+    }
+    function buildCalendarEvents(rows){
+      return rows
+        .filter((r) => r && r.fecha)
+        .map((r) => {
+          const fecha = String(r.fecha).includes('T') ? String(r.fecha).slice(0, 10) : String(r.fecha).slice(0, 10);
+          const horaMatch = /^(\d{2}):(\d{2})/.exec(String(r.hora || ''));
+          const start = horaMatch ? `${fecha}T${horaMatch[1]}:${horaMatch[2]}:00` : fecha;
+          const allDay = !horaMatch;
+          const colors = getEstadoCalendarColors(r.estado);
+          return {
+            id: String(r.id),
+            title: `${r.nombre || 'Cliente'}`,
+            start,
+            allDay,
+            backgroundColor: colors.backgroundColor,
+            borderColor: colors.borderColor,
+            textColor: colors.textColor,
+            extendedProps: {
+              pedidoId: r.id,
+              estado: r.estado || 'Pendiente',
+              nombre: r.nombre || '',
+              hora: horaMatch ? `${horaMatch[1]}:${horaMatch[2]}` : '',
+              total: r.presupuesto_total
+            }
+          };
+        });
+    }
+    function ensureCalendar(){
+      if(calendar || !window.FullCalendar) return;
+      calendar = new FullCalendar.Calendar(calendarView, {
+        initialView: 'dayGridMonth',
+        locale: 'es',
+        firstDay: 1,
+        height: 'auto',
+        dayMaxEventRows: false,
+        dayMaxEvents: false,
+        displayEventTime: false,
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        buttonText: {
+          today: 'Hoy',
+          month: 'Mes',
+          week: 'Semana',
+          day: 'Dia'
+        },
+        eventClick: (info) => {
+          const id = info.event.extendedProps.pedidoId;
+          if(id) location.href = `/admin/pedido/${id}`;
+        },
+        eventContent: (arg) => {
+          const ex = arg.event.extendedProps;
+          const wrap = document.createElement('div');
+          wrap.className = 'cal-event-main';
+
+          const cliente = document.createElement('span');
+          cliente.className = 'cal-event-cliente';
+          cliente.textContent = ex.nombre || arg.event.title || 'Cliente';
+
+          wrap.appendChild(cliente);
+
+          if(ex.hora){
+            const hora = document.createElement('span');
+            hora.className = 'cal-event-hora';
+            hora.textContent = ex.hora;
+            wrap.appendChild(hora);
+          }
+
+          return { domNodes: [wrap] };
+        },
+        eventDidMount: (info) => {
+          const ex = info.event.extendedProps;
+          const hora = ex.hora ? ` ${ex.hora}` : '';
+          info.el.title = `${ex.nombre || 'Cliente'}${hora}`;
+        }
+      });
+      calendar.render();
+    }
+    function renderCalendar(rows){
+      if(!window.FullCalendar){
+        calendarEmpty.textContent = 'No se pudo cargar la libreria de calendario.';
+        calendarEmpty.classList.add('is-visible');
+        return;
+      }
+      ensureCalendar();
+      if(!calendar) return;
+      calendar.removeAllEvents();
+      const events = buildCalendarEvents(rows);
+      if(events.length){
+        calendar.addEventSource(events);
+        calendarEmpty.classList.remove('is-visible');
+        calendarEmpty.textContent = '';
+      } else {
+        calendarEmpty.textContent = 'No hay pedidos para mostrar en el calendario con los filtros actuales.';
+        calendarEmpty.classList.add('is-visible');
+      }
+      calendar.updateSize();
+    }
+    function applyCurrentView(){
+      const showTabla = currentView === 'tabla';
+      const showFichas = currentView === 'fichas';
+      const showCalendario = currentView === 'calendario';
+      pedidosTable.style.display = showTabla ? 'table' : 'none';
+      cardsGrid.classList.toggle('is-visible', showFichas);
+      calendarView.classList.toggle('is-visible', showCalendario);
+      if(showCalendario) renderCalendar(currentRows);
+      updateViewButtons();
+    }
+    function renderCard(r){
+      return `
+        <article class="pedido-card">
+          <div class="pedido-card-head">
+            <span class="pedido-card-id">#${r.id}</span>
+            <span class="estado-cell" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="Cambiar estado">${renderEstadoBadge(r.estado)}</span>
+          </div>
+          <div class="pedido-card-grid">
+            <div class="pedido-card-row"><span class="pedido-card-label">Cliente</span><span class="pedido-card-value">${r.nombre || ''}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Personas</span><span class="pedido-card-value">${r.personas ?? ''}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Churros/persona</span><span class="pedido-card-value">${r.churros_por_persona ?? ''}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Chocolates</span><span class="pedido-card-value">${r.chocolates ?? ''}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Fecha</span><span class="pedido-card-value">${formatDate(r.fecha)}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Hora</span><span class="pedido-card-value">${formatTime(r.hora)}</span></div>
+            <div class="pedido-card-row"><span class="pedido-card-label">Total</span><span class="pedido-card-value">${r.presupuesto_total}</span></div>
+          </div>
+          <span class="btn-row">
+            <button data-id="${r.id}" class="open">Abrir</button>
+            <button data-id="${r.id}" class="del">Eliminar</button>
+          </span>
+        </article>
+      `;
+    }
+    function openEstadoModal(id, estadoRaw, nombre){
+      editingEstadoId = Number(id);
+      estadoModalSelect.value = estadoRaw || 'Pendiente';
+      estadoModalText.textContent = `Pedido #${id}${nombre ? ` · ${nombre}` : ''}`;
+      estadoModalError.textContent = '';
+      estadoModalBackdrop.classList.add('is-open');
+      estadoModalBackdrop.setAttribute('aria-hidden', 'false');
+      estadoModalSelect.focus();
+    }
+    function closeEstadoModal(){
+      editingEstadoId = null;
+      estadoModalError.textContent = '';
+      estadoModalBackdrop.classList.remove('is-open');
+      estadoModalBackdrop.setAttribute('aria-hidden', 'true');
+      estadoModalSave.disabled = false;
+      estadoModalCancel.disabled = false;
+    }
+    async function saveEstadoFromModal(){
+      const id = Number(editingEstadoId);
+      if(!Number.isFinite(id)) return;
+      const estado = estadoModalSelect.value;
+      estadoModalSave.disabled = true;
+      estadoModalCancel.disabled = true;
+      estadoModalError.textContent = '';
+      try {
+        const resp = await fetch(`/admin/api/pedidos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ estado })
+        });
+        if (resp.status === 401) {
+          location.href = '/admin';
+          return;
+        }
+        const data = await resp.json();
+        if (!data || !data.ok) {
+          estadoModalError.textContent = data?.error || 'No se pudo guardar el estado.';
+          return;
+        }
+        const finalEstado = data.data?.estado || estado;
+        document.querySelectorAll(`.estado-cell[data-id="${id}"]`).forEach((cell) => {
+          cell.dataset.estado = finalEstado;
+          cell.innerHTML = renderEstadoBadge(finalEstado);
+        });
+        currentRows = currentRows.map((r) => (Number(r.id) === id ? { ...r, estado: finalEstado } : r));
+        if(currentView === 'calendario') renderCalendar(currentRows);
+        closeEstadoModal();
+      } catch (_error) {
+        estadoModalError.textContent = 'Error guardando estado.';
+      } finally {
+        if (estadoModalBackdrop.classList.contains('is-open')) {
+          estadoModalSave.disabled = false;
+          estadoModalCancel.disabled = false;
+        }
+      }
+    }
+    let currentSort = 'fecha';
+    let currentDir = 'desc';
+    function updateSortIndicators(){
+      document.querySelectorAll('th.sortable').forEach(th => {
+        if(th.getAttribute('data-sort') === currentSort){ th.setAttribute('data-dir', currentDir); }
+        else { th.removeAttribute('data-dir'); }
+      });
+    }
+    async function load() {
+      const q = document.getElementById('q').value.trim();
+      const desde = document.getElementById('desde').value;
+      const hasta = document.getElementById('hasta').value;
+      const pageSize = Number(pageSizeSel.value);
+      const params = new URLSearchParams({ page: '1', pageSize, sort: currentSort, dir: currentDir });
+      if (q) params.set('q', q);
+      if (desde) params.set('desde', desde);
+      if (hasta) params.set('hasta', hasta);
+      const res = await fetch(`/admin/api/pedidos?${params.toString()}`);
+      const data = await res.json();
+      if (!data.ok) { alert(data.error || 'Error'); return; }
+      // Client-side fallback sort to ensure visible reordering
+      const rows = Array.isArray(data.data) ? data.data.slice() : [];
+      const dirFactor = currentDir === 'asc' ? 1 : -1;
+      function toNumber(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
+      function toDate(v){
+        if(!v) return 0;
+        if(typeof v === 'string'){
+          let s = v; if(s.includes('T')) s = s.slice(0,10);
+          if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s).getTime();
+        }
+        const d = new Date(v); return isNaN(d) ? 0 : d.getTime();
+      }
+      function toMinutes(v){
+        if(typeof v === 'string'){
+          const m = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(v);
+          if(m){ return Number(m[1])*60 + Number(m[2]); }
+        }
+        return 0;
+      }
+      rows.sort((a,b) => {
+        let cmp = 0;
+        switch(currentSort){
+          case 'id': cmp = toNumber(a.id) - toNumber(b.id); break;
+          case 'presupuesto_total': cmp = toNumber(a.presupuesto_total) - toNumber(b.presupuesto_total); break;
+          case 'fecha': cmp = toDate(a.fecha) - toDate(b.fecha); break;
+          case 'hora': cmp = toMinutes(a.hora) - toMinutes(b.hora); break;
+          case 'estado': {
+            const av = (a.estado||'').toString().toLowerCase();
+            const bv = (b.estado||'').toString().toLowerCase();
+            cmp = av.localeCompare(bv, 'es');
+            break;
+          }
+          case 'personas': {
+            cmp = toNumber(a.personas) - toNumber(b.personas);
+            break;
+          }
+          case 'churros_por_persona': {
+            cmp = toNumber(a.churros_por_persona) - toNumber(b.churros_por_persona);
+            break;
+          }
+          case 'chocolates': {
+            cmp = toNumber(a.chocolates) - toNumber(b.chocolates);
+            break;
+          }
+          case 'nombre':
+          default: {
+            const av = (a.nombre||'').toString().toLowerCase();
+            const bv = (b.nombre||'').toString().toLowerCase();
+            cmp = av.localeCompare(bv, 'es');
+            break;
+          }
+        }
+        return dirFactor * cmp;
+      });
+      currentRows = rows;
+      tbody.innerHTML = '';
+      cardsGrid.innerHTML = '';
+      for (const r of rows) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.id}</td>
+          <td>${r.nombre}</td>
+          <td>${r.personas ?? ''}</td>
+          <td>${r.churros_por_persona ?? ''}</td>
+          <td>${r.chocolates ?? ''}</td>
+          <td>${formatDate(r.fecha)}</td>
+          <td>${formatTime(r.hora)}</td>
+          <td>${r.presupuesto_total}</td>
+          <td class="estado-cell" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="Cambiar estado">${renderEstadoBadge(r.estado)}</td>
+          <td>
+            <span class="btn-row">
+              <button data-id="${r.id}" class="open">Abrir</button>
+              <button data-id="${r.id}" class="del">Eliminar</button>
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        cardsGrid.insertAdjacentHTML('beforeend', renderCard(r));
+      }
+      bindActions();
+      updateSortIndicators();
+      applyCurrentView();
+    }
+    // Interacciones de ordenación en cabecera (delegadas)
+    const thead = document.querySelector('table thead');
+    if(thead){
+      thead.addEventListener('click', (ev) => {
+        const th = ev.target.closest('th.sortable');
+        if(!th) return;
+        const col = th.getAttribute('data-sort');
+        if(col === currentSort){ currentDir = currentDir === 'asc' ? 'desc' : 'asc'; }
+        else { currentSort = col; currentDir = 'asc'; }
+        load();
+      });
+    }
+
+    function bindActions() {
+      document.querySelectorAll('button.del').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          if (!confirm('¿Eliminar pedido #' + id + '?')) return;
+          const res = await fetch(`/admin/api/pedidos/${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.ok) load(); else alert(data.error || 'Error');
+        });
+      });
+      document.querySelectorAll('button.open').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          if(!id) return;
+          location.href = `/admin/pedido/${id}`;
+        });
+      });
+      document.querySelectorAll('.estado-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+          openEstadoModal(cell.dataset.id, cell.dataset.estado, cell.dataset.nombre || '');
+        });
+      });
+    }
+
+    viewTablaBtn.addEventListener('click', () => {
+      currentView = 'tabla';
+      applyCurrentView();
+    });
+    viewFichasBtn.addEventListener('click', () => {
+      currentView = 'fichas';
+      applyCurrentView();
+    });
+    viewCalendarioBtn.addEventListener('click', () => {
+      currentView = 'calendario';
+      applyCurrentView();
+    });
+
+    estadoModalCancel.addEventListener('click', closeEstadoModal);
+    estadoModalSave.addEventListener('click', saveEstadoFromModal);
+    estadoModalBackdrop.addEventListener('click', (ev) => {
+      if(ev.target === estadoModalBackdrop){
+        closeEstadoModal();
+      }
+    });
+    document.addEventListener('keydown', (ev) => {
+      if(ev.key === 'Escape' && estadoModalBackdrop.classList.contains('is-open')){
+        closeEstadoModal();
+      }
+    });
+
+    document.getElementById('searchBtn').addEventListener('click', load);
+    pageSizeSel.addEventListener('change', load);
+    load();
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      location.href = '/admin/api/export.csv';
+    });
+
+    const historialBtn = document.getElementById('historialBtn');
+    if (historialBtn) {
+      historialBtn.addEventListener('click', () => {
+        location.href = '/admin/historial-pedidos';
+      });
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/admin/logout', { method: 'POST' });
+      location.href = '/admin';
+    });
+  </script>
+</body>
+</html>

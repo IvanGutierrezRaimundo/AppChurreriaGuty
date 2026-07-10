@@ -83,6 +83,20 @@ app.get('/admin', (req, res) => {
   });
 });
 
+// Página de pedidos (ficha 1 del menú admin)
+app.get('/admin/pedidos', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'pedidos.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
+// Página de historial de pedidos cobrados
+app.get('/admin/historial-pedidos', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'historial_pedidos.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 app.post('/api/pedidos', async (req, res) => {
   try {
     const {
@@ -172,7 +186,7 @@ app.post('/api/pedidos', async (req, res) => {
 // --- APIs de administración ---
 app.get('/admin/api/pedidos', ensureAdmin, async (req, res) => {
   try {
-    const { q, desde, hasta, page = 1, pageSize = 20 } = req.query;
+    const { q, desde, hasta, estado, page = 1, pageSize = 20 } = req.query;
     // Ordenación segura por columnas permitidas
     const sortMap = {
       id: 'id',
@@ -195,6 +209,10 @@ app.get('/admin/api/pedidos', ensureAdmin, async (req, res) => {
       where.push('(nombre LIKE ? OR email LIKE ? OR telefono LIKE ? OR ciudad LIKE ? OR provincia LIKE ?)');
       const like = `%${q}%`;
       params.push(like, like, like, like, like);
+    }
+    if (estado) {
+      where.push('estado = ?');
+      params.push(estado);
     }
     if (desde) { where.push('fecha >= ?'); params.push(desde); }
     if (hasta) { where.push('fecha <= ?'); params.push(hasta); }
@@ -360,14 +378,14 @@ app.get('/admin/api/export.csv', ensureAdmin, async (req, res) => {
 // Página de detalle del pedido (protegida)
 app.get('/admin/pedido/:id', ensureAdmin, (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.redirect('/admin');
+  if (!Number.isFinite(id)) return res.redirect('/admin/pedidos');
   return res.sendFile(path.join(__dirname, 'private', 'admin_pedido.html'), {
     headers: { 'Cache-Control': 'no-store' }
   });
 });
 app.get('/admin/pedido', ensureAdmin, (req, res) => {
   const id = req.query.id;
-  if (!id) return res.redirect('/admin');
+  if (!id) return res.redirect('/admin/pedidos');
   return res.sendFile(path.join(__dirname, 'private', 'admin_pedido.html'), {
     headers: { 'Cache-Control': 'no-store' }
   });

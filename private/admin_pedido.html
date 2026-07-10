@@ -381,9 +381,9 @@
         }
       }
     }
-    document.getElementById('backBtn').addEventListener('click', () => { location.href = '/admin'; });
+    document.getElementById('backBtn').addEventListener('click', () => { location.href = '/admin/pedidos'; });
     const backBtnMobile = document.getElementById('backBtnMobile');
-    if(backBtnMobile){ backBtnMobile.addEventListener('click', () => { location.href = '/admin'; }); }
+    if(backBtnMobile){ backBtnMobile.addEventListener('click', () => { location.href = '/admin/pedidos'; }); }
     document.getElementById('exportOne').addEventListener('click', () => { location.href = '/admin/api/export.csv'; });
 
     const editEstado = document.getElementById('editEstado');
