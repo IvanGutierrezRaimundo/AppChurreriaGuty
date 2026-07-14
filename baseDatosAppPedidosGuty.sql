@@ -1,1 +1,0 @@
-SELECT * FROM app_pedidos_guty.pedidos;
