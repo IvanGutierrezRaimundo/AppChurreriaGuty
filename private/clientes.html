@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Clientes</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .admin-bar{ max-width: 1200px; margin: 0 auto var(--space-lg); display:flex; align-items:center; justify-content: space-between; }
+    .admin-grid{ display:grid; grid-template-columns: 2.5fr 1fr auto; gap: 12px; align-items:end; }
+    .admin-table-wrap{ max-width: 1200px; margin: 0 auto; }
+    .admin-doc{ max-width: 1200px; margin: 0 auto; }
+    th.sortable{ cursor: pointer; user-select: none; }
+    th .sort-icons{ margin-left: 6px; font-size: 0.82rem; color: var(--color-muted); display:inline-flex; gap:2px; }
+    th[data-dir="asc"] .arrow-up{ color: var(--color-brown); }
+    th[data-dir="desc"] .arrow-down{ color: var(--color-brown); }
+    .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
+    .cliente-modal-backdrop{
+      position: fixed;
+      inset: 0;
+      background: rgba(43, 30, 24, 0.42);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1000;
+    }
+    .cliente-modal-backdrop.is-open{ display: flex; }
+    .cliente-modal{
+      width: min(100%, 720px);
+      background: #FFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      padding: 20px;
+    }
+    .cliente-modal-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .cliente-modal-head h2{ margin: 0; color: var(--color-brown); font-size: 1.25rem; }
+    .cliente-modal-grid{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 14px;
+    }
+    .cliente-detail{
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      background: #FFF;
+      padding: 10px;
+      min-height: 54px;
+    }
+    .cliente-detail-label{ margin: 0 0 4px; color: var(--color-muted); font-size: 0.86rem; }
+    .cliente-detail-value{ margin: 0; color: var(--color-brown); font-weight: 700; word-break: break-word; }
+    .cliente-modal-actions{ display: flex; justify-content: flex-end; margin-top: 16px; }
+    @media (max-width: 680px){
+      .cliente-modal-grid{ grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-bar">
+    <h1>Administración de Clientes</h1>
+    <div class="actions">
+      <button type="button" id="createClienteBtn" title="Crear Cliente">Crear Cliente</button>
+      <button type="button" id="exportBtn" title="Exportar CSV">Exportar</button>
+      <button type="button" id="printPdfBtn" title="Imprimir PDF">Imprimir PDF</button>
+      <button type="button" id="logoutBtn" title="Salir">Salir</button>
+    </div>
+  </div>
+
+  <div class="doc admin-doc">
+    <section class="admin-grid">
+      <div class="field">
+        <label for="q">Buscar</label>
+        <input id="q" placeholder="nombre, nif, teléfono, email, dirección, ciudad, provincia, cp" />
+      </div>
+      <div class="field">
+        <label for="pageSize">Resultados</label>
+        <select id="pageSize">
+          <option>20</option>
+          <option>50</option>
+          <option>100</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="searchBtn">Buscar</button>
+      </div>
+    </section>
+
+    <div class="admin-table-wrap">
+      <table id="clientesTable">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="id">ID <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="nif">NIF <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="nombre">Nombre <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="telefono">Teléfono <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="email">Email <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="direccion">Dirección <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="ciudad">Ciudad <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="clienteModalBackdrop" class="cliente-modal-backdrop" aria-hidden="true">
+    <div class="cliente-modal" role="dialog" aria-modal="true" aria-labelledby="clienteModalTitle">
+      <div class="cliente-modal-head">
+        <h2 id="clienteModalTitle">Detalle de cliente</h2>
+        <button type="button" id="clienteModalCloseTop" title="Cerrar">Cerrar</button>
+      </div>
+      <div class="cliente-modal-grid">
+        <div class="cliente-detail"><p class="cliente-detail-label">ID</p><p id="d_id" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">NIF</p><p id="d_nif" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Nombre</p><p id="d_nombre" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Telefono</p><p id="d_telefono" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Email</p><p id="d_email" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Direccion</p><p id="d_direccion" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Ciudad</p><p id="d_ciudad" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Provincia</p><p id="d_provincia" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">CP</p><p id="d_cp" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Registro</p><p id="d_registro" class="cliente-detail-value"></p></div>
+      </div>
+      <div class="cliente-modal-actions">
+        <button type="button" id="clienteModalClose">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tbody = document.getElementById('tbody');
+    const pageSizeSel = document.getElementById('pageSize');
+    const clienteModalBackdrop = document.getElementById('clienteModalBackdrop');
+    const clienteModalClose = document.getElementById('clienteModalClose');
+    const clienteModalCloseTop = document.getElementById('clienteModalCloseTop');
+    let currentRows = [];
+    let currentSort = 'fecha_registro';
+    let currentDir = 'desc';
+
+    function escapeHtml(value){
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatDateTime(value){
+      if(!value) return '';
+      const dt = new Date(value);
+      if(isNaN(dt)) return String(value);
+      return dt.toLocaleString('es-ES');
+    }
+
+    function updateSortIndicators(){
+      document.querySelectorAll('th.sortable').forEach((th) => {
+        if(th.getAttribute('data-sort') === currentSort){ th.setAttribute('data-dir', currentDir); }
+        else { th.removeAttribute('data-dir'); }
+      });
+    }
+
+    function setDetail(fieldId, value){
+      const el = document.getElementById(fieldId);
+      if (!el) return;
+      el.textContent = value == null || value === '' ? '-' : String(value);
+    }
+
+    function openClienteModal(cliente){
+      setDetail('d_id', cliente.id);
+      setDetail('d_nif', cliente.nif);
+      setDetail('d_nombre', cliente.nombre);
+      setDetail('d_telefono', cliente.telefono);
+      setDetail('d_email', cliente.email);
+      setDetail('d_direccion', cliente.direccion);
+      setDetail('d_ciudad', cliente.ciudad);
+      setDetail('d_provincia', cliente.provincia);
+      setDetail('d_cp', cliente.cp);
+      setDetail('d_registro', formatDateTime(cliente.fecha_registro));
+      clienteModalBackdrop.classList.add('is-open');
+      clienteModalBackdrop.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeClienteModal(){
+      clienteModalBackdrop.classList.remove('is-open');
+      clienteModalBackdrop.setAttribute('aria-hidden', 'true');
+    }
+
+    function bindActions(){
+      document.querySelectorAll('button.open').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          const cliente = currentRows.find((r) => String(r.id) === String(id));
+          if (!cliente) {
+            alert('No se pudo cargar el detalle del cliente.');
+            return;
+          }
+          openClienteModal(cliente);
+        });
+      });
+      document.querySelectorAll('button.del').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          alert('Eliminar cliente #' + id + ' aun no disponible.');
+        });
+      });
+    }
+
+    async function load(){
+      const q = document.getElementById('q').value.trim();
+      const pageSize = Number(pageSizeSel.value);
+      const params = new URLSearchParams({ page: '1', pageSize, sort: currentSort, dir: currentDir });
+      if (q) params.set('q', q);
+
+      const res = await fetch('/admin/api/clientes?' + params.toString());
+      const data = await res.json();
+      if (!data.ok) {
+        alert(data.error || 'Error cargando clientes.');
+        return;
+      }
+
+      tbody.innerHTML = '';
+      const rows = Array.isArray(data.data) ? data.data : [];
+      currentRows = rows;
+      for (const r of rows){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(r.id)}</td>
+          <td>${escapeHtml(r.nif)}</td>
+          <td>${escapeHtml(r.nombre)}</td>
+          <td>${escapeHtml(r.telefono)}</td>
+          <td>${escapeHtml(r.email)}</td>
+          <td>${escapeHtml(r.direccion)}</td>
+          <td>${escapeHtml(r.ciudad)}</td>
+          <td>
+            <span class="btn-row">
+              <button data-id="${escapeHtml(r.id)}" class="open">Abrir</button>
+              <button data-id="${escapeHtml(r.id)}" class="del">Eliminar</button>
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      bindActions();
+      updateSortIndicators();
+    }
+
+    const thead = document.querySelector('table thead');
+    if (thead) {
+      thead.addEventListener('click', (ev) => {
+        const th = ev.target.closest('th.sortable');
+        if (!th) return;
+        const col = th.getAttribute('data-sort');
+        if (col === currentSort) currentDir = currentDir === 'asc' ? 'desc' : 'asc';
+        else {
+          currentSort = col;
+          currentDir = 'asc';
+        }
+        load();
+      });
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', load);
+    pageSizeSel.addEventListener('change', load);
+
+    document.getElementById('createClienteBtn').addEventListener('click', () => {
+      alert('Crear cliente aun no disponible.');
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      alert('Exportar clientes aun no disponible.');
+    });
+
+    document.getElementById('printPdfBtn').addEventListener('click', () => {
+      alert('Imprimir PDF de clientes aun no disponible.');
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/admin/logout', { method: 'POST' });
+      location.href = '/admin';
+    });
+
+    clienteModalClose.addEventListener('click', closeClienteModal);
+    clienteModalCloseTop.addEventListener('click', closeClienteModal);
+    clienteModalBackdrop.addEventListener('click', (ev) => {
+      if (ev.target === clienteModalBackdrop) closeClienteModal();
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && clienteModalBackdrop.classList.contains('is-open')) {
+        closeClienteModal();
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

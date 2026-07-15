@@ -97,6 +97,13 @@ app.get('/admin/historial-pedidos', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de clientes (ficha del menú admin)
+app.get('/admin/clientes', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'clientes.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 app.post('/api/pedidos', async (req, res) => {
   try {
     const {
@@ -228,6 +235,52 @@ app.get('/admin/api/pedidos', ensureAdmin, async (req, res) => {
     res.json({ ok: true, data: rows });
   } catch (err) {
     console.error('Error listando pedidos:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.get('/admin/api/clientes', ensureAdmin, async (req, res) => {
+  try {
+    const { q, page = 1, pageSize = 20 } = req.query;
+    const sortMap = {
+      id: 'id',
+      nif: 'nif',
+      nombre: 'nombre',
+      telefono: 'telefono',
+      email: 'email',
+      direccion: 'direccion',
+      ciudad: 'ciudad',
+      provincia: 'provincia',
+      cp: 'cp',
+      fecha_registro: 'fecha_registro'
+    };
+    const sortParam = (req.query.sort || 'fecha_registro').toString();
+    const dirParam = (req.query.dir || 'desc').toString().toLowerCase();
+    const sortCol = sortMap[sortParam] || 'fecha_registro';
+    const sortDir = dirParam === 'asc' ? 'ASC' : 'DESC';
+
+    const where = [];
+    const params = [];
+    if (q) {
+      where.push('(nombre LIKE ? OR nif LIKE ? OR telefono LIKE ? OR email LIKE ? OR direccion LIKE ? OR ciudad LIKE ? OR provincia LIKE ? OR cp LIKE ?)');
+      const like = `%${q}%`;
+      params.push(like, like, like, like, like, like, like, like);
+    }
+
+    const safePageSize = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 500);
+    const safePage = Math.max(parseInt(page, 10) || 1, 1);
+    const offset = (safePage - 1) * safePageSize;
+
+    const sql = `SELECT id, nif, nombre, telefono, email, direccion, ciudad, provincia, cp, fecha_registro
+      FROM clientes
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY ${sortCol} ${sortDir}, id DESC
+      LIMIT ${safePageSize} OFFSET ${offset}`;
+
+    const [rows] = await pool.execute(sql, params);
+    res.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error('Error listando clientes:', err);
     res.status(500).json({ ok: false, error: 'Error interno' });
   }
 });
@@ -428,7 +481,7 @@ async function start() {
 start();
 
 async function ensureSchema() {
-  const ddl = `
+  const ddlPedidos = `
     CREATE TABLE IF NOT EXISTS pedidos (
       id INT AUTO_INCREMENT PRIMARY KEY,
       nombre VARCHAR(120) NOT NULL,
@@ -454,8 +507,24 @@ async function ensureSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `;
+  const ddlClientes = `
+    CREATE TABLE IF NOT EXISTS clientes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      nif VARCHAR(15),
+      nombre VARCHAR(100) NOT NULL,
+      telefono VARCHAR(15),
+      email VARCHAR(100),
+      direccion VARCHAR(255),
+      ciudad VARCHAR(50),
+      provincia VARCHAR(50),
+      cp VARCHAR(10),
+      fecha_registro TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_clientes_telefono (telefono)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `;
   try {
-    await pool.execute(ddl);
+    await pool.execute(ddlPedidos);
+    await pool.execute(ddlClientes);
   } catch (err) {
     console.error('Error al asegurar esquema:', err);
     throw err;
