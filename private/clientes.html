@@ -27,36 +27,49 @@
     }
     .cliente-modal-backdrop.is-open{ display: flex; }
     .cliente-modal{
-      width: min(100%, 720px);
+      width: min(100%, 640px);
       background: #FFF;
       border: 1px solid var(--color-border);
       border-radius: var(--radius);
       box-shadow: var(--shadow-md);
-      padding: 20px;
+      padding: 14px;
+      max-height: calc(100vh - 34px);
+      overflow: auto;
     }
     .cliente-modal-head{
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
-    .cliente-modal-head h2{ margin: 0; color: var(--color-brown); font-size: 1.25rem; }
+    .cliente-modal-head h2{ margin: 0; color: var(--color-brown); font-size: 1.08rem; }
     .cliente-modal-grid{
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px 14px;
+      gap: 8px 10px;
     }
     .cliente-detail{
       border: 1px solid var(--color-border);
-      border-radius: 10px;
+      border-radius: 8px;
       background: #FFF;
-      padding: 10px;
-      min-height: 54px;
+      padding: 8px;
+      min-height: 48px;
     }
-    .cliente-detail-label{ margin: 0 0 4px; color: var(--color-muted); font-size: 0.86rem; }
-    .cliente-detail-value{ margin: 0; color: var(--color-brown); font-weight: 700; word-break: break-word; }
-    .cliente-modal-actions{ display: flex; justify-content: flex-end; margin-top: 16px; }
+    .cliente-detail-label{ margin: 0 0 3px; color: var(--color-muted); font-size: 0.78rem; }
+    .cliente-detail-value{ margin: 0; color: var(--color-brown); font-size: 0.93rem; font-weight: 700; word-break: break-word; }
+    .cliente-modal-actions{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .cliente-edit-input{
+      width: 100%;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      font: inherit;
+      font-size: 0.92rem;
+      color: var(--color-brown);
+      background: #FFF;
+    }
+    .cliente-edit-error{ min-height: 1.2em; margin-top: 8px; font-size: 0.9rem; color: #B91C1C; font-weight: 600; }
     @media (max-width: 680px){
       .cliente-modal-grid{ grid-template-columns: 1fr; }
     }
@@ -66,6 +79,7 @@
   <div class="admin-bar">
     <h1>Administración de Clientes</h1>
     <div class="actions">
+      <button type="button" id="menuBtn" title="Menu">Menu</button>
       <button type="button" id="createClienteBtn" title="Crear Cliente">Crear Cliente</button>
       <button type="button" id="exportBtn" title="Exportar CSV">Exportar</button>
       <button type="button" id="printPdfBtn" title="Imprimir PDF">Imprimir PDF</button>
@@ -116,7 +130,6 @@
     <div class="cliente-modal" role="dialog" aria-modal="true" aria-labelledby="clienteModalTitle">
       <div class="cliente-modal-head">
         <h2 id="clienteModalTitle">Detalle de cliente</h2>
-        <button type="button" id="clienteModalCloseTop" title="Cerrar">Cerrar</button>
       </div>
       <div class="cliente-modal-grid">
         <div class="cliente-detail"><p class="cliente-detail-label">ID</p><p id="d_id" class="cliente-detail-value"></p></div>
@@ -132,6 +145,32 @@
       </div>
       <div class="cliente-modal-actions">
         <button type="button" id="clienteModalClose">Cerrar</button>
+        <button type="button" id="clienteModalEdit">Editar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="clienteEditBackdrop" class="cliente-modal-backdrop" aria-hidden="true">
+    <div class="cliente-modal" role="dialog" aria-modal="true" aria-labelledby="clienteEditTitle">
+      <div class="cliente-modal-head">
+        <h2 id="clienteEditTitle">Editar cliente</h2>
+      </div>
+      <div class="cliente-modal-grid">
+        <div class="cliente-detail"><p class="cliente-detail-label">ID</p><p id="e_id" class="cliente-detail-value"></p></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">NIF</p><input id="e_nif" class="cliente-edit-input" maxlength="15" /></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Nombre</p><input id="e_nombre" class="cliente-edit-input" /></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Telefono</p><input id="e_telefono" class="cliente-edit-input" inputmode="numeric" maxlength="9" /></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Email</p><input id="e_email" class="cliente-edit-input" type="email" /></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Direccion</p><input id="e_direccion" class="cliente-edit-input" /></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Ciudad</p><input id="e_ciudad" class="cliente-edit-input" /></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Provincia</p><input id="e_provincia" class="cliente-edit-input" /></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">CP</p><input id="e_cp" class="cliente-edit-input" /></div>
+        <div class="cliente-detail"><p class="cliente-detail-label">Registro</p><p id="e_registro" class="cliente-detail-value"></p></div>
+      </div>
+      <div id="clienteEditError" class="cliente-edit-error"></div>
+      <div class="cliente-modal-actions">
+        <button type="button" id="clienteEditCancel">Cancelar</button>
+        <button type="button" id="clienteEditSubmit">Enviar</button>
       </div>
     </div>
   </div>
@@ -141,8 +180,15 @@
     const pageSizeSel = document.getElementById('pageSize');
     const clienteModalBackdrop = document.getElementById('clienteModalBackdrop');
     const clienteModalClose = document.getElementById('clienteModalClose');
-    const clienteModalCloseTop = document.getElementById('clienteModalCloseTop');
+    const clienteModalEdit = document.getElementById('clienteModalEdit');
+    const clienteEditBackdrop = document.getElementById('clienteEditBackdrop');
+    const clienteEditCancel = document.getElementById('clienteEditCancel');
+    const clienteEditSubmit = document.getElementById('clienteEditSubmit');
+    const clienteEditError = document.getElementById('clienteEditError');
+    const clienteEditTitle = document.getElementById('clienteEditTitle');
     let currentRows = [];
+    let activeDetailClientId = null;
+    let editMode = 'edit';
     let currentSort = 'fecha_registro';
     let currentDir = 'desc';
 
@@ -169,6 +215,33 @@
       });
     }
 
+    function isValidNIF(value){
+      if(!value) return false;
+      const v = String(value).trim().toUpperCase();
+      const dni = /^\d{8}[A-Z]$/;
+      const nie = /^[XYZ]\d{7}[A-Z]$/;
+      const cif = /^[ABCDEFGHJNPQRSUVW]\d{7}[A-Z0-9]$/;
+      const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+      if(dni.test(v)){
+        const num = parseInt(v.slice(0,8), 10);
+        return letters[num % 23] === v.slice(8);
+      }
+      if(nie.test(v)){
+        const map = { X: '0', Y: '1', Z: '2' };
+        const num = parseInt(map[v[0]] + v.slice(1,8), 10);
+        return letters[num % 23] === v.slice(8);
+      }
+      return cif.test(v);
+    }
+
+    function isValidPhone(value){
+      return /^\d{9}$/.test(String(value || '').trim());
+    }
+
+    function isValidEmail(value){
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+    }
+
     function setDetail(fieldId, value){
       const el = document.getElementById(fieldId);
       if (!el) return;
@@ -176,6 +249,7 @@
     }
 
     function openClienteModal(cliente){
+      activeDetailClientId = Number(cliente.id);
       setDetail('d_id', cliente.id);
       setDetail('d_nif', cliente.nif);
       setDetail('d_nombre', cliente.nombre);
@@ -191,8 +265,150 @@
     }
 
     function closeClienteModal(){
+      activeDetailClientId = null;
       clienteModalBackdrop.classList.remove('is-open');
       clienteModalBackdrop.setAttribute('aria-hidden', 'true');
+    }
+
+    function openEditModal(cliente){
+      editMode = 'edit';
+      clienteEditTitle.textContent = 'Editar cliente';
+      setDetail('e_id', cliente.id);
+      setDetail('e_registro', formatDateTime(cliente.fecha_registro));
+      document.getElementById('e_nif').value = cliente.nif || '';
+      document.getElementById('e_nombre').value = cliente.nombre || '';
+      document.getElementById('e_telefono').value = cliente.telefono || '';
+      document.getElementById('e_email').value = cliente.email || '';
+      document.getElementById('e_direccion').value = cliente.direccion || '';
+      document.getElementById('e_ciudad').value = cliente.ciudad || '';
+      document.getElementById('e_provincia').value = cliente.provincia || '';
+      document.getElementById('e_cp').value = cliente.cp || '';
+      clienteEditError.textContent = '';
+      clienteEditBackdrop.classList.add('is-open');
+      clienteEditBackdrop.setAttribute('aria-hidden', 'false');
+      document.getElementById('e_nif').focus();
+    }
+
+    function openCreateModal(){
+      editMode = 'create';
+      activeDetailClientId = null;
+      clienteEditTitle.textContent = 'Crear cliente';
+      setDetail('e_id', '-');
+      setDetail('e_registro', '-');
+      document.getElementById('e_nif').value = '';
+      document.getElementById('e_nombre').value = '';
+      document.getElementById('e_telefono').value = '';
+      document.getElementById('e_email').value = '';
+      document.getElementById('e_direccion').value = '';
+      document.getElementById('e_ciudad').value = '';
+      document.getElementById('e_provincia').value = '';
+      document.getElementById('e_cp').value = '';
+      clienteEditError.textContent = '';
+      clienteEditBackdrop.classList.add('is-open');
+      clienteEditBackdrop.setAttribute('aria-hidden', 'false');
+      document.getElementById('e_nif').focus();
+    }
+
+    function closeEditModal(){
+      clienteEditBackdrop.classList.remove('is-open');
+      clienteEditBackdrop.setAttribute('aria-hidden', 'true');
+      clienteEditError.textContent = '';
+      clienteEditSubmit.disabled = false;
+      clienteEditCancel.disabled = false;
+    }
+
+    function reopenDetailFromActive(){
+      const cliente = currentRows.find((r) => Number(r.id) === Number(activeDetailClientId));
+      if (cliente) openClienteModal(cliente);
+    }
+
+    function handleEditFromDetail(){
+      const cliente = currentRows.find((r) => Number(r.id) === Number(activeDetailClientId));
+      if (!cliente) {
+        alert('No se pudo cargar el cliente para editar.');
+        return;
+      }
+      clienteModalBackdrop.classList.remove('is-open');
+      clienteModalBackdrop.setAttribute('aria-hidden', 'true');
+      openEditModal(cliente);
+    }
+
+    async function submitClienteEdit(){
+      const nifValue = document.getElementById('e_nif').value.trim().toUpperCase();
+      const nombreValue = document.getElementById('e_nombre').value.trim();
+      const telefonoValue = document.getElementById('e_telefono').value.trim();
+      const emailValue = document.getElementById('e_email').value.trim();
+      const payload = {
+        nif: nifValue,
+        nombre: nombreValue,
+        telefono: telefonoValue,
+        email: emailValue,
+        direccion: document.getElementById('e_direccion').value.trim(),
+        ciudad: document.getElementById('e_ciudad').value.trim(),
+        provincia: document.getElementById('e_provincia').value.trim(),
+        cp: document.getElementById('e_cp').value.trim()
+      };
+
+      if (!nombreValue) {
+        clienteEditError.textContent = 'El nombre es obligatorio.';
+        document.getElementById('e_nombre').focus();
+        return;
+      }
+      if (nifValue && !isValidNIF(nifValue)) {
+        clienteEditError.textContent = 'Introduce un NIF/DNI/NIE/CIF valido.';
+        document.getElementById('e_nif').focus();
+        return;
+      }
+      if (!isValidPhone(telefonoValue)) {
+        clienteEditError.textContent = 'El telefono debe tener exactamente 9 digitos.';
+        document.getElementById('e_telefono').focus();
+        return;
+      }
+      if (emailValue && !isValidEmail(emailValue)) {
+        clienteEditError.textContent = 'Introduce un email valido.';
+        document.getElementById('e_email').focus();
+        return;
+      }
+
+      clienteEditSubmit.disabled = true;
+      clienteEditCancel.disabled = true;
+      clienteEditError.textContent = '';
+      try {
+        const isCreate = editMode === 'create';
+        const id = Number(activeDetailClientId);
+        const url = isCreate ? '/admin/api/clientes' : ('/admin/api/clientes/' + id);
+        const method = isCreate ? 'POST' : 'PUT';
+        if (!isCreate && !Number.isFinite(id)) {
+          clienteEditError.textContent = 'No se pudo identificar el cliente a editar.';
+          return;
+        }
+        const resp = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        });
+        if (resp.status === 401) {
+          location.href = '/admin';
+          return;
+        }
+        const data = await resp.json();
+        if (!data || !data.ok || !data.data) {
+          clienteEditError.textContent = data?.error || (isCreate ? 'No se pudo crear el cliente.' : 'No se pudo actualizar el cliente.');
+          return;
+        }
+        const updated = data.data;
+        await load();
+        closeEditModal();
+        openClienteModal(updated);
+      } catch (_err) {
+        clienteEditError.textContent = editMode === 'create' ? 'Error creando cliente.' : 'Error actualizando cliente.';
+      } finally {
+        if (clienteEditBackdrop.classList.contains('is-open')) {
+          clienteEditSubmit.disabled = false;
+          clienteEditCancel.disabled = false;
+        }
+      }
     }
 
     function bindActions(){
@@ -273,9 +489,11 @@
     document.getElementById('searchBtn').addEventListener('click', load);
     pageSizeSel.addEventListener('change', load);
 
-    document.getElementById('createClienteBtn').addEventListener('click', () => {
-      alert('Crear cliente aun no disponible.');
+    document.getElementById('menuBtn').addEventListener('click', () => {
+      location.href = '/admin';
     });
+
+    document.getElementById('createClienteBtn').addEventListener('click', openCreateModal);
 
     document.getElementById('exportBtn').addEventListener('click', () => {
       alert('Exportar clientes aun no disponible.');
@@ -291,12 +509,29 @@
     });
 
     clienteModalClose.addEventListener('click', closeClienteModal);
-    clienteModalCloseTop.addEventListener('click', closeClienteModal);
+    clienteModalEdit.addEventListener('click', handleEditFromDetail);
     clienteModalBackdrop.addEventListener('click', (ev) => {
       if (ev.target === clienteModalBackdrop) closeClienteModal();
     });
+    clienteEditCancel.addEventListener('click', () => {
+      closeEditModal();
+      if (editMode === 'edit') reopenDetailFromActive();
+    });
+    clienteEditSubmit.addEventListener('click', submitClienteEdit);
+    clienteEditBackdrop.addEventListener('click', (ev) => {
+      if (ev.target === clienteEditBackdrop) {
+        closeEditModal();
+        if (editMode === 'edit') reopenDetailFromActive();
+      }
+    });
     document.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape' && clienteModalBackdrop.classList.contains('is-open')) {
+      if (ev.key !== 'Escape') return;
+      if (clienteEditBackdrop.classList.contains('is-open')) {
+        closeEditModal();
+        if (editMode === 'edit') reopenDetailFromActive();
+        return;
+      }
+      if (clienteModalBackdrop.classList.contains('is-open')) {
         closeClienteModal();
       }
     });

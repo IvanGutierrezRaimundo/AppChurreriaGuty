@@ -43,6 +43,39 @@ function ensureAdmin(req, res, next) {
   return res.status(401).json({ ok: false, error: 'No autorizado' });
 }
 
+function isValidSpanishNif(value) {
+  if (!value) return false;
+  const v = String(value).trim().toUpperCase();
+  const dni = /^\d{8}[A-Z]$/;
+  const nie = /^[XYZ]\d{7}[A-Z]$/;
+  const cif = /^[ABCDEFGHJNPQRSUVW]\d{7}[A-Z0-9]$/;
+  const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+
+  if (dni.test(v)) {
+    const num = parseInt(v.slice(0, 8), 10);
+    return letters[num % 23] === v.slice(8);
+  }
+  if (nie.test(v)) {
+    const map = { X: '0', Y: '1', Z: '2' };
+    const num = parseInt(map[v[0]] + v.slice(1, 8), 10);
+    return letters[num % 23] === v.slice(8);
+  }
+  if (cif.test(v)) {
+    return true;
+  }
+  return false;
+}
+
+function isValidSpanishPhone(value) {
+  if (!value) return false;
+  return /^\d{9}$/.test(String(value).trim());
+}
+
+function isValidEmail(value) {
+  if (!value) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
+}
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Login y logout de administrador
@@ -281,6 +314,149 @@ app.get('/admin/api/clientes', ensureAdmin, async (req, res) => {
     res.json({ ok: true, data: rows });
   } catch (err) {
     console.error('Error listando clientes:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.post('/admin/api/clientes', ensureAdmin, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const nullIfEmpty = (v) => {
+      if (typeof v === 'undefined' || v === null) return null;
+      const s = String(v).trim();
+      return s === '' ? null : s;
+    };
+
+    const nif = nullIfEmpty(body.nif);
+    const nombre = nullIfEmpty(body.nombre);
+    const telefono = nullIfEmpty(body.telefono);
+    const email = nullIfEmpty(body.email);
+    const direccion = nullIfEmpty(body.direccion);
+    const ciudad = nullIfEmpty(body.ciudad);
+    const provincia = nullIfEmpty(body.provincia);
+    const cp = nullIfEmpty(body.cp);
+
+    if (!nombre) {
+      return res.status(400).json({ ok: false, error: 'El nombre es obligatorio.' });
+    }
+    if (!telefono || !isValidSpanishPhone(telefono)) {
+      return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
+    }
+    if (nif && !isValidSpanishNif(nif)) {
+      return res.status(400).json({ ok: false, error: 'Introduce un NIF/DNI/NIE/CIF valido.' });
+    }
+    if (email && !isValidEmail(email)) {
+      return res.status(400).json({ ok: false, error: 'Introduce un email valido.' });
+    }
+
+    const [result] = await pool.execute(
+      `INSERT INTO clientes (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nif ? String(nif).toUpperCase() : null,
+        nombre,
+        String(telefono).trim(),
+        email ? String(email).trim() : null,
+        direccion,
+        ciudad,
+        provincia,
+        cp
+      ]
+    );
+
+    const [rows] = await pool.execute(
+      'SELECT id, nif, nombre, telefono, email, direccion, ciudad, provincia, cp, fecha_registro FROM clientes WHERE id = ? LIMIT 1',
+      [result.insertId]
+    );
+    res.status(201).json({ ok: true, data: rows[0] || null });
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ ok: false, error: 'El telefono ya existe en otro cliente.' });
+    }
+    console.error('Error creando cliente:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.put('/admin/api/clientes/:id', ensureAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'ID invalido' });
+
+    const [rows] = await pool.execute('SELECT * FROM clientes WHERE id = ? LIMIT 1', [id]);
+    if (!rows || rows.length === 0) return res.status(404).json({ ok: false, error: 'Cliente no encontrado' });
+
+    const body = req.body || {};
+    const current = rows[0];
+
+    const nullIfEmpty = (v) => {
+      if (typeof v === 'undefined' || v === null) return null;
+      const s = String(v).trim();
+      return s === '' ? null : s;
+    };
+
+    const payload = {
+      nif: nullIfEmpty(body.nif),
+      nombre: nullIfEmpty(body.nombre),
+      telefono: nullIfEmpty(body.telefono),
+      email: nullIfEmpty(body.email),
+      direccion: nullIfEmpty(body.direccion),
+      ciudad: nullIfEmpty(body.ciudad),
+      provincia: nullIfEmpty(body.provincia),
+      cp: nullIfEmpty(body.cp)
+    };
+
+    const nombreFinal = payload.nombre || current.nombre;
+    if (!nombreFinal) {
+      return res.status(400).json({ ok: false, error: 'El nombre es obligatorio.' });
+    }
+
+    const has = (key) => Object.prototype.hasOwnProperty.call(body, key);
+    const nifFinal = has('nif') ? payload.nif : (current.nif || null);
+    const telefonoFinal = has('telefono') ? payload.telefono : (current.telefono || null);
+    const emailFinal = has('email') ? payload.email : (current.email || null);
+    const direccionFinal = has('direccion') ? payload.direccion : (current.direccion || null);
+    const ciudadFinal = has('ciudad') ? payload.ciudad : (current.ciudad || null);
+    const provinciaFinal = has('provincia') ? payload.provincia : (current.provincia || null);
+    const cpFinal = has('cp') ? payload.cp : (current.cp || null);
+
+    if (nifFinal && !isValidSpanishNif(nifFinal)) {
+      return res.status(400).json({ ok: false, error: 'Introduce un NIF/DNI/NIE/CIF valido.' });
+    }
+    if (!telefonoFinal || !isValidSpanishPhone(telefonoFinal)) {
+      return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
+    }
+    if (emailFinal && !isValidEmail(emailFinal)) {
+      return res.status(400).json({ ok: false, error: 'Introduce un email valido.' });
+    }
+
+    await pool.execute(
+      `UPDATE clientes
+       SET nif = ?, nombre = ?, telefono = ?, email = ?, direccion = ?, ciudad = ?, provincia = ?, cp = ?
+       WHERE id = ?`,
+      [
+        nifFinal ? String(nifFinal).toUpperCase() : null,
+        nombreFinal,
+        String(telefonoFinal).trim(),
+        emailFinal ? String(emailFinal).trim() : null,
+        direccionFinal,
+        ciudadFinal,
+        provinciaFinal,
+        cpFinal,
+        id
+      ]
+    );
+
+    const [updatedRows] = await pool.execute(
+      'SELECT id, nif, nombre, telefono, email, direccion, ciudad, provincia, cp, fecha_registro FROM clientes WHERE id = ? LIMIT 1',
+      [id]
+    );
+    res.json({ ok: true, data: updatedRows[0] || null });
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ ok: false, error: 'El telefono ya existe en otro cliente.' });
+    }
+    console.error('Error actualizando cliente:', err);
     res.status(500).json({ ok: false, error: 'Error interno' });
   }
 });
