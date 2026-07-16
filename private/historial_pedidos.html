@@ -791,6 +791,13 @@
       });
     }
 
+    const createPedidoBtn = document.getElementById('createPedidoBtn');
+    if (createPedidoBtn) {
+      createPedidoBtn.addEventListener('click', () => {
+        location.href = '/admin/crear-pedido';
+      });
+    }
+
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       await fetch('/admin/logout', { method: 'POST' });
       location.href = '/admin';

@@ -1,0 +1,996 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pedido</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E🧾%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .crear-page {
+      max-width: 1080px;
+      margin: 22px auto;
+      padding: 0 14px;
+    }
+    .crear-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .crear-head h1 {
+      margin: 0;
+    }
+    .crear-head-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .crear-head-actions button {
+      white-space: nowrap;
+    }
+    #pedido-form {
+      margin: 0;
+    }
+    @media (max-width: 760px) {
+      .crear-page {
+        margin-top: 14px;
+      }
+      .crear-head {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+  <script>
+    // Validador NIF español (DNI/NIE; CIF formato básico) - ámbito global
+    function isValidNIF(s){
+      if(!s) return false;
+      const v = s.toUpperCase();
+      const dni = /^\d{8}[A-Z]$/;
+      const nie = /^[XYZ]\d{7}[A-Z]$/;
+      const cif = /^[ABCDEFGHJNPQRSUVW]\d{7}[A-Z0-9]$/;
+      const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+      if(dni.test(v)){
+        const num = parseInt(v.slice(0,8),10);
+        const letter = v.slice(8);
+        return letters[num % 23] === letter;
+      }
+      if(nie.test(v)){
+        const map = { 'X': '0', 'Y': '1', 'Z': '2' };
+        const numStr = map[v[0]] + v.slice(1,8);
+        const num = parseInt(numStr,10);
+        const letter = v.slice(8);
+        return letters[num % 23] === letter;
+      }
+      if(cif.test(v)){
+        return true;
+      }
+      return false;
+    }
+    function formatCurrency(value){
+      return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+    }
+
+    function formatISODate(dt){
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function normalizePhone(value){
+      let digits = String(value || '').replace(/\D/g, '');
+      if(digits.length === 11 && digits.startsWith('34')){
+        digits = digits.slice(2);
+      }
+      return digits;
+    }
+
+    function showConfirmModal(payload, totalPresupuesto, provisionalId){
+      const modal = document.getElementById('confirm-modal');
+      const confirmData = document.getElementById('confirm-data');
+      const summary = document.getElementById('confirm-summary');
+      const budget = document.getElementById('confirm-budget');
+      const order = document.getElementById('confirm-order');
+      if(!modal || !summary || !budget || !order) return;
+
+      const envioSi = payload?.requiere_envio === true
+        || payload?.requiere_envio === 1
+        || String(payload?.requiere_envio || '').toLowerCase() === 'si'
+        || String(payload?.requiere_envio || '').toLowerCase() === 'sí';
+
+      const fechaResumen = (() => {
+        const raw = String(payload?.fecha || '').trim();
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+        if(!m) return raw || '—';
+        return `${m[3]}/${m[2]}/${m[1].slice(2)}`;
+      })();
+
+      const sections = [
+        {
+          title: 'Datos personales',
+          lines: [
+            ['Nombre', payload.nombre],
+            ['Teléfono', payload.telefono],
+            ['E-mail', payload.email || '—'],
+            ['Dirección', payload.direccion || '—'],
+            ['CP / Ciudad / Provincia', [payload.cp, payload.ciudad, payload.provincia].filter(Boolean).join(' · ') || '—'],
+            ['NIF', payload.nif || '—']
+          ]
+        },
+        {
+          title: 'Cantidad',
+          lines: [
+            ['Personas', payload.personas || 0],
+            ['Churros por persona', Number.isFinite(payload.churros_por_persona) ? payload.churros_por_persona : '—'],
+            ['Chocolates', payload.chocolates || 0]
+          ]
+        },
+        {
+          title: 'Fecha y hora',
+          lines: [
+            ['Fecha', fechaResumen],
+            ['Hora', payload.hora || '—']
+          ]
+        },
+        {
+          title: 'Envío',
+          lines: [
+            ['Envío', envioSi ? 'Sí' : 'No'],
+            ['Dirección de entrega', envioSi ? (payload.direccion_entrega || '—') : 'No aplica']
+          ]
+        },
+        {
+          title: 'Pago y comentarios',
+          lines: [
+            ['Método de pago', payload.metodo_pago || '—'],
+            ['Comentarios', payload.comentarios || 'Sin comentarios.']
+          ]
+        }
+      ];
+
+      if(confirmData){
+        confirmData.dataset.payload = JSON.stringify(payload);
+        confirmData.dataset.total = String(totalPresupuesto);
+      }
+
+      summary.innerHTML = sections.map((section) => {
+        const items = section.lines
+          .map(([label, value]) => `<li><strong>${label}:</strong><span class="confirm-value">${value}</span></li>`)
+          .join('');
+        return `
+          <article class="confirm-fieldset">
+            <h4>${section.title}</h4>
+            <ul class="confirm-list confirm-summary-list">${items}</ul>
+          </article>
+        `;
+      }).join('');
+      budget.innerHTML = `
+        <li><span>Churros</span><strong>${formatCurrency(Math.max(0, (payload.personas || 0) * (Number.isFinite(payload.churros_por_persona) ? payload.churros_por_persona : 0) * 0.25))}</strong></li>
+        <li><span>Chocolate</span><strong>${formatCurrency((payload.chocolates || 0) * 1.5)}</strong></li>
+        <li><span>Envío</span><strong>${formatCurrency(envioSi ? 25 : 0)}</strong></li>
+        <li class="confirm-total"><span>Total</span><strong>${formatCurrency(totalPresupuesto)}</strong></li>`;
+      order.textContent = provisionalId;
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeConfirmModal(){
+      const modal = document.getElementById('confirm-modal');
+      const status = document.getElementById('confirm-status');
+      const accept = document.getElementById('confirm-accept');
+      const cancel = document.getElementById('confirm-cancel');
+      const back = document.getElementById('confirm-back');
+      if(status){ status.textContent=''; status.classList.add('hidden'); }
+      if(accept){ accept.disabled = false; accept.textContent = 'Aceptar'; accept.classList.remove('hidden'); }
+      if(cancel){ cancel.classList.remove('hidden'); cancel.textContent = 'Cancelar'; }
+      if(back){ back.classList.add('hidden'); }
+      modal?.classList.add('hidden');
+      modal?.setAttribute('aria-hidden', 'true');
+    }
+
+    function showConfirmMessage(text, { isError = false } = {}){
+      const status = document.getElementById('confirm-status');
+      const accept = document.getElementById('confirm-accept');
+      const cancel = document.getElementById('confirm-cancel');
+      const back = document.getElementById('confirm-back');
+      if(status){
+        status.textContent = text;
+        status.classList.toggle('error', isError);
+        status.classList.remove('hidden');
+      }
+      if(accept){ accept.classList.toggle('hidden', isError); }
+      if(cancel){ cancel.classList.toggle('hidden', isError); }
+      if(back){ back.classList.toggle('hidden', !isError); }
+    }
+
+    function showSuccessModal(orderId){
+      const modal = document.getElementById('success-modal');
+      const successOrder = document.getElementById('success-order');
+      if(!modal) return;
+      if(successOrder) successOrder.textContent = orderId ? `PED-${orderId}` : '—';
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function resetPedidoFormState(){
+      const form = document.getElementById('pedido-form');
+      const statusEl = document.getElementById('status');
+      const personasInput = document.getElementById('personas');
+      const churrosInput = document.getElementById('churros_por_persona');
+      const warn = document.getElementById('budget-warning');
+      const box = document.querySelector('.budget-lines');
+      const elCh = document.getElementById('pres-churros');
+      const elCo = document.getElementById('pres-chocolate');
+      const elEn = document.getElementById('pres-envio');
+      const elTo = document.getElementById('pres-total');
+      const emailInput = document.getElementById('email');
+      const emailErr = document.getElementById('email-error');
+
+      if(form) form.reset();
+      if(personasInput) personasInput.value = '';
+      if(churrosInput){
+        churrosInput.value = '';
+        churrosInput.disabled = true;
+        churrosInput.required = false;
+      }
+      if(statusEl){ statusEl.textContent=''; statusEl.classList.add('hidden'); }
+      if(warn) warn.classList.add('hidden');
+      if(box) box.classList.remove('invalid');
+      if(elCh) elCh.textContent = '0,00 €';
+      if(elCo) elCo.textContent = '0,00 €';
+      if(elEn) elEn.textContent = '0,00 €';
+      if(elTo) elTo.textContent = '0,00 €';
+      if(emailInput) emailInput.setCustomValidity('');
+      if(emailErr){ emailErr.textContent=''; emailErr.classList.add('hidden'); }
+      if(typeof updateChurrosRequirement === 'function') updateChurrosRequirement();
+      if(typeof updateBudget === 'function') updateBudget();
+      if(typeof updateFacturaRequirement === 'function') updateFacturaRequirement();
+      if(typeof updateEnvioUI === 'function') updateEnvioUI();
+    }
+
+    function closeSuccessModal(){
+      const modal = document.getElementById('success-modal');
+      if(modal){
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+      resetPedidoFormState();
+    }
+
+    async function submitPedido(payload){
+      const accept = document.getElementById('confirm-accept');
+      const cancel = document.getElementById('confirm-cancel');
+      try {
+        if(accept) accept.disabled = true;
+        if(cancel) cancel.disabled = true;
+        showConfirmMessage('Procesando formulario...');
+        const resp = await fetch('/api/pedidos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if(!resp.ok || data.ok === false){
+          const msg = data.error || 'No se pudo guardar el pedido.';
+          showConfirmMessage(`Lo sentimos, ha habido un problema al enviar el pedido. ${msg} Puede volver al formulario e intentarlo de nuevo.`, { isError: true });
+          return;
+        }
+        closeConfirmModal();
+        showSuccessModal(data.id);
+      } catch (err) {
+        console.error('Error enviando pedido:', err);
+        showConfirmMessage('Lo sentimos, ha habido un error de conexión. Disculpe las molestias. Puede volver al formulario e intentarlo de nuevo.', { isError: true });
+      } finally {
+        if(document.getElementById('confirm-accept')) document.getElementById('confirm-accept').disabled = false;
+        if(document.getElementById('confirm-cancel')) document.getElementById('confirm-cancel').disabled = false;
+      }
+    }
+
+    async function onSubmit(e) {
+      e.preventDefault();
+
+      const nombre = document.getElementById('nombre').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const telefonoRaw = document.getElementById('telefono').value.trim();
+      const telefono = normalizePhone(telefonoRaw);
+      const direccion = document.getElementById('direccion').value.trim();
+      const codigoPostal = (document.getElementById('cp')?.value || '').trim();
+      const ciudad = (document.getElementById('ciudad')?.value || '').trim();
+      const provincia = (document.getElementById('provincia')?.value || '').trim();
+      const nif = (document.getElementById('nif')?.value || '').toString().trim().toUpperCase();
+      const direccionEntrega = (document.getElementById('direccion_entrega')?.value || '').trim();
+      const personas = Number(document.getElementById('personas')?.value || 0);
+      const churrosRaw = (document.getElementById('churros_por_persona')?.value || '').trim();
+      const churrosPorPersona = churrosRaw === '' ? NaN : Number(churrosRaw);
+      const chocolates = Number(document.getElementById('chocolates')?.value || 0);
+      const fechaTexto = (document.getElementById('fecha_text')?.value || '').trim();
+      const hora = (document.getElementById('hora')?.value || '').trim();
+      const comentarios = document.getElementById('comentarios').value.trim();
+      const envioSeleccion = document.querySelector('input[name="envio"]:checked')?.value || '';
+      const requiereEnvio = envioSeleccion === 'si';
+      const aceptaTerminos = document.getElementById('acepta').checked;
+      const honeypot = document.getElementById('hp').value;
+      const facturaOn = document.getElementById('factura')?.checked || false;
+      const metodoPago = document.querySelector('input[name="pago"]:checked')?.value || '';
+      const MAX_DIRECCION = 100;
+
+      // Reglas de obligatoriedad para Datos personales según factura
+      const nombreEl = document.getElementById('nombre');
+      const telefonoEl = document.getElementById('telefono');
+      const emailEl = document.getElementById('email');
+      const cpEl = document.getElementById('cp');
+      const direccionEl = document.getElementById('direccion');
+      const ciudadEl = document.getElementById('ciudad');
+      const provinciaEl = document.getElementById('provincia');
+      const nifEl = document.getElementById('nif');
+      if(facturaOn){
+        const missingEl = [nombreEl, telefonoEl, emailEl, cpEl, direccionEl, ciudadEl, provinciaEl, nifEl].find(el => !el || (el.value ?? '').toString().trim() === '');
+        if(missingEl){
+          status.textContent = 'Completa todos los campos de Datos personales para emitir la factura.';
+          missingEl.setCustomValidity('Este campo es obligatorio para la factura.');
+          missingEl.reportValidity();
+          return;
+        }
+        const nifVal = (nifEl?.value || '').toString().trim().toUpperCase();
+        if(!isValidNIF(nifVal)){
+          status.textContent = 'NIF inválido. Introduce un NIF/DNI/NIE/CIF válido.';
+          nifEl?.setCustomValidity('Introduce un NIF válido.');
+          nifEl?.reportValidity();
+          return;
+        }
+      } else {
+        const missingEl = [nombreEl, telefonoEl].find(el => !el || (el.value ?? '').toString().trim() === '');
+        if(missingEl){
+          status.textContent = 'Nombre y teléfono son obligatorios.';
+          missingEl.setCustomValidity('Completa este campo.');
+          missingEl.reportValidity();
+          return;
+        }
+      }
+
+      if(!/^\d{9}$/.test(telefono)){
+        const msg = 'El teléfono debe tener exactamente 9 dígitos.';
+        status.textContent = msg;
+        telefonoEl?.setCustomValidity(msg);
+        telefonoEl?.reportValidity();
+        return;
+      }
+      if(telefonoEl) telefonoEl.value = telefono;
+      telefonoEl?.setCustomValidity('');
+
+      if(direccion.length > MAX_DIRECCION){
+        const msg = `La dirección no puede superar ${MAX_DIRECCION} caracteres.`;
+        status.textContent = msg;
+        document.getElementById('direccion')?.setCustomValidity(msg);
+        document.getElementById('direccion')?.reportValidity();
+        return;
+      }
+      document.getElementById('direccion')?.setCustomValidity('');
+
+      if(direccionEntrega.length > MAX_DIRECCION){
+        const msg = `La dirección de entrega no puede superar ${MAX_DIRECCION} caracteres.`;
+        status.textContent = msg;
+        document.getElementById('direccion_entrega')?.setCustomValidity(msg);
+        document.getElementById('direccion_entrega')?.reportValidity();
+        return;
+      }
+      document.getElementById('direccion_entrega')?.setCustomValidity('');
+
+      // Validación fecha dd/mm/aa y que sea hoy o posterior
+      function parseDDMMYY(s){
+        const m = /^(\d{2})\/(\d{2})\/(\d{2})$/.exec(s);
+        if(!m) return null;
+        const d = parseInt(m[1],10), mo = parseInt(m[2],10)-1, y = 2000 + parseInt(m[3],10);
+        const dt = new Date(y, mo, d);
+        if(dt.getFullYear()!==y || dt.getMonth()!==mo || dt.getDate()!==d) return null;
+        return dt;
+      }
+      function formatISODate(dt){
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth()+1).padStart(2,'0');
+        const d = String(dt.getDate()).padStart(2,'0');
+        return `${y}-${m}-${d}`;
+      }
+      function startOfDay(dt){ const t=new Date(dt); t.setHours(0,0,0,0); return t; }
+      const hoy = startOfDay(new Date());
+      let fechaISO = '';
+      if(fechaTexto){
+        const f = parseDDMMYY(fechaTexto);
+        if(!f || startOfDay(f) < hoy){
+          status.textContent = 'Fecha inválida. Usa dd/mm/aa y debe ser hoy o posterior.';
+          return;
+        }
+        fechaISO = formatISODate(f);
+      } else {
+        status.textContent = 'Indica una fecha en formato dd/mm/aa.';
+        return;
+      }
+
+      // Al menos uno: personas o chocolates debe estar relleno
+      const personasRaw = (document.getElementById('personas')?.value || '').trim();
+      const chocolatesRaw = (document.getElementById('chocolates')?.value || '').trim();
+      if(personasRaw === '' && chocolatesRaw === ''){
+        const msg = 'Completa Número de personas o Chocolates (al menos uno).';
+        status.textContent = msg;
+        document.getElementById('personas')?.setCustomValidity(msg);
+        document.getElementById('chocolates')?.setCustomValidity(msg);
+        (document.getElementById('personas') || document.getElementById('chocolates'))?.reportValidity();
+        return;
+      } else {
+        document.getElementById('personas')?.setCustomValidity('');
+        document.getElementById('chocolates')?.setCustomValidity('');
+      }
+
+      // Método de pago: el grupo exige una opción seleccionada (HTML required en radios)
+      if(!metodoPago){
+        status.textContent = 'Selecciona un método de pago.';
+        document.querySelector('input[name="pago"]')?.reportValidity();
+        return;
+      }
+
+      // Validaciones de cantidad
+      const personasEl = document.getElementById('personas');
+      const churrosEl = document.getElementById('churros_por_persona');
+      const chocolatesEl = document.getElementById('chocolates');
+      const okPersonas = personas >= 0 && personas <= 1000;
+      const personasVal = Number(personasRaw);
+      const requireChurros = Number.isFinite(personasVal) && personasVal > 0;
+      const okChurros = !requireChurros ? true : (Number.isFinite(churrosPorPersona) && churrosPorPersona >= 4 && churrosPorPersona <= 12);
+      const okChocolates = chocolates >= 0 && chocolates <= 1000;
+      if(!okPersonas){ personasEl?.reportValidity(); status.textContent = 'Número de personas debe ser entre 0 y 1000.'; return; }
+      if(requireChurros && !okChurros){
+        const msg = 'Si indicas personas, rellena Número de churros por persona (entre 4 y 12).';
+        churrosEl?.setCustomValidity(msg);
+        churrosEl?.reportValidity();
+        status.textContent = msg;
+        return;
+      }
+      churrosEl?.setCustomValidity('');
+      if(!okChocolates){ chocolatesEl?.reportValidity(); status.textContent = 'Chocolates debe ser entre 0 y 1000.'; return; }
+
+      // Validación de presupuesto mínimo
+      const totalPresupuesto = (Number.isFinite(personas) && Number.isFinite(churrosPorPersona) ? personas * churrosPorPersona * 0.25 : 0)
+        + (Number.isFinite(chocolates) ? chocolates * 1.5 : 0)
+        + (requiereEnvio ? 25 : 0);
+      if(totalPresupuesto < 100){
+        status.textContent = 'El presupuesto mínimo es 100 €. Ajusta cantidades o envío.';
+        const warn = document.getElementById('budget-warning');
+        const box = document.querySelector('.budget-lines');
+        warn?.classList.remove('hidden');
+        box?.classList.add('invalid');
+        return;
+      }
+
+      const payload = {
+        nombre,
+        telefono,
+        email,
+        cp: codigoPostal,
+        direccion,
+        ciudad,
+        provincia,
+        nif,
+        solicita_factura: facturaOn,
+        personas,
+        churros_por_persona: churrosPorPersona,
+        chocolates,
+        fecha: fechaISO,
+        hora,
+        requiere_envio: requiereEnvio,
+        direccion_entrega: direccionEntrega,
+        metodo_pago: metodoPago,
+        comentarios
+      };
+
+      showConfirmModal(payload, totalPresupuesto, 'Se asignará al confirmar');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('pedido-form').addEventListener('submit', onSubmit);
+
+      const confirmAccept = document.getElementById('confirm-accept');
+      const confirmCancel = document.getElementById('confirm-cancel');
+      const confirmClose = document.getElementById('confirm-close');
+      const successClose = document.getElementById('success-close');
+      const successModal = document.getElementById('success-modal');
+      const modal = document.getElementById('confirm-modal');
+      const confirmBack = document.getElementById('confirm-back');
+      const comentariosInput = document.getElementById('comentarios');
+      const comentariosCounter = document.getElementById('comentarios-counter');
+      const selectClienteBtn = document.getElementById('selectClienteBtn');
+      const volverPedidosBtn = document.getElementById('volverPedidosBtn');
+      const MAX_COMENTARIOS = 200;
+
+      selectClienteBtn?.addEventListener('click', () => {
+        alert('Próximamente: selector de clientes.');
+      });
+      volverPedidosBtn?.addEventListener('click', () => {
+        location.href = '/admin/pedidos';
+      });
+
+      function updateComentariosCounter(){
+        if(!comentariosInput || !comentariosCounter) return;
+        const length = comentariosInput.value.length;
+        comentariosCounter.textContent = `${length} / ${MAX_COMENTARIOS} caracteres`;
+        comentariosCounter.classList.toggle('is-limit', length >= MAX_COMENTARIOS);
+      }
+      comentariosInput?.addEventListener('input', updateComentariosCounter);
+      updateComentariosCounter();
+
+      confirmAccept?.addEventListener('click', async () => {
+        const payload = JSON.parse(document.getElementById('confirm-data')?.dataset.payload || 'null');
+        const total = Number(document.getElementById('confirm-data')?.dataset.total || 0);
+        if(!payload){ return; }
+        confirmAccept.disabled = true;
+        confirmAccept.textContent = 'Enviando...';
+        await submitPedido({ ...payload, presupuesto_total: total });
+        confirmAccept.disabled = false;
+        confirmAccept.textContent = 'Aceptar';
+      });
+      confirmCancel?.addEventListener('click', closeConfirmModal);
+      confirmBack?.addEventListener('click', closeConfirmModal);
+      successClose?.addEventListener('click', closeSuccessModal);
+      successModal?.addEventListener('click', (e) => {
+        if(e.target === successModal) closeSuccessModal();
+      });
+      modal?.addEventListener('click', (e) => {
+        if(e.target === modal) closeConfirmModal();
+      });
+
+      // Requerimientos dinámicos de Datos personales según "¿Necesita factura?"
+      const facturaChk = document.getElementById('factura');
+      const nombreEl = document.getElementById('nombre');
+      const telefonoEl = document.getElementById('telefono');
+      const emailEl = document.getElementById('email');
+      const cpEl = document.getElementById('cp');
+      const direccionEl = document.getElementById('direccion');
+      const ciudadEl = document.getElementById('ciudad');
+      const provinciaEl2 = document.getElementById('provincia');
+      const nifEl2 = document.getElementById('nif');
+      function updateFacturaRequirement(){
+        // Nombre y teléfono siempre obligatorios
+        if(nombreEl) nombreEl.required = true;
+        if(telefonoEl) telefonoEl.required = true;
+        const on = facturaChk?.checked || false;
+        [emailEl, cpEl, direccionEl, ciudadEl, provinciaEl2, nifEl2].forEach(el => { if(el) el.required = on; });
+        // Limpiar mensajes personalizados al cambiar estado
+        [nombreEl, telefonoEl, emailEl, cpEl, direccionEl, ciudadEl, provinciaEl2, nifEl2].forEach(el => el?.setCustomValidity(''));
+        // Nota: el mensaje de e-mail se actualiza en sus propios listeners
+        // Mostrar/ocultar aviso bajo el check
+        const hint = document.getElementById('factura-hint');
+        if(hint) hint.classList.toggle('hidden', !on);
+      }
+
+            const nifInput = document.getElementById('nif');
+            const nifErr = document.getElementById('nif-error');
+            function updateNifError(){
+              if(!nifInput || !nifErr) return;
+              const val = (nifInput.value || '').toString().trim().toUpperCase();
+              nifInput.value = val;
+              const on = facturaChk?.checked || false;
+              if(on){
+                if(val === ''){
+                  nifInput.setCustomValidity('El NIF es obligatorio para factura.');
+                } else if(!isValidNIF(val)){
+                  nifInput.setCustomValidity('Introduce un NIF/DNI/NIE/CIF válido.');
+                } else {
+                  nifInput.setCustomValidity('');
+                }
+              } else {
+                if(val !== '' && !isValidNIF(val)) nifInput.setCustomValidity('Introduce un NIF válido.');
+                else nifInput.setCustomValidity('');
+              }
+              const msg = nifInput.validationMessage || '';
+              nifErr.textContent = msg;
+              nifErr.classList.toggle('hidden', msg === '');
+            }
+            nifInput?.addEventListener('input', updateNifError);
+            nifInput?.addEventListener('change', updateNifError);
+            facturaChk?.addEventListener('change', updateNifError);
+            updateNifError();
+      facturaChk?.addEventListener('change', updateFacturaRequirement);
+      facturaChk?.addEventListener('input', updateFacturaRequirement);
+      updateFacturaRequirement();
+
+      telefonoEl?.addEventListener('input', () => {
+        telefonoEl.setCustomValidity('');
+      });
+      // Configurar date picker oculto y botón
+      const fechaPicker = document.getElementById('fecha_picker');
+      const fechaText = document.getElementById('fecha_text');
+      const calBtn = document.getElementById('open-cal');
+      if(fechaPicker){
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        fechaPicker.min = formatISODate(today);
+        fechaPicker.addEventListener('change', () => {
+          if(fechaPicker.value){
+            const [yy,mm,dd] = fechaPicker.value.split('-');
+            fechaText.value = `${dd}/${mm}/${yy.slice(2)}`;
+          }
+        });
+      }
+      if(calBtn && fechaPicker){
+        calBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          fechaPicker.focus({ preventScroll: true });
+          if(typeof fechaPicker.showPicker === 'function') fechaPicker.showPicker();
+          else fechaPicker.click();
+        });
+      }
+      // Mostrar/ocultar Dirección de entrega según selección de envío
+      const envioRadios = document.querySelectorAll('input[name="envio"]');
+      const dirWrap = document.getElementById('direccion-entrega-wrap');
+      const dirEntregaInput = document.getElementById('direccion_entrega');
+      const envioSuplMsg = document.getElementById('envio-supl-msg');
+      function updateEnvioUI(){
+        const si = document.querySelector('input[name="envio"]:checked')?.value === 'si';
+        if(si){
+          dirWrap?.classList.remove('hidden');
+          if(dirEntregaInput) dirEntregaInput.required = true;
+          envioSuplMsg?.classList.remove('hidden');
+        } else {
+          dirWrap?.classList.add('hidden');
+          if(dirEntregaInput){ dirEntregaInput.required = false; dirEntregaInput.value = ''; }
+          envioSuplMsg?.classList.add('hidden');
+        }
+      }
+      envioRadios.forEach(r => r.addEventListener('change', updateEnvioUI));
+      updateEnvioUI();
+      // Validación en vivo para rangos de cantidad
+      function setRangeValidation(el, min, max, msg){
+        if(!el) return;
+        const check = () => {
+          const raw = (el.value ?? '').toString().trim();
+          if(raw === '') { el.setCustomValidity(''); return; }
+          const v = Number(raw);
+          if(!Number.isFinite(v) || v < min || v > max) el.setCustomValidity(msg);
+          else el.setCustomValidity('');
+        };
+        el.addEventListener('input', check);
+        check();
+      }
+      setRangeValidation(document.getElementById('personas'), 0, 1000, 'Introduce un número entre 0 y 1000');
+      setRangeValidation(document.getElementById('churros_por_persona'), 4, 12, 'Introduce un número entre 4 y 12');
+      setRangeValidation(document.getElementById('chocolates'), 0, 1000, 'Introduce un número entre 0 y 1000');
+
+      // Requerir churros si personas tiene valor
+      const personasInput = document.getElementById('personas');
+      const churrosInput = document.getElementById('churros_por_persona');
+      function updateChurrosRequirement(){
+        if(!personasInput || !churrosInput) return;
+        const raw = (personasInput.value ?? '').toString().trim();
+        const val = Number(raw);
+        const hasPositive = Number.isFinite(val) && val > 0;
+        churrosInput.required = hasPositive;
+        churrosInput.disabled = !hasPositive;
+        if(!hasPositive){
+          churrosInput.value = '';
+          churrosInput.setCustomValidity('');
+        }
+      }
+      personasInput?.addEventListener('input', updateChurrosRequirement);
+      personasInput?.addEventListener('change', updateChurrosRequirement);
+      updateChurrosRequirement();
+
+      // Presupuesto dinámico
+      const nf = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+      function safeNumber(el){
+        const raw = (el?.value ?? '').toString().trim();
+        if(raw === '') return NaN;
+        const v = Number(raw);
+        return Number.isFinite(v) ? v : NaN;
+      }
+      function updateBudget(){
+        const personasVal = safeNumber(document.getElementById('personas'));
+        const churrosPorVal = safeNumber(document.getElementById('churros_por_persona'));
+        const chocolatesVal = safeNumber(document.getElementById('chocolates'));
+        const envioSi = document.querySelector('input[name="envio"]:checked')?.value === 'si';
+
+        const churrosOk = Number.isFinite(personasVal) && personasVal > 0 && Number.isFinite(churrosPorVal) && churrosPorVal >= 4 && churrosPorVal <= 12;
+        const priceChurros = churrosOk ? personasVal * churrosPorVal * 0.25 : 0;
+        const priceChoco = Number.isFinite(chocolatesVal) && chocolatesVal >= 0 ? chocolatesVal * 1.5 : 0;
+        const priceEnvio = envioSi ? 25 : 0;
+        const total = priceChurros + priceChoco + priceEnvio;
+
+        const elCh = document.getElementById('pres-churros');
+        const elCo = document.getElementById('pres-chocolate');
+        const elEn = document.getElementById('pres-envio');
+        const elTo = document.getElementById('pres-total');
+        if(elCh) elCh.textContent = nf.format(priceChurros);
+        if(elCo) elCo.textContent = nf.format(priceChoco);
+        if(elEn) elEn.textContent = nf.format(priceEnvio);
+        if(elTo) elTo.textContent = nf.format(total);
+
+        const warn = document.getElementById('budget-warning');
+        const box = document.querySelector('.budget-lines');
+        const hasInputs = (Number.isFinite(personasVal) && personasVal > 0) || (Number.isFinite(chocolatesVal) && chocolatesVal > 0) || envioSi;
+        const showWarn = hasInputs && total < 100;
+        warn?.classList.toggle('hidden', !showWarn);
+        box?.classList.toggle('invalid', showWarn);
+      }
+      ['personas','churros_por_persona','chocolates','fecha_text','hora'].forEach(id => {
+        const el = document.getElementById(id);
+        el?.addEventListener('input', updateBudget);
+        el?.addEventListener('change', updateBudget);
+      });
+      document.querySelectorAll('input[name="envio"]').forEach(r => r.addEventListener('change', updateBudget));
+      updateBudget();
+
+      // Botón Reiniciar: limpia el formulario y restaura estado de UI
+      const resetBtn = document.getElementById('reset-form');
+      if(resetBtn){
+        resetBtn.addEventListener('click', () => {
+          resetPedidoFormState();
+          ['personas','churros_por_persona','chocolates'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.setCustomValidity('');
+          });
+        });
+      }
+
+      // Mensaje personalizado para e-mail
+      const emailInput = document.getElementById('email');
+      const emailErr = document.getElementById('email-error');
+      function updateEmailError(){
+        if(!emailInput || !emailErr) return;
+        const msg = emailInput.validationMessage || '';
+        emailErr.textContent = msg;
+        emailErr.classList.toggle('hidden', msg === '');
+      }
+      if(emailInput){
+        emailInput.addEventListener('input', () => {
+          emailInput.setCustomValidity('');
+          if(emailInput.validity.valueMissing){
+            emailInput.setCustomValidity('El e-mail es obligatorio.');
+          } else if(emailInput.validity.typeMismatch){
+            emailInput.setCustomValidity('Introduce un e-mail válido (ej. usuario@dominio.com).');
+          }
+          updateEmailError();
+        });
+        emailInput.addEventListener('invalid', updateEmailError);
+      }
+
+      
+    });
+  </script>
+  <!-- Campo honeypot para bots -->
+</head>
+<body>
+  <div class="crear-page">
+  <div class="crear-head">
+    <h1>CREAR PEDIDO NUEVO</h1>
+    <div class="crear-head-actions">
+      <button type="button" id="selectClienteBtn">Seleccionar cliente</button>
+      <button type="button" id="volverPedidosBtn">Volver a pedidos</button>
+    </div>
+  </div>
+  <form id="pedido-form" autocomplete="off">
+    <fieldset>
+      <legend>Datos personales</legend>
+      <div class="field">
+        <label>¿Necesita factura? <input type="checkbox" id="factura" name="factura"></label>
+        <div id="factura-hint" class="hint hidden" aria-live="polite">Al seleccionar factura, todos los campos de Datos personales son obligatorios.</div>
+      </div>
+      <div class="grid grid-2">
+        <div class="field">
+          <label for="nombre">Nombre o razón social *</label>
+          <input id="nombre" name="nombre" autocomplete="name" placeholder="Ej: Juan Pérez / Churrería Guty" required>
+        </div>
+        <div class="field">
+          <label for="telefono">Teléfono *</label>
+          <input id="telefono" name="telefono" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Ej: 600 123 456" required>
+        </div>
+        <div class="field">
+          <label for="nif">N.I.F.</label>
+          <input id="nif" name="nif" autocomplete="off" placeholder="DNI/NIE/CIF" inputmode="text">
+          <div id="nif-error" class="error hidden" aria-live="polite"></div>
+        </div>
+        <div class="field">
+          <label for="email">E-mail</label>
+          <input id="email" name="email" type="email" autocomplete="email" placeholder="tu@correo.com">
+          <div id="email-error" class="error hidden" aria-live="polite"></div>
+        </div>
+        <div class="field">
+          <label for="cp">Código postal</label>
+          <input id="cp" name="cp" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{4,6}" maxlength="6" placeholder="Ej: 33001">
+        </div>
+        <div class="field">
+          <label for="direccion">Dirección</label>
+          <input id="direccion" name="direccion" autocomplete="address-line1" maxlength="100" placeholder="Calle, número, piso">
+        </div>
+        <div class="field">
+          <label for="ciudad">Ciudad</label>
+          <input id="ciudad" name="ciudad" autocomplete="address-level2" placeholder="Ej: Oviedo">
+        </div>
+        <div class="field">
+          <label for="provincia">Provincia</label>
+          <input id="provincia" name="provincia" autocomplete="address-level1" placeholder="Ej: Asturias">
+        </div>
+      </div>
+      <div class="hint">* Campos obligatorios.</div>
+    </fieldset>
+
+    
+    <fieldset>
+      <legend>Cantidad</legend>
+      <div class="grid">
+        <div>
+          <label class="section-label">Churros</label>
+          <div class="grid grid-2">
+            <div class="field">
+              <label for="personas">Número de personas</label>
+              <input id="personas" name="personas" type="number" min="0" max="1000" placeholder="Entre 0 y 1000" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="churros_por_persona">Número de churros por persona</label>
+              <input id="churros_por_persona" name="churros_por_persona" type="number" min="4" max="12" placeholder="Introduce un número entre 4 y 12" autocomplete="off" disabled>
+              
+            </div>
+          </div>
+          <div class="note"><strong>Cantidades recomendadas</strong> : 4 por niño, 6 por adulto, tipo de churro madrileño de unos 5 cm.</div>
+        </div>
+        <div>
+          <label class="section-label">Chocolate</label>
+          <div class="grid grid-2">
+            <div class="field">
+              <label for="chocolates">Chocolates</label>
+              <input id="chocolates" name="chocolates" type="number" min="0" max="1000" placeholder="Entre 0 y 1000" autocomplete="off">
+              <div class="note">Vasos de 20 cl.</div>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+    </fieldset>
+
+    
+
+    <fieldset>
+      <legend>Fecha</legend>
+      <div class="grid grid-2">
+        <div class="field">
+          <label for="fecha_text">Día</label>
+          <div class="input-with-icon">
+            <input id="fecha_text" name="fecha_text" inputmode="numeric" placeholder="dd/mm/aa" pattern="\d{2}/\d{2}/\d{2}" required>
+            <button type="button" id="open-cal" class="icon-btn" aria-label="Abrir calendario" title="Abrir calendario">📅</button>
+            <input type="date" id="fecha_picker" class="visually-hidden">
+          </div>
+          <div class="hint">Formato: dd/mm/aa (ej. 03/02/26)</div>
+        </div>
+        <div class="field">
+          <label for="hora">Hora</label>
+          <input id="hora" name="hora" type="time" step="60" placeholder="hh:mm" required>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Envío</legend>
+      <div class="grid">
+        <div class="field">
+          <p>¿ Necesitas que te los llevemos?</p>
+        </div>
+        <div class="field">
+          <div class="options" role="radiogroup" aria-label="Necesitas envío">
+            <label><input type="radio" name="envio" value="si" required> Sí</label>
+            <label><input type="radio" name="envio" value="no"> No, voy a recogerlo</label>
+            <span class="note">C/ General Elorza nº69 Oviedo (Salesas).</span>
+          </div>
+        </div>
+        <div class="field hidden" id="direccion-entrega-wrap">
+          <label for="direccion_entrega">Dirección de entrega</label>
+          <input id="direccion_entrega" name="direccion_entrega" maxlength="100" placeholder="Calle, número, piso">
+        </div>
+        <div class="field hidden" id="envio-supl-msg">
+          <div class="note">Este servicio tendrá un suplemento de 25 €; incluye entrega de los churros, bidones y termos de chocolate, así como su recogida.
+             También se entregan vasos de cartón y servilletas si fuera necesario. No servimos el producto pero explicamos cuál es la mejor y más rápida manera de hacerlo.</div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Método de pago</legend>
+      <div class="grid">
+        <div class="field">
+          <div class="options" role="radiogroup" aria-label="Método de pago">
+            <label>Transferencia bancaria <input type="radio" name="pago" value="transferencia" required></label>
+            <label>Pago en el local <input type="radio" name="pago" value="local"></label>
+            <label>Pago en la entrega <input type="radio" name="pago" value="entrega"></label>
+          </div>
+        </div>
+        <div class="note">A particulares y a clientes nuevos se les podría exigir una fianza inicial.</div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Presupuesto</legend>
+      <div class="grid">
+        <div class="field">
+          <div class="budget-lines">
+            <div class="budget-row"><span>Churros</span><span id="pres-churros">0,00 €</span></div>
+            <div class="budget-row"><span>Chocolate</span><span id="pres-chocolate">0,00 €</span></div>
+            <div class="budget-row"><span>Envío</span><span id="pres-envio">0,00 €</span></div>
+            <div class="budget-sep"></div>
+            <div class="budget-row total"><span>Total (IVA inc.)</span><span id="pres-total">0,00 €</span></div>
+          </div>
+          <div id="budget-warning" class="warning hidden" aria-live="polite">El presupuesto mínimo es 100 € para aceptar el pedido. Añade más cantidad o selecciona envío si procede.</div>
+          <div class="hint">Los precios incluyen IVA.</div>
+        </div>
+      </div>
+    </fieldset>
+
+    
+
+    <div class="field">
+      <label for="comentarios">Comentarios (opcional)</label>
+      <textarea id="comentarios" name="comentarios" rows="4" maxlength="200"></textarea>
+      <div id="comentarios-counter" class="char-counter" aria-live="polite">0 / 200 caracteres</div>
+      <div class="note">Los churros vienen con <strong>azúcar</strong>, si quiere algunos o todos sin azúcar, déjelo reflejado en la sección de comentarios.</div>
+    </div>
+    <div class="field">
+      <div class="boxed">Información de alérgenos: los churros contiene <strong>GLUTEN</strong> y el chocolate contiene <strong>GLUTEN</strong> y <strong>LÁCTEOS</strong>.</div>
+    </div>
+
+    <div id="hp-wrap">
+      <label for="hp">No completar</label>
+      <input id="hp" name="hp" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>
+        <input type="checkbox" id="acepta" required>
+        Acepto los <a href="/terminos.html" target="_blank" rel="noopener">términos</a> y la <a href="/privacidad.html" target="_blank" rel="noopener">política de privacidad</a>
+      </label>
+      <div class="hint">Al enviar, aceptas que te contactemos para tu pedido.</div>
+    </div>
+
+    <div class="actions">
+      <button type="submit">Enviar pedido</button>
+      <button type="button" id="reset-form">Reiniciar</button>
+    </div>
+
+    <div id="status" class="status hidden" aria-live="polite"></div>
+  </form>
+  </div>
+
+  <div id="confirm-modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <div class="confirm-header">
+        <h2 id="confirm-title" class="confirm-title">Revisa tu pedido</h2>
+        <p class="confirm-intro">Comprueba los datos antes de enviarlo.</p>
+      </div>
+      <div id="confirm-data" hidden></div>
+      <p id="confirm-status" class="confirm-status hidden" aria-live="polite"></p>
+      <div class="confirm-grid">
+        <section>
+          <h3>Datos del pedido</h3>
+          <div id="confirm-summary" class="confirm-summary"></div>
+        </section>
+        <section class="confirm-fieldset confirm-budget-panel">
+          <h3>Presupuesto</h3>
+          <ul id="confirm-budget" class="confirm-list confirm-budget"></ul>
+          <p class="confirm-order">N.º de pedido: <strong id="confirm-order"></strong></p>
+        </section>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" id="confirm-cancel" class="ghost">Cancelar</button>
+        <button type="button" id="confirm-back" class="ghost hidden">Volver al formulario</button>
+        <button type="button" id="confirm-accept">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="success-modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal success-modal" role="dialog" aria-modal="true" aria-labelledby="success-title">
+      <button type="button" id="success-close" class="confirm-close" aria-label="Cerrar">×</button>
+      <h2 id="success-title">Pedido enviado</h2>
+      <p class="confirm-intro">Su solicitud de pedido ha sido enviada, espere a que sea confirmada. Nos pondremos en contacto con usted por teléfono, Whatsapp o E-mail, gracias por su confianza.</p>
+      <p class="confirm-order">N.º de pedido: <strong id="success-order"></strong></p>
+    </div>
+  </div>
+</body>
+</html>

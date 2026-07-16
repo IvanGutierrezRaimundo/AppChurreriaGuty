@@ -145,6 +145,13 @@ app.get('/admin/clientes', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de creación de pedidos desde administración
+app.get('/admin/crear-pedido', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'crear_pedido.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 app.post('/api/pedidos', async (req, res) => {
   try {
     const {
