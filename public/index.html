@@ -43,6 +43,14 @@
       return `${y}-${m}-${d}`;
     }
 
+    function normalizePhone(value){
+      let digits = String(value || '').replace(/\D/g, '');
+      if(digits.length === 11 && digits.startsWith('34')){
+        digits = digits.slice(2);
+      }
+      return digits;
+    }
+
     function showConfirmModal(payload, totalPresupuesto, provisionalId){
       const modal = document.getElementById('confirm-modal');
       const confirmData = document.getElementById('confirm-data');
@@ -249,7 +257,8 @@
 
       const nombre = document.getElementById('nombre').value.trim();
       const email = document.getElementById('email').value.trim();
-      const telefono = document.getElementById('telefono').value.trim();
+      const telefonoRaw = document.getElementById('telefono').value.trim();
+      const telefono = normalizePhone(telefonoRaw);
       const direccion = document.getElementById('direccion').value.trim();
       const codigoPostal = (document.getElementById('cp')?.value || '').trim();
       const ciudad = (document.getElementById('ciudad')?.value || '').trim();
@@ -304,6 +313,16 @@
           return;
         }
       }
+
+      if(!/^\d{9}$/.test(telefono)){
+        const msg = 'El teléfono debe tener exactamente 9 dígitos.';
+        status.textContent = msg;
+        telefonoEl?.setCustomValidity(msg);
+        telefonoEl?.reportValidity();
+        return;
+      }
+      if(telefonoEl) telefonoEl.value = telefono;
+      telefonoEl?.setCustomValidity('');
 
       if(direccion.length > MAX_DIRECCION){
         const msg = `La dirección no puede superar ${MAX_DIRECCION} caracteres.`;
@@ -529,6 +548,10 @@
       facturaChk?.addEventListener('change', updateFacturaRequirement);
       facturaChk?.addEventListener('input', updateFacturaRequirement);
       updateFacturaRequirement();
+
+      telefonoEl?.addEventListener('input', () => {
+        telefonoEl.setCustomValidity('');
+      });
       // Configurar date picker oculto y botón
       const fechaPicker = document.getElementById('fecha_picker');
       const fechaText = document.getElementById('fecha_text');
@@ -706,7 +729,7 @@
         </div>
         <div class="field">
           <label for="telefono">Teléfono *</label>
-          <input id="telefono" name="telefono" type="tel" inputmode="tel" autocomplete="tel" placeholder="Ej: 600 123 456" required>
+          <input id="telefono" name="telefono" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Ej: 600 123 456" required>
         </div>
         <div class="field">
           <label for="nif">N.I.F.</label>
@@ -787,7 +810,7 @@
         </div>
         <div class="field">
           <label for="hora">Hora</label>
-          <input id="hora" name="hora" type="time" step="900" placeholder="hh:mm" required>
+          <input id="hora" name="hora" type="time" step="60" placeholder="hh:mm" required>
         </div>
       </div>
     </fieldset>

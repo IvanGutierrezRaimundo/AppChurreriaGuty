@@ -220,6 +220,9 @@
             <div class="pedido-field"><p class="pedido-field-label">Personas</p><input id="e_personas" class="pedido-input" type="number" min="0" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Churros por persona</p><input id="e_churros" class="pedido-input" type="number" min="2" max="12" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Chocolates</p><input id="e_chocolates" class="pedido-input" type="number" min="0" /></div>
+            <div class="pedido-field"><p class="pedido-field-label">Total automatico</p><p id="e_total_auto" class="pedido-field-value">-</p></div>
+            <div class="pedido-field"><p class="pedido-field-label">Editar total manual</p><label class="pedido-toggle"><input id="e_total_manual_enabled" type="checkbox" /> Sobrescribir total</label></div>
+            <div class="pedido-field"><p class="pedido-field-label">Total manual (€)</p><input id="e_total_manual" class="pedido-input" type="number" min="0" step="0.01" disabled /></div>
           </div>
         </div>
         <div class="pedido-section pedido-section-rose">
@@ -380,6 +383,7 @@
       document.getElementById('e_direccion_entrega').value = p.direccion_entrega || '';
       document.getElementById('e_metodo_pago').value = p.metodo_pago || '';
       document.getElementById('e_comentarios').value = p.comentarios || '';
+      hydrateEditTotalFields();
       editError.textContent = '';
       detailBackdrop.classList.remove('is-open');
       detailBackdrop.setAttribute('aria-hidden', 'true');
@@ -401,6 +405,51 @@
       return Number.isFinite(n) ? n : null;
     }
 
+    function toDecimalOrNull(v){
+      const s = String(v ?? '').trim();
+      if(s === '') return null;
+      const n = Number(s.replace(',', '.'));
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function calculateAutoTotal(){
+      const personas = toNumOrNull(document.getElementById('e_personas').value);
+      const churrosPor = toNumOrNull(document.getElementById('e_churros').value);
+      const chocolates = toNumOrNull(document.getElementById('e_chocolates').value);
+      const envio = !!document.getElementById('e_requiere_envio').checked;
+
+      const churrosOk = Number.isFinite(personas) && personas > 0 && Number.isFinite(churrosPor) && churrosPor >= 4 && churrosPor <= 12;
+      const priceChurros = churrosOk ? personas * churrosPor * 0.25 : 0;
+      const priceChoco = Number.isFinite(chocolates) && chocolates >= 0 ? chocolates * 1.5 : 0;
+      const priceEnvio = envio ? 25 : 0;
+      return Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
+    }
+
+    function updateEditTotalFields(){
+      const autoTotal = calculateAutoTotal();
+      const autoEl = document.getElementById('e_total_auto');
+      if(autoEl) autoEl.textContent = nf.format(autoTotal);
+
+      const manualEnabled = !!document.getElementById('e_total_manual_enabled').checked;
+      const manualInput = document.getElementById('e_total_manual');
+      manualInput.disabled = !manualEnabled;
+      if(!manualEnabled){
+        manualInput.value = autoTotal.toFixed(2);
+      }
+    }
+
+    function hydrateEditTotalFields(){
+      const autoTotal = calculateAutoTotal();
+      const currentTotal = Number(currentPedido?.presupuesto_total);
+      const hasManualTotal = Number.isFinite(currentTotal) && Math.abs(currentTotal - autoTotal) > 0.01;
+
+      const toggle = document.getElementById('e_total_manual_enabled');
+      const input = document.getElementById('e_total_manual');
+      toggle.checked = hasManualTotal;
+      input.value = Number.isFinite(currentTotal) ? currentTotal.toFixed(2) : autoTotal.toFixed(2);
+      updateEditTotalFields();
+    }
+
     async function fetchPedido(id){
       const resp = await fetch(`/admin/api/pedidos/${id}`, { credentials: 'same-origin' });
       if(resp.status === 401) throw new Error('SESSION');
@@ -411,6 +460,13 @@
 
     async function submitEdit(){
       if(!currentPedido) return;
+      const useManualTotal = !!document.getElementById('e_total_manual_enabled').checked;
+      const manualTotal = toDecimalOrNull(document.getElementById('e_total_manual').value);
+      if(useManualTotal && (manualTotal === null || manualTotal < 0)){
+        editError.textContent = 'Introduce un total manual valido.';
+        return;
+      }
+
       const payload = {
         estado: document.getElementById('e_estado').value,
         nombre: document.getElementById('e_nombre').value.trim(),
@@ -430,7 +486,9 @@
         requiere_envio: !!document.getElementById('e_requiere_envio').checked,
         direccion_entrega: document.getElementById('e_direccion_entrega').value.trim(),
         metodo_pago: document.getElementById('e_metodo_pago').value.trim(),
-        comentarios: document.getElementById('e_comentarios').value
+        comentarios: document.getElementById('e_comentarios').value,
+        presupuesto_total_manual: useManualTotal,
+        presupuesto_total: useManualTotal ? Number(manualTotal.toFixed(2)) : null
       };
 
       const submitBtn = document.getElementById('pedidoEditSubmitBtn');
@@ -584,6 +642,14 @@
     document.getElementById('pedidoPrintBtn').addEventListener('click', downloadPedidoPdf);
     document.getElementById('pedidoEditCancelBtn').addEventListener('click', () => closeEditModal(true));
     document.getElementById('pedidoEditSubmitBtn').addEventListener('click', submitEdit);
+    ['e_personas','e_churros','e_chocolates'].forEach((id) => {
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.addEventListener('input', updateEditTotalFields);
+      el.addEventListener('change', updateEditTotalFields);
+    });
+    document.getElementById('e_requiere_envio').addEventListener('change', updateEditTotalFields);
+    document.getElementById('e_total_manual_enabled').addEventListener('change', updateEditTotalFields);
     document.getElementById('fallbackBackBtn').addEventListener('click', () => { location.href = '/admin/pedidos'; });
 
     editBackdrop.addEventListener('click', (ev) => {

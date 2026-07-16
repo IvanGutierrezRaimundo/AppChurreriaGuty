@@ -71,6 +71,14 @@ function isValidSpanishPhone(value) {
   return /^\d{9}$/.test(String(value).trim());
 }
 
+function normalizeSpanishPhone(value) {
+  let digits = String(value || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('34')) {
+    digits = digits.slice(2);
+  }
+  return digits;
+}
+
 function isValidEmail(value) {
   if (!value) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
@@ -160,8 +168,13 @@ app.post('/api/pedidos', async (req, res) => {
       comentarios
     } = req.body || {};
 
+    const telefonoNormalizado = normalizeSpanishPhone(telefono);
+
     if (!nombre || !telefono || !fecha || !hora || !metodo_pago) {
       return res.status(400).json({ ok: false, error: 'Campos obligatorios faltan: nombre, teléfono, fecha, hora, método de pago.' });
+    }
+    if (!isValidSpanishPhone(telefonoNormalizado)) {
+      return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
     }
 
     const personasNum = Number(personas);
@@ -207,7 +220,7 @@ app.post('/api/pedidos', async (req, res) => {
     `;
 
     const params = [
-      nombre, telefono, email || null, cp || null, direccion || null, ciudad || null, provincia || null, (nif || '').toUpperCase() || null, facturaBool,
+      nombre, telefonoNormalizado, email || null, cp || null, direccion || null, ciudad || null, provincia || null, (nif || '').toUpperCase() || null, facturaBool,
       Number.isFinite(personasNum) ? personasNum : null,
       Number.isFinite(churrosPorNum) ? churrosPorNum : null,
       Number.isFinite(chocolatesNum) ? chocolatesNum : null,
@@ -570,7 +583,7 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Provincia y NIF son obligatorios si se solicita factura.' });
     }
 
-    // Recalcular presupuesto_total igual que POST
+    // Por defecto se recalcula automaticamente; opcionalmente se permite total manual.
     const personasNum = Number(merged.personas);
     const churrosPorNum = Number(merged.churros_por_persona);
     const chocolatesNum = Number(merged.chocolates);
@@ -579,11 +592,22 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     const priceChurros = churrosOk ? personasNum * churrosPorNum * 0.25 : 0;
     const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * 1.5 : 0;
     const priceEnvio = envioBool ? 25 : 0;
-    const presupuesto_total = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
-    if (presupuesto_total < 100) {
-      return res.status(400).json({ ok: false, error: 'El presupuesto mínimo es 100 €.' });
+    const presupuestoAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
+    const manualEnabled = !!body.presupuesto_total_manual;
+
+    if (manualEnabled) {
+      const manualRaw = body.presupuesto_total;
+      const manualNum = Number(String(manualRaw ?? '').replace(',', '.'));
+      if (!Number.isFinite(manualNum) || manualNum < 0) {
+        return res.status(400).json({ ok: false, error: 'Total manual inválido.' });
+      }
+      merged.presupuesto_total = Number(manualNum.toFixed(2));
+    } else {
+      if (presupuestoAuto < 100) {
+        return res.status(400).json({ ok: false, error: 'El presupuesto mínimo es 100 €.' });
+      }
+      merged.presupuesto_total = presupuestoAuto;
     }
-    merged.presupuesto_total = presupuesto_total;
 
     // Construir UPDATE con todos los campos permitidos
     const set = allowed.concat('presupuesto_total').map(k => `${k} = ?`).join(', ');
