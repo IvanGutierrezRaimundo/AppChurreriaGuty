@@ -33,6 +33,74 @@
     #pedido-form {
       margin: 0;
     }
+    .cliente-picker-modal {
+      width: min(760px, 96vw);
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .cliente-picker-table-wrap {
+      border: 1px solid #d8dfec;
+      border-radius: 10px;
+      overflow: auto;
+      max-height: min(56vh, 420px);
+      background: #fff;
+    }
+    .cliente-picker-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    .cliente-picker-table th,
+    .cliente-picker-table td {
+      padding: 9px 11px;
+      border-bottom: 1px solid #edf1f7;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .cliente-picker-table th {
+      position: sticky;
+      top: 0;
+      background: #f4f7fd;
+      z-index: 1;
+    }
+    .cliente-picker-row {
+      cursor: pointer;
+    }
+    .cliente-picker-row:hover {
+      background: #f8fbff;
+    }
+    .cliente-picker-row.is-selected {
+      background: #e6f0ff;
+    }
+    .cliente-picker-status {
+      margin: 0;
+      font-size: 0.92rem;
+      color: #2f3e54;
+    }
+    .cliente-picker-search {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #c8d3e2;
+      border-radius: 9px;
+      padding: 9px 10px;
+      font: inherit;
+      background: #fff;
+    }
+    .cliente-picker-search:focus {
+      outline: 2px solid #9bc0ff;
+      outline-offset: 1px;
+      border-color: #89b1f7;
+    }
+    .cliente-picker-status.error {
+      color: #b42318;
+    }
+    .cliente-picker-empty {
+      margin: 0;
+      padding: 14px;
+      color: #5f6f87;
+    }
     @media (max-width: 760px) {
       .crear-page {
         margin-top: 14px;
@@ -40,6 +108,10 @@
       .crear-head {
         flex-direction: column;
         align-items: flex-start;
+      }
+      .cliente-picker-table th,
+      .cliente-picker-table td {
+        padding: 8px;
       }
     }
   </style>
@@ -86,6 +158,22 @@
         digits = digits.slice(2);
       }
       return digits;
+    }
+
+    function toDateInputValue(value){
+      const raw = String(value || '').trim();
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+      if(!m) return '';
+      return `${m[3]}/${m[2]}/${m[1].slice(2)}`;
+    }
+
+    function parsePedidoDateTime(valueFecha, valueHora){
+      const fecha = String(valueFecha || '').trim();
+      const hora = String(valueHora || '').trim();
+      const iso = hora ? `${fecha}T${hora}` : `${fecha}T00:00:00`;
+      const dt = new Date(iso);
+      if(Number.isNaN(dt.getTime())) return null;
+      return dt;
     }
 
     function showConfirmModal(payload, totalPresupuesto, provisionalId){
@@ -502,10 +590,240 @@
       const comentariosCounter = document.getElementById('comentarios-counter');
       const selectClienteBtn = document.getElementById('selectClienteBtn');
       const volverPedidosBtn = document.getElementById('volverPedidosBtn');
+      const clientePickerModal = document.getElementById('cliente-picker-modal');
+      const clientePickerBody = document.getElementById('cliente-picker-body');
+      const clientePickerSearch = document.getElementById('cliente-picker-search');
+      const clientePickerStatus = document.getElementById('cliente-picker-status');
+      const clientePickerAccept = document.getElementById('cliente-picker-accept');
+      const clientePickerCancel = document.getElementById('cliente-picker-cancel');
+      const clientePickerClose = document.getElementById('cliente-picker-close');
       const MAX_COMENTARIOS = 200;
+      let pedidosCliente = [];
+      let pedidoSeleccionado = null;
 
-      selectClienteBtn?.addEventListener('click', () => {
-        alert('Próximamente: selector de clientes.');
+      function normalizeSearchText(value){
+        return String(value || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .trim();
+      }
+
+      function getFilteredPedidos(){
+        const term = normalizeSearchText(clientePickerSearch?.value || '');
+        if(!term) return [...pedidosCliente];
+        return pedidosCliente.filter((pedido) => {
+          const nombre = normalizeSearchText(pedido?.nombre || '');
+          const telefono = normalizePhone(pedido?.telefono || '');
+          const nif = normalizeSearchText(pedido?.nif || '');
+          return nombre.includes(term) || telefono.includes(term) || nif.includes(term);
+        });
+      }
+
+      function updateClientePickerStatus(filteredCount){
+        if(!clientePickerStatus) return;
+        if(filteredCount === 0){
+          clientePickerStatus.textContent = 'No hay coincidencias para la búsqueda actual.';
+          return;
+        }
+        const total = pedidosCliente.length;
+        if(filteredCount === total){
+          clientePickerStatus.textContent = `${total} cliente(s) cargado(s). Selecciona uno y pulsa Aceptar.`;
+          return;
+        }
+        clientePickerStatus.textContent = `${filteredCount} resultado(s) de ${total} cliente(s).`;
+      }
+
+      function renderClientePickerFiltered(){
+        const filtered = getFilteredPedidos();
+        renderClientePickerRows(filtered);
+        updateClientePickerStatus(filtered.length);
+      }
+
+      function closeClientePickerModal(){
+        clientePickerModal?.classList.add('hidden');
+        clientePickerModal?.setAttribute('aria-hidden', 'true');
+      }
+
+      function renderClientePickerRows(rows){
+        if(!clientePickerBody) return;
+        clientePickerBody.innerHTML = '';
+        pedidoSeleccionado = null;
+        if(clientePickerAccept) clientePickerAccept.disabled = true;
+
+        if(!rows.length){
+          const tr = document.createElement('tr');
+          const td = document.createElement('td');
+          td.colSpan = 3;
+          td.className = 'cliente-picker-empty';
+          td.textContent = 'No hay clientes disponibles.';
+          tr.appendChild(td);
+          clientePickerBody.appendChild(tr);
+          return;
+        }
+
+        rows.forEach((pedido) => {
+          const tr = document.createElement('tr');
+          tr.className = 'cliente-picker-row';
+
+          const tdNombre = document.createElement('td');
+          tdNombre.textContent = String(pedido.nombre || '').trim() || '—';
+          const tdTelefono = document.createElement('td');
+          tdTelefono.textContent = String(pedido.telefono || '').trim() || '—';
+          const tdNif = document.createElement('td');
+          tdNif.textContent = String(pedido.nif || '').trim() || '—';
+
+          tr.appendChild(tdNombre);
+          tr.appendChild(tdTelefono);
+          tr.appendChild(tdNif);
+
+          tr.addEventListener('click', () => {
+            clientePickerBody.querySelectorAll('.cliente-picker-row').forEach((row) => {
+              row.classList.remove('is-selected');
+            });
+            tr.classList.add('is-selected');
+            pedidoSeleccionado = pedido;
+            if(clientePickerAccept) clientePickerAccept.disabled = false;
+          });
+
+          clientePickerBody.appendChild(tr);
+        });
+      }
+
+      function pickPedidoMasRecienteCercano(actual, candidato){
+        if(!actual) return candidato;
+
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        const d1 = parsePedidoDateTime(actual.fecha, actual.hora);
+        const d2 = parsePedidoDateTime(candidato.fecha, candidato.hora);
+        const t1 = d1 ? d1.getTime() : 0;
+        const t2 = d2 ? d2.getTime() : 0;
+        const diff1 = Math.abs(t1 - hoy.getTime());
+        const diff2 = Math.abs(t2 - hoy.getTime());
+
+        if(diff2 < diff1) return candidato;
+        if(diff2 > diff1) return actual;
+        if(t2 > t1) return candidato;
+        if(t2 < t1) return actual;
+
+        return Number(candidato.id || 0) > Number(actual.id || 0) ? candidato : actual;
+      }
+
+      async function openClientePickerModal(){
+        if(!clientePickerModal || !clientePickerStatus){
+          return;
+        }
+        clientePickerModal.classList.remove('hidden');
+        clientePickerModal.setAttribute('aria-hidden', 'false');
+        clientePickerStatus.classList.remove('error');
+        if(clientePickerSearch) clientePickerSearch.value = '';
+        clientePickerStatus.textContent = 'Cargando clientes...';
+        renderClientePickerRows([]);
+
+        try {
+          const resp = await fetch('/admin/api/pedidos?page=1&pageSize=500&sort=fecha&dir=desc', {
+            credentials: 'same-origin'
+          });
+          const data = await resp.json().catch(() => ({}));
+          if(!resp.ok || data.ok === false){
+            throw new Error(data.error || 'No se pudieron cargar los pedidos.');
+          }
+
+          const pedidos = Array.isArray(data.data) ? data.data : [];
+          const porTelefono = new Map();
+          pedidos.forEach((pedido) => {
+            const tel = normalizePhone(pedido?.telefono || '');
+            if(!/^\d{9}$/.test(tel)) return;
+            const normalizado = { ...pedido, telefono: tel };
+            const actual = porTelefono.get(tel);
+            porTelefono.set(tel, pickPedidoMasRecienteCercano(actual, normalizado));
+          });
+
+          pedidosCliente = Array.from(porTelefono.values()).sort((a, b) => {
+            return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { sensitivity: 'base' });
+          });
+
+          renderClientePickerFiltered();
+          clientePickerSearch?.focus();
+        } catch (err) {
+          console.error('Error cargando clientes para selector:', err);
+          pedidosCliente = [];
+          renderClientePickerRows([]);
+          clientePickerStatus.textContent = `Error al cargar clientes: ${err?.message || 'desconocido'}`;
+          clientePickerStatus.classList.add('error');
+        }
+      }
+
+      function applyPedidoSeleccionado(pedido){
+        if(!pedido) return;
+
+        const setValue = (id, value) => {
+          const el = document.getElementById(id);
+          if(!el) return;
+          el.value = value ?? '';
+        };
+
+        setValue('nombre', pedido.nombre || '');
+        setValue('telefono', normalizePhone(pedido.telefono || ''));
+        setValue('nif', pedido.nif || '');
+        setValue('email', pedido.email || '');
+        setValue('cp', pedido.cp || '');
+        setValue('direccion', pedido.direccion || '');
+        setValue('ciudad', pedido.ciudad || '');
+        setValue('provincia', pedido.provincia || '');
+
+        setValue('personas', Number.isFinite(Number(pedido.personas)) ? Number(pedido.personas) : '');
+        setValue('churros_por_persona', Number.isFinite(Number(pedido.churros_por_persona)) ? Number(pedido.churros_por_persona) : '');
+        setValue('chocolates', Number.isFinite(Number(pedido.chocolates)) ? Number(pedido.chocolates) : '');
+        setValue('fecha_text', toDateInputValue(pedido.fecha));
+        setValue('hora', pedido.hora ? String(pedido.hora).slice(0, 5) : '');
+        setValue('direccion_entrega', pedido.direccion_entrega || '');
+        setValue('comentarios', pedido.comentarios || '');
+
+        const factura = document.getElementById('factura');
+        if(factura){
+          factura.checked = pedido.solicita_factura === true || pedido.solicita_factura === 1 || String(pedido.solicita_factura) === '1';
+        }
+
+        const envioValue = (pedido.requiere_envio === true || pedido.requiere_envio === 1 || String(pedido.requiere_envio) === '1') ? 'si' : 'no';
+        const envioRadio = document.querySelector(`input[name="envio"][value="${envioValue}"]`);
+        if(envioRadio) envioRadio.checked = true;
+
+        const pagoValue = String(pedido.metodo_pago || '').trim();
+        if(pagoValue){
+          const pagoRadio = document.querySelector(`input[name="pago"][value="${pagoValue}"]`);
+          if(pagoRadio) pagoRadio.checked = true;
+        }
+
+        const statusEl = document.getElementById('status');
+        if(statusEl){
+          statusEl.textContent = '';
+          statusEl.classList.add('hidden');
+        }
+
+        if(typeof updateFacturaRequirement === 'function') updateFacturaRequirement();
+        if(typeof updateNifError === 'function') updateNifError();
+        if(typeof updateEnvioUI === 'function') updateEnvioUI();
+        if(typeof updateChurrosRequirement === 'function') updateChurrosRequirement();
+        if(typeof updateBudget === 'function') updateBudget();
+        if(typeof updateComentariosCounter === 'function') updateComentariosCounter();
+      }
+
+      selectClienteBtn?.addEventListener('click', openClientePickerModal);
+      clientePickerCancel?.addEventListener('click', closeClientePickerModal);
+      clientePickerClose?.addEventListener('click', closeClientePickerModal);
+      clientePickerModal?.addEventListener('click', (e) => {
+        if(e.target === clientePickerModal) closeClientePickerModal();
+      });
+      clientePickerAccept?.addEventListener('click', () => {
+        if(!pedidoSeleccionado) return;
+        applyPedidoSeleccionado(pedidoSeleccionado);
+        closeClientePickerModal();
+      });
+      clientePickerSearch?.addEventListener('input', () => {
+        renderClientePickerFiltered();
       });
       volverPedidosBtn?.addEventListener('click', () => {
         location.href = '/admin/pedidos';
@@ -955,6 +1273,32 @@
 
     <div id="status" class="status hidden" aria-live="polite"></div>
   </form>
+  </div>
+
+  <div id="cliente-picker-modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal cliente-picker-modal" role="dialog" aria-modal="true" aria-labelledby="cliente-picker-title">
+      <button type="button" id="cliente-picker-close" class="confirm-close" aria-label="Cerrar">×</button>
+      <h2 id="cliente-picker-title">Seleccionar cliente</h2>
+      <p class="confirm-intro">Elige un cliente para rellenar el formulario con su pedido más reciente (sin teléfonos repetidos).</p>
+      <input type="search" id="cliente-picker-search" class="cliente-picker-search" placeholder="Buscar por nombre, teléfono o NIF" autocomplete="off" aria-label="Buscar cliente">
+      <p id="cliente-picker-status" class="cliente-picker-status" aria-live="polite">Cargando clientes...</p>
+      <div class="cliente-picker-table-wrap">
+        <table class="cliente-picker-table" aria-label="Clientes disponibles">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Teléfono</th>
+              <th>NIF</th>
+            </tr>
+          </thead>
+          <tbody id="cliente-picker-body"></tbody>
+        </table>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" id="cliente-picker-cancel" class="ghost">Cancelar</button>
+        <button type="button" id="cliente-picker-accept" disabled>Aceptar</button>
+      </div>
+    </div>
   </div>
 
   <div id="confirm-modal" class="confirm-modal-backdrop hidden" aria-hidden="true">

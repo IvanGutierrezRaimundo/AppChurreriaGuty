@@ -171,6 +171,7 @@
   <div class="admin-bar">
     <h1>Historial de Pedidos</h1>
     <div class="actions">
+      <button type="button" id="menuAdminBtn" title="Menú">Menú</button>
       <button type="button" id="pedidosBtn" title="Pedidos">Pedidos</button>
       <button type="button" id="createPedidoBtn" title="Crear Pedido">Crear Pedido</button>
       <button type="button" id="exportBtn" title="Exportar CSV">Exportar</button>
@@ -788,6 +789,13 @@
     if (pedidosBtn) {
       pedidosBtn.addEventListener('click', () => {
         location.href = '/admin/pedidos';
+      });
+    }
+
+    const menuAdminBtn = document.getElementById('menuAdminBtn');
+    if (menuAdminBtn) {
+      menuAdminBtn.addEventListener('click', () => {
+        location.href = '/admin';
       });
     }
 
