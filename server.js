@@ -251,6 +251,62 @@ app.post('/api/pedidos', async (req, res) => {
       envioBool, direccion_entrega || null, metodo_pago, comentarios || null, presupuestoFinal
     ];
 
+    if (!isAdminCreate) {
+      const nullIfEmpty = (v) => {
+        if (typeof v === 'undefined' || v === null) return null;
+        const s = String(v).trim();
+        return s === '' ? null : s;
+      };
+
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        const [dupes] = await conn.execute(
+          'SELECT id FROM clientes WHERE telefono = ? LIMIT 1',
+          [telefonoNormalizado]
+        );
+        if (Array.isArray(dupes) && dupes.length > 0) {
+          await conn.rollback();
+          return res.status(409).json({
+            ok: false,
+            error: 'Ya existe un cliente con ese teléfono. No se ha registrado el pedido para evitar duplicados.'
+          });
+        }
+
+        const [pedidoResult] = await conn.execute(sql, params);
+
+        await conn.execute(
+          `INSERT INTO clientes (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            nullIfEmpty(nif) ? String(nif).trim().toUpperCase() : null,
+            nullIfEmpty(nombre),
+            telefonoNormalizado,
+            nullIfEmpty(email),
+            nullIfEmpty(direccion),
+            nullIfEmpty(ciudad),
+            nullIfEmpty(provincia),
+            nullIfEmpty(cp)
+          ]
+        );
+
+        await conn.commit();
+        return res.status(201).json({ ok: true, id: pedidoResult.insertId, presupuesto_total: presupuestoFinal });
+      } catch (publicErr) {
+        await conn.rollback();
+        if (publicErr && publicErr.code === 'ER_DUP_ENTRY') {
+          return res.status(409).json({
+            ok: false,
+            error: 'Ya existe un cliente con ese teléfono. No se ha registrado el pedido para evitar duplicados.'
+          });
+        }
+        throw publicErr;
+      } finally {
+        conn.release();
+      }
+    }
+
     const [result] = await pool.execute(sql, params);
     return res.status(201).json({ ok: true, id: result.insertId, presupuesto_total: presupuestoFinal });
   } catch (err) {
