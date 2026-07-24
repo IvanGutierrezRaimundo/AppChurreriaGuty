@@ -205,7 +205,7 @@
         <div class="pedido-section pedido-section-green">
           <div class="pedido-grid">
             <div class="pedido-field"><p class="pedido-field-label">Cliente</p><input id="e_nombre" class="pedido-input" /></div>
-            <div class="pedido-field"><p class="pedido-field-label">Telefono</p><input id="e_telefono" class="pedido-input" /></div>
+            <div class="pedido-field"><p class="pedido-field-label">Telefono</p><input id="e_telefono" class="pedido-input" type="tel" inputmode="tel" maxlength="20" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Email</p><input id="e_email" class="pedido-input" type="email" /></div>
             <div class="pedido-field"><p class="pedido-field-label">NIF</p><input id="e_nif" class="pedido-input" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Direccion</p><input id="e_direccion" class="pedido-input" /></div>
@@ -218,7 +218,7 @@
         <div class="pedido-section pedido-section-blue">
           <div class="pedido-grid">
             <div class="pedido-field"><p class="pedido-field-label">Personas</p><input id="e_personas" class="pedido-input" type="number" min="0" /></div>
-            <div class="pedido-field"><p class="pedido-field-label">Churros por persona</p><input id="e_churros" class="pedido-input" type="number" min="2" max="12" /></div>
+            <div class="pedido-field"><p class="pedido-field-label">Churros por persona</p><input id="e_churros" class="pedido-input" type="number" min="1" max="100" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Chocolates</p><input id="e_chocolates" class="pedido-input" type="number" min="0" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Total automatico</p><p id="e_total_auto" class="pedido-field-value">-</p></div>
             <div class="pedido-field"><p class="pedido-field-label">Editar total manual</p><label class="pedido-toggle"><input id="e_total_manual_enabled" type="checkbox" /> Sobrescribir total</label></div>
@@ -412,13 +412,21 @@
       return Number.isFinite(n) ? n : null;
     }
 
+    function normalizePhone(value){
+      let digits = String(value || '').replace(/\D/g, '');
+      if(digits.length === 11 && digits.startsWith('34')){
+        digits = digits.slice(2);
+      }
+      return digits;
+    }
+
     function calculateAutoTotal(){
       const personas = toNumOrNull(document.getElementById('e_personas').value);
       const churrosPor = toNumOrNull(document.getElementById('e_churros').value);
       const chocolates = toNumOrNull(document.getElementById('e_chocolates').value);
       const envio = !!document.getElementById('e_requiere_envio').checked;
 
-      const churrosOk = Number.isFinite(personas) && personas > 0 && Number.isFinite(churrosPor) && churrosPor >= 4 && churrosPor <= 12;
+      const churrosOk = Number.isFinite(personas) && personas > 0 && Number.isFinite(churrosPor) && churrosPor >= 1 && churrosPor <= 100;
       const priceChurros = churrosOk ? personas * churrosPor * 0.25 : 0;
       const priceChoco = Number.isFinite(chocolates) && chocolates >= 0 ? chocolates * 1.5 : 0;
       const priceEnvio = envio ? 25 : 0;
@@ -460,6 +468,14 @@
 
     async function submitEdit(){
       if(!currentPedido) return;
+      const phoneInput = document.getElementById('e_telefono');
+      const telefonoNormalizado = normalizePhone(phoneInput?.value || '');
+      if(!/^\d{9}$/.test(telefonoNormalizado)){
+        editError.textContent = 'El telefono debe tener exactamente 9 digitos.';
+        phoneInput?.focus();
+        return;
+      }
+      if(phoneInput) phoneInput.value = telefonoNormalizado;
       const useManualTotal = !!document.getElementById('e_total_manual_enabled').checked;
       const manualTotal = toDecimalOrNull(document.getElementById('e_total_manual').value);
       if(useManualTotal && (manualTotal === null || manualTotal < 0)){

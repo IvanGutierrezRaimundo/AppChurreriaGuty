@@ -152,6 +152,13 @@
       return `${y}-${m}-${d}`;
     }
 
+    function toDecimalOrNull(value){
+      const raw = String(value ?? '').trim();
+      if(raw === '') return null;
+      const parsed = Number(raw.replace(',', '.'));
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
     function normalizePhone(value){
       let digits = String(value || '').replace(/\D/g, '');
       if(digits.length === 11 && digits.startsWith('34')){
@@ -314,6 +321,8 @@
       const elCo = document.getElementById('pres-chocolate');
       const elEn = document.getElementById('pres-envio');
       const elTo = document.getElementById('pres-total');
+      const totalManualToggle = document.getElementById('total_manual_enabled');
+      const totalManualInput = document.getElementById('total_manual');
       const emailInput = document.getElementById('email');
       const emailErr = document.getElementById('email-error');
 
@@ -331,6 +340,11 @@
       if(elCo) elCo.textContent = '0,00 €';
       if(elEn) elEn.textContent = '0,00 €';
       if(elTo) elTo.textContent = '0,00 €';
+      if(totalManualToggle) totalManualToggle.checked = false;
+      if(totalManualInput){
+        totalManualInput.value = '';
+        totalManualInput.disabled = true;
+      }
       if(emailInput) emailInput.setCustomValidity('');
       if(emailErr){ emailErr.textContent=''; emailErr.classList.add('hidden'); }
       if(typeof updateChurrosRequirement === 'function') updateChurrosRequirement();
@@ -403,6 +417,8 @@
       const honeypot = document.getElementById('hp').value;
       const facturaOn = document.getElementById('factura')?.checked || false;
       const metodoPago = document.querySelector('input[name="pago"]:checked')?.value || '';
+      const useManualTotal = !!document.getElementById('total_manual_enabled')?.checked;
+      const manualTotal = toDecimalOrNull(document.getElementById('total_manual')?.value || '');
       const MAX_DIRECCION = 100;
 
       // Reglas de obligatoriedad para Datos personales según factura
@@ -526,11 +542,11 @@
       const okPersonas = personas >= 0 && personas <= 1000;
       const personasVal = Number(personasRaw);
       const requireChurros = Number.isFinite(personasVal) && personasVal > 0;
-      const okChurros = !requireChurros ? true : (Number.isFinite(churrosPorPersona) && churrosPorPersona >= 4 && churrosPorPersona <= 12);
+      const okChurros = !requireChurros ? true : (Number.isFinite(churrosPorPersona) && churrosPorPersona >= 2 && churrosPorPersona <= 100);
       const okChocolates = chocolates >= 0 && chocolates <= 1000;
       if(!okPersonas){ personasEl?.reportValidity(); status.textContent = 'Número de personas debe ser entre 0 y 1000.'; return; }
       if(requireChurros && !okChurros){
-        const msg = 'Si indicas personas, rellena Número de churros por persona (entre 4 y 12).';
+        const msg = 'Si indicas personas, rellena Número de churros por persona (entre 2 y 100).';
         churrosEl?.setCustomValidity(msg);
         churrosEl?.reportValidity();
         status.textContent = msg;
@@ -539,18 +555,19 @@
       churrosEl?.setCustomValidity('');
       if(!okChocolates){ chocolatesEl?.reportValidity(); status.textContent = 'Chocolates debe ser entre 0 y 1000.'; return; }
 
-      // Validación de presupuesto mínimo
-      const totalPresupuesto = (Number.isFinite(personas) && Number.isFinite(churrosPorPersona) ? personas * churrosPorPersona * 0.25 : 0)
-        + (Number.isFinite(chocolates) ? chocolates * 1.5 : 0)
-        + (requiereEnvio ? 25 : 0);
-      if(totalPresupuesto < 100){
-        status.textContent = 'El presupuesto mínimo es 100 €. Ajusta cantidades o envío.';
-        const warn = document.getElementById('budget-warning');
-        const box = document.querySelector('.budget-lines');
-        warn?.classList.remove('hidden');
-        box?.classList.add('invalid');
+      if(useManualTotal && (manualTotal === null || manualTotal < 0)){
+        const msg = 'Introduce un total manual válido (0 o superior).';
+        status.textContent = msg;
+        document.getElementById('total_manual')?.setCustomValidity(msg);
+        document.getElementById('total_manual')?.reportValidity();
         return;
       }
+      document.getElementById('total_manual')?.setCustomValidity('');
+
+      const totalPresupuestoAuto = (Number.isFinite(personas) && Number.isFinite(churrosPorPersona) ? personas * churrosPorPersona * 0.25 : 0)
+        + (Number.isFinite(chocolates) ? chocolates * 1.5 : 0)
+        + (requiereEnvio ? 25 : 0);
+      const totalPresupuesto = useManualTotal ? Number(manualTotal.toFixed(2)) : totalPresupuestoAuto;
 
       const payload = {
         nombre,
@@ -570,7 +587,9 @@
         requiere_envio: requiereEnvio,
         direccion_entrega: direccionEntrega,
         metodo_pago: metodoPago,
-        comentarios
+        comentarios,
+        presupuesto_total_manual: useManualTotal,
+        presupuesto_total: useManualTotal ? Number(manualTotal.toFixed(2)) : null
       };
 
       showConfirmModal(payload, totalPresupuesto, 'Se asignará al confirmar');
@@ -797,6 +816,31 @@
           if(pagoRadio) pagoRadio.checked = true;
         }
 
+        const totalManualToggle = document.getElementById('total_manual_enabled');
+        const totalManualInput = document.getElementById('total_manual');
+        const personasVal = Number(pedido.personas);
+        const churrosPorVal = Number(pedido.churros_por_persona);
+        const chocolatesVal = Number(pedido.chocolates);
+        const envioSi = pedido.requiere_envio === true || pedido.requiere_envio === 1 || String(pedido.requiere_envio) === '1';
+        const churrosOk = Number.isFinite(personasVal) && personasVal > 0 && Number.isFinite(churrosPorVal) && churrosPorVal >= 2 && churrosPorVal <= 100;
+        const priceChurros = churrosOk ? personasVal * churrosPorVal * 0.25 : 0;
+        const priceChoco = Number.isFinite(chocolatesVal) && chocolatesVal >= 0 ? chocolatesVal * 1.5 : 0;
+        const priceEnvio = envioSi ? 25 : 0;
+        const totalAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
+        const totalHistorico = toDecimalOrNull(pedido.presupuesto_total);
+
+        // Si el histórico no coincide con el total automático, forzamos sobreescritura con el valor real guardado.
+        if(totalManualToggle && totalManualInput){
+          if(totalHistorico !== null && Math.abs(totalHistorico - totalAuto) > 0.009){
+            totalManualToggle.checked = true;
+            totalManualInput.value = totalHistorico.toFixed(2);
+          } else {
+            totalManualToggle.checked = false;
+            totalManualInput.value = '';
+          }
+          if(typeof updateManualTotalUI === 'function') updateManualTotalUI();
+        }
+
         const statusEl = document.getElementById('status');
         if(statusEl){
           statusEl.textContent = '';
@@ -972,7 +1016,7 @@
         check();
       }
       setRangeValidation(document.getElementById('personas'), 0, 1000, 'Introduce un número entre 0 y 1000');
-      setRangeValidation(document.getElementById('churros_por_persona'), 4, 12, 'Introduce un número entre 4 y 12');
+      setRangeValidation(document.getElementById('churros_por_persona'), 2, 100, 'Introduce un número entre 2 y 100');
       setRangeValidation(document.getElementById('chocolates'), 0, 1000, 'Introduce un número entre 0 y 1000');
 
       // Requerir churros si personas tiene valor
@@ -1002,17 +1046,30 @@
         const v = Number(raw);
         return Number.isFinite(v) ? v : NaN;
       }
+      function updateManualTotalUI(){
+        const toggle = document.getElementById('total_manual_enabled');
+        const input = document.getElementById('total_manual');
+        if(!toggle || !input) return;
+        input.disabled = !toggle.checked;
+        if(!toggle.checked){
+          input.value = '';
+          input.setCustomValidity('');
+        }
+      }
       function updateBudget(){
         const personasVal = safeNumber(document.getElementById('personas'));
         const churrosPorVal = safeNumber(document.getElementById('churros_por_persona'));
         const chocolatesVal = safeNumber(document.getElementById('chocolates'));
         const envioSi = document.querySelector('input[name="envio"]:checked')?.value === 'si';
 
-        const churrosOk = Number.isFinite(personasVal) && personasVal > 0 && Number.isFinite(churrosPorVal) && churrosPorVal >= 4 && churrosPorVal <= 12;
+        const churrosOk = Number.isFinite(personasVal) && personasVal > 0 && Number.isFinite(churrosPorVal) && churrosPorVal >= 2 && churrosPorVal <= 100;
         const priceChurros = churrosOk ? personasVal * churrosPorVal * 0.25 : 0;
         const priceChoco = Number.isFinite(chocolatesVal) && chocolatesVal >= 0 ? chocolatesVal * 1.5 : 0;
         const priceEnvio = envioSi ? 25 : 0;
-        const total = priceChurros + priceChoco + priceEnvio;
+        const totalAuto = priceChurros + priceChoco + priceEnvio;
+        const useManual = !!document.getElementById('total_manual_enabled')?.checked;
+        const manualVal = toDecimalOrNull(document.getElementById('total_manual')?.value || '');
+        const total = useManual && manualVal !== null && manualVal >= 0 ? manualVal : totalAuto;
 
         const elCh = document.getElementById('pres-churros');
         const elCo = document.getElementById('pres-chocolate');
@@ -1022,13 +1079,6 @@
         if(elCo) elCo.textContent = nf.format(priceChoco);
         if(elEn) elEn.textContent = nf.format(priceEnvio);
         if(elTo) elTo.textContent = nf.format(total);
-
-        const warn = document.getElementById('budget-warning');
-        const box = document.querySelector('.budget-lines');
-        const hasInputs = (Number.isFinite(personasVal) && personasVal > 0) || (Number.isFinite(chocolatesVal) && chocolatesVal > 0) || envioSi;
-        const showWarn = hasInputs && total < 100;
-        warn?.classList.toggle('hidden', !showWarn);
-        box?.classList.toggle('invalid', showWarn);
       }
       ['personas','churros_por_persona','chocolates','fecha_text','hora'].forEach(id => {
         const el = document.getElementById(id);
@@ -1036,6 +1086,13 @@
         el?.addEventListener('change', updateBudget);
       });
       document.querySelectorAll('input[name="envio"]').forEach(r => r.addEventListener('change', updateBudget));
+      document.getElementById('total_manual_enabled')?.addEventListener('change', () => {
+        updateManualTotalUI();
+        updateBudget();
+      });
+      document.getElementById('total_manual')?.addEventListener('input', updateBudget);
+      document.getElementById('total_manual')?.addEventListener('change', updateBudget);
+      updateManualTotalUI();
       updateBudget();
 
       // Botón Reiniciar: limpia el formulario y restaura estado de UI
@@ -1145,7 +1202,7 @@
             </div>
             <div class="field">
               <label for="churros_por_persona">Número de churros por persona</label>
-              <input id="churros_por_persona" name="churros_por_persona" type="number" min="4" max="12" placeholder="Introduce un número entre 4 y 12" autocomplete="off" disabled>
+              <input id="churros_por_persona" name="churros_por_persona" type="number" min="2" max="100" placeholder="Introduce un número entre 2 y 100" autocomplete="off" disabled>
               
             </div>
           </div>
@@ -1235,7 +1292,14 @@
             <div class="budget-sep"></div>
             <div class="budget-row total"><span>Total (IVA inc.)</span><span id="pres-total">0,00 €</span></div>
           </div>
-          <div id="budget-warning" class="warning hidden" aria-live="polite">El presupuesto mínimo es 100 € para aceptar el pedido. Añade más cantidad o selecciona envío si procede.</div>
+          <div class="field" style="margin-top:10px;">
+            <label><input type="checkbox" id="total_manual_enabled"> Sobrescribir total</label>
+          </div>
+          <div class="field">
+            <label for="total_manual">Total manual (€)</label>
+            <input id="total_manual" type="number" min="0" step="0.01" placeholder="Ej: 85,50" disabled>
+          </div>
+          <div id="budget-warning" class="warning hidden" aria-live="polite"></div>
           <div class="hint">Los precios incluyen IVA.</div>
         </div>
       </div>

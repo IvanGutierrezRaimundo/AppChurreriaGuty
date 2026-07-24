@@ -172,7 +172,9 @@ app.post('/api/pedidos', async (req, res) => {
       requiere_envio,
       direccion_entrega,
       metodo_pago,
-      comentarios
+      comentarios,
+      presupuesto_total_manual,
+      presupuesto_total
     } = req.body || {};
 
     const telefonoNormalizado = normalizeSpanishPhone(telefono);
@@ -192,13 +194,27 @@ app.post('/api/pedidos', async (req, res) => {
     const MAX_DIRECCION = 100;
     const MAX_COMENTARIOS = 200;
 
-    const churrosOk = Number.isFinite(personasNum) && personasNum > 0 && Number.isFinite(churrosPorNum) && churrosPorNum >= 2 && churrosPorNum <= 12;
+    const isAdminCreate = !!(req.session && req.session.admin);
+    const minChurros = isAdminCreate ? 2 : 4;
+    const maxChurros = isAdminCreate ? 100 : 12;
+    const churrosOk = Number.isFinite(personasNum) && personasNum > 0 && Number.isFinite(churrosPorNum) && churrosPorNum >= minChurros && churrosPorNum <= maxChurros;
+    if (Number.isFinite(personasNum) && personasNum > 0 && !churrosOk) {
+      return res.status(400).json({ ok: false, error: `Si indicas personas, churros por persona debe estar entre ${minChurros} y ${maxChurros}.` });
+    }
     const priceChurros = churrosOk ? personasNum * churrosPorNum * 0.25 : 0;
     const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * 1.5 : 0;
     const priceEnvio = envioBool ? 25 : 0;
-    const presupuesto_total = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
+    const presupuestoAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
+    const manualEnabled = isAdminCreate && !!presupuesto_total_manual;
+    let presupuestoFinal = presupuestoAuto;
 
-    if (presupuesto_total < 100) {
+    if (manualEnabled) {
+      const manualNum = Number(String(presupuesto_total ?? '').replace(',', '.'));
+      if (!Number.isFinite(manualNum) || manualNum < 0) {
+        return res.status(400).json({ ok: false, error: 'Total manual inválido.' });
+      }
+      presupuestoFinal = Number(manualNum.toFixed(2));
+    } else if (!isAdminCreate && presupuestoAuto < 100) {
       return res.status(400).json({ ok: false, error: 'El presupuesto mínimo es 100 €.' });
     }
 
@@ -232,11 +248,11 @@ app.post('/api/pedidos', async (req, res) => {
       Number.isFinite(churrosPorNum) ? churrosPorNum : null,
       Number.isFinite(chocolatesNum) ? chocolatesNum : null,
       fecha, hora,
-      envioBool, direccion_entrega || null, metodo_pago, comentarios || null, presupuesto_total
+      envioBool, direccion_entrega || null, metodo_pago, comentarios || null, presupuestoFinal
     ];
 
     const [result] = await pool.execute(sql, params);
-    return res.status(201).json({ ok: true, id: result.insertId, presupuesto_total });
+    return res.status(201).json({ ok: true, id: result.insertId, presupuesto_total: presupuestoFinal });
   } catch (err) {
     console.error('Error al insertar pedido:', err);
     return res.status(500).json({ ok: false, error: 'Error interno.' });
@@ -580,11 +596,14 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     merged.comentarios = nullIfEmpty(merged.comentarios);
     merged.metodo_pago = (merged.metodo_pago || current.metodo_pago);
     merged.nombre = (merged.nombre || current.nombre);
-    merged.telefono = (merged.telefono || current.telefono);
+    merged.telefono = normalizeSpanishPhone(merged.telefono || current.telefono);
 
     // Validaciones igual que el formulario
     if (!merged.nombre || !merged.telefono || !merged.fecha || !merged.hora || !merged.metodo_pago) {
       return res.status(400).json({ ok: false, error: 'Campos obligatorios faltan: nombre, teléfono, fecha, hora, método de pago.' });
+    }
+    if (!isValidSpanishPhone(merged.telefono)) {
+      return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
     }
     if (merged.solicita_factura === 1 && (!merged.provincia || !merged.nif)) {
       return res.status(400).json({ ok: false, error: 'Provincia y NIF son obligatorios si se solicita factura.' });
@@ -595,7 +614,7 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     const churrosPorNum = Number(merged.churros_por_persona);
     const chocolatesNum = Number(merged.chocolates);
     const envioBool = !!merged.requiere_envio;
-    const churrosOk = Number.isFinite(personasNum) && personasNum > 0 && Number.isFinite(churrosPorNum) && churrosPorNum >= 4 && churrosPorNum <= 12;
+    const churrosOk = Number.isFinite(personasNum) && personasNum > 0 && Number.isFinite(churrosPorNum) && churrosPorNum >= 1 && churrosPorNum <= 100;
     const priceChurros = churrosOk ? personasNum * churrosPorNum * 0.25 : 0;
     const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * 1.5 : 0;
     const priceEnvio = envioBool ? 25 : 0;
@@ -610,9 +629,6 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
       }
       merged.presupuesto_total = Number(manualNum.toFixed(2));
     } else {
-      if (presupuestoAuto < 100) {
-        return res.status(400).json({ ok: false, error: 'El presupuesto mínimo es 100 €.' });
-      }
       merged.presupuesto_total = presupuestoAuto;
     }
 
@@ -732,6 +748,20 @@ async function ensureSchema() {
   try {
     await pool.execute(ddlPedidos);
     await pool.execute(ddlClientes);
+    // Compatibilidad: en algunas BBDD antiguas existe un CHECK que fuerza presupuesto >= 100.
+    // Se elimina para permitir importes inferiores en edición de pedidos desde admin.
+    const [checkRows] = await pool.execute(
+      `SELECT CONSTRAINT_NAME
+       FROM information_schema.TABLE_CONSTRAINTS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'pedidos'
+         AND CONSTRAINT_TYPE = 'CHECK'
+         AND CONSTRAINT_NAME = 'chk_presupuesto_min'
+       LIMIT 1`
+    );
+    if (Array.isArray(checkRows) && checkRows.length > 0) {
+      await pool.execute('ALTER TABLE pedidos DROP CHECK chk_presupuesto_min');
+    }
   } catch (err) {
     console.error('Error al asegurar esquema:', err);
     throw err;
