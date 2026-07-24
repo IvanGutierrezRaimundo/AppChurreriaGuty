@@ -251,64 +251,49 @@ app.post('/api/pedidos', async (req, res) => {
       envioBool, direccion_entrega || null, metodo_pago, comentarios || null, presupuestoFinal
     ];
 
-    if (!isAdminCreate) {
-      const nullIfEmpty = (v) => {
-        if (typeof v === 'undefined' || v === null) return null;
-        const s = String(v).trim();
-        return s === '' ? null : s;
-      };
+    const nullIfEmpty = (v) => {
+      if (typeof v === 'undefined' || v === null) return null;
+      const s = String(v).trim();
+      return s === '' ? null : s;
+    };
 
-      const conn = await pool.getConnection();
-      try {
-        await conn.beginTransaction();
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-        const [dupes] = await conn.execute(
-          'SELECT id FROM clientes WHERE telefono = ? LIMIT 1',
-          [telefonoNormalizado]
-        );
-        if (Array.isArray(dupes) && dupes.length > 0) {
-          await conn.rollback();
-          return res.status(409).json({
-            ok: false,
-            error: 'Ya existe un cliente con ese teléfono. No se ha registrado el pedido para evitar duplicados.'
-          });
-        }
+      const [pedidoResult] = await conn.execute(sql, params);
 
-        const [pedidoResult] = await conn.execute(sql, params);
+      await conn.execute(
+        `INSERT INTO clientes (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           nif = VALUES(nif),
+           nombre = VALUES(nombre),
+           email = VALUES(email),
+           direccion = VALUES(direccion),
+           ciudad = VALUES(ciudad),
+           provincia = VALUES(provincia),
+           cp = VALUES(cp)`,
+        [
+          nullIfEmpty(nif) ? String(nif).trim().toUpperCase() : null,
+          nullIfEmpty(nombre),
+          telefonoNormalizado,
+          nullIfEmpty(email),
+          nullIfEmpty(direccion),
+          nullIfEmpty(ciudad),
+          nullIfEmpty(provincia),
+          nullIfEmpty(cp)
+        ]
+      );
 
-        await conn.execute(
-          `INSERT INTO clientes (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            nullIfEmpty(nif) ? String(nif).trim().toUpperCase() : null,
-            nullIfEmpty(nombre),
-            telefonoNormalizado,
-            nullIfEmpty(email),
-            nullIfEmpty(direccion),
-            nullIfEmpty(ciudad),
-            nullIfEmpty(provincia),
-            nullIfEmpty(cp)
-          ]
-        );
-
-        await conn.commit();
-        return res.status(201).json({ ok: true, id: pedidoResult.insertId, presupuesto_total: presupuestoFinal });
-      } catch (publicErr) {
-        await conn.rollback();
-        if (publicErr && publicErr.code === 'ER_DUP_ENTRY') {
-          return res.status(409).json({
-            ok: false,
-            error: 'Ya existe un cliente con ese teléfono. No se ha registrado el pedido para evitar duplicados.'
-          });
-        }
-        throw publicErr;
-      } finally {
-        conn.release();
-      }
+      await conn.commit();
+      return res.status(201).json({ ok: true, id: pedidoResult.insertId, presupuesto_total: presupuestoFinal });
+    } catch (publicErr) {
+      await conn.rollback();
+      throw publicErr;
+    } finally {
+      conn.release();
     }
-
-    const [result] = await pool.execute(sql, params);
-    return res.status(201).json({ ok: true, id: result.insertId, presupuesto_total: presupuestoFinal });
   } catch (err) {
     console.error('Error al insertar pedido:', err);
     return res.status(500).json({ ok: false, error: 'Error interno.' });
@@ -716,11 +701,48 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     const params = allowed.concat('presupuesto_total').map(k => merged[k]);
     params.push(id);
     const sql = `UPDATE pedidos SET ${set} WHERE id = ?`;
-    const [result] = await pool.execute(sql, params);
-    // Devolver el registro actualizado
-    const [rows2] = await pool.execute('SELECT * FROM pedidos WHERE id = ? LIMIT 1', [id]);
-    const row = rows2 && rows2[0] ? rows2[0] : null;
-    res.json({ ok: true, affectedRows: result.affectedRows, data: row });
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [result] = await conn.execute(sql, params);
+
+      await conn.execute(
+        `INSERT INTO clientes (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           nif = VALUES(nif),
+           nombre = VALUES(nombre),
+           email = VALUES(email),
+           direccion = VALUES(direccion),
+           ciudad = VALUES(ciudad),
+           provincia = VALUES(provincia),
+           cp = VALUES(cp)`,
+        [
+          merged.nif ? String(merged.nif).trim().toUpperCase() : null,
+          merged.nombre ? String(merged.nombre).trim() : null,
+          merged.telefono ? String(merged.telefono).trim() : null,
+          merged.email ? String(merged.email).trim() : null,
+          merged.direccion ? String(merged.direccion).trim() : null,
+          merged.ciudad ? String(merged.ciudad).trim() : null,
+          merged.provincia ? String(merged.provincia).trim() : null,
+          merged.cp ? String(merged.cp).trim() : null
+        ]
+      );
+
+      await conn.commit();
+
+      // Devolver el registro actualizado
+      const [rows2] = await conn.execute('SELECT * FROM pedidos WHERE id = ? LIMIT 1', [id]);
+      const row = rows2 && rows2[0] ? rows2[0] : null;
+      res.json({ ok: true, affectedRows: result.affectedRows, data: row });
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    } finally {
+      conn.release();
+    }
   } catch (err) {
     console.error('Error actualizando pedido:', err);
     res.status(500).json({ ok: false, error: 'Error interno' });
