@@ -176,7 +176,6 @@
       <button type="button" id="createPedidoBtn" title="Crear Pedido">Crear Pedido</button>
       <button type="button" id="exportBtn" title="Exportar CSV">Exportar</button>
       <button type="button" id="printPdfBtn" title="Imprimir PDF">Imprimir PDF</button>
-      <button type="button" id="logoutBtn" title="Salir">Salir</button>
     </div>
   </div>
 
@@ -805,11 +804,6 @@
         location.href = '/admin/crear-pedido';
       });
     }
-
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await fetch('/admin/logout', { method: 'POST' });
-      location.href = '/admin';
-    });
   </script>
 </body>
 </html>

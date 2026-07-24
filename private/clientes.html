@@ -15,6 +15,64 @@
     th[data-dir="asc"] .arrow-up{ color: var(--color-brown); }
     th[data-dir="desc"] .arrow-down{ color: var(--color-brown); }
     .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
+    .view-switch{ display: flex; justify-content: flex-start; gap: 8px; margin: 0 0 10px; }
+    .view-toggle{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 96px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--color-border);
+      background: var(--color-primary);
+      color: var(--color-brown);
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease;
+    }
+    .view-toggle:hover{ border-color: var(--color-brown); }
+    .view-toggle.is-active{
+      background: #E5E7EB;
+      border-color: #D1D5DB;
+      color: #374151;
+    }
+    .cards-grid{
+      display: none;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .cards-grid.is-visible{ display: grid; }
+    .cliente-card{
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      background: #FFF;
+      padding: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .cliente-card-head{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .cliente-card-id{ font-weight: 800; color: var(--color-brown); }
+    .cliente-card-grid{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .cliente-card-row{
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+    }
+    .cliente-card-label{ color: var(--color-muted); font-size: 0.9rem; }
+    .cliente-card-value{ font-weight: 700; text-align: right; }
     .cliente-modal-backdrop{
       position: fixed;
       inset: 0;
@@ -73,17 +131,19 @@
     @media (max-width: 680px){
       .cliente-modal-grid{ grid-template-columns: 1fr; }
     }
+    @media (max-width: 560px){
+      .cards-grid{ grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <div class="admin-bar">
-    <h1>Administración de Clientes</h1>
+    <h1>Clientes</h1>
     <div class="actions">
       <button type="button" id="menuBtn" title="Menu">Menu</button>
       <button type="button" id="createClienteBtn" title="Crear Cliente">Crear Cliente</button>
       <button type="button" id="exportBtn" title="Exportar CSV">Exportar</button>
       <button type="button" id="printPdfBtn" title="Imprimir PDF">Imprimir PDF</button>
-      <button type="button" id="logoutBtn" title="Salir">Salir</button>
     </div>
   </div>
 
@@ -108,6 +168,10 @@
     </section>
 
     <div class="admin-table-wrap">
+      <div class="view-switch" aria-label="Cambiar vista de clientes">
+        <button type="button" id="viewTablaBtn" class="view-toggle is-active" aria-current="page">Tabla</button>
+        <button type="button" id="viewFichasBtn" class="view-toggle">Fichas</button>
+      </div>
       <table id="clientesTable">
         <thead>
           <tr>
@@ -123,6 +187,7 @@
         </thead>
         <tbody id="tbody"></tbody>
       </table>
+      <div id="cardsGrid" class="cards-grid"></div>
     </div>
   </div>
 
@@ -178,6 +243,10 @@
   <script>
     const tbody = document.getElementById('tbody');
     const pageSizeSel = document.getElementById('pageSize');
+    const clientesTable = document.getElementById('clientesTable');
+    const cardsGrid = document.getElementById('cardsGrid');
+    const viewTablaBtn = document.getElementById('viewTablaBtn');
+    const viewFichasBtn = document.getElementById('viewFichasBtn');
     const clienteModalBackdrop = document.getElementById('clienteModalBackdrop');
     const clienteModalClose = document.getElementById('clienteModalClose');
     const clienteModalEdit = document.getElementById('clienteModalEdit');
@@ -189,6 +258,7 @@
     let currentRows = [];
     let activeDetailClientId = null;
     let editMode = 'edit';
+    let currentView = 'tabla';
     let currentSort = 'fecha_registro';
     let currentDir = 'desc';
 
@@ -206,6 +276,44 @@
       const dt = new Date(value);
       if(isNaN(dt)) return String(value);
       return dt.toLocaleString('es-ES');
+    }
+
+    function updateViewButtons(){
+      const isTabla = currentView === 'tabla';
+      const isFichas = currentView === 'fichas';
+      viewTablaBtn.classList.toggle('is-active', isTabla);
+      viewFichasBtn.classList.toggle('is-active', isFichas);
+      if(isTabla) viewTablaBtn.setAttribute('aria-current', 'page');
+      else viewTablaBtn.removeAttribute('aria-current');
+      if(isFichas) viewFichasBtn.setAttribute('aria-current', 'page');
+      else viewFichasBtn.removeAttribute('aria-current');
+    }
+
+    function applyCurrentView(){
+      const showTabla = currentView === 'tabla';
+      const showFichas = currentView === 'fichas';
+      clientesTable.style.display = showTabla ? 'table' : 'none';
+      cardsGrid.classList.toggle('is-visible', showFichas);
+      updateViewButtons();
+    }
+
+    function renderCard(r){
+      return `
+        <article class="cliente-card">
+          <div class="cliente-card-head">
+            <span class="cliente-card-id">#${escapeHtml(r.id)}</span>
+          </div>
+          <div class="cliente-card-grid">
+            <div class="cliente-card-row"><span class="cliente-card-label">Nombre</span><span class="cliente-card-value">${escapeHtml(r.nombre)}</span></div>
+            <div class="cliente-card-row"><span class="cliente-card-label">Telefono</span><span class="cliente-card-value">${escapeHtml(r.telefono)}</span></div>
+            <div class="cliente-card-row"><span class="cliente-card-label">NIF</span><span class="cliente-card-value">${escapeHtml(r.nif)}</span></div>
+          </div>
+          <span class="btn-row">
+            <button data-id="${escapeHtml(r.id)}" class="open">Abrir</button>
+            <button data-id="${escapeHtml(r.id)}" class="del">Eliminar</button>
+          </span>
+        </article>
+      `;
     }
 
     function updateSortIndicators(){
@@ -445,6 +553,7 @@
       }
 
       tbody.innerHTML = '';
+  cardsGrid.innerHTML = '';
       const rows = Array.isArray(data.data) ? data.data : [];
       currentRows = rows;
       for (const r of rows){
@@ -465,10 +574,12 @@
           </td>
         `;
         tbody.appendChild(tr);
+        cardsGrid.insertAdjacentHTML('beforeend', renderCard(r));
       }
 
       bindActions();
       updateSortIndicators();
+      applyCurrentView();
     }
 
     const thead = document.querySelector('table thead');
@@ -503,9 +614,13 @@
       alert('Imprimir PDF de clientes aun no disponible.');
     });
 
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await fetch('/admin/logout', { method: 'POST' });
-      location.href = '/admin';
+    viewTablaBtn.addEventListener('click', () => {
+      currentView = 'tabla';
+      applyCurrentView();
+    });
+    viewFichasBtn.addEventListener('click', () => {
+      currentView = 'fichas';
+      applyCurrentView();
     });
 
     clienteModalClose.addEventListener('click', closeClienteModal);
