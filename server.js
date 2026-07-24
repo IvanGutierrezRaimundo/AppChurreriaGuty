@@ -831,6 +831,7 @@ async function start() {
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASS || '',
       database: process.env.DB_NAME || 'app_pedidos_guty',
+      dateStrings: true,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0
