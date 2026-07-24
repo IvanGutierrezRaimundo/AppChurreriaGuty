@@ -831,7 +831,8 @@
         setValue('personas', Number.isFinite(Number(pedido.personas)) ? Number(pedido.personas) : '');
         setValue('churros_por_persona', Number.isFinite(Number(pedido.churros_por_persona)) ? Number(pedido.churros_por_persona) : '');
         setValue('chocolates', Number.isFinite(Number(pedido.chocolates)) ? Number(pedido.chocolates) : '');
-        setValue('fecha_text', toDateInputValue(pedido.fecha));
+        setValue('fecha_text', '');
+        setValue('fecha_picker', '');
         setValue('hora', pedido.hora ? String(pedido.hora).slice(0, 5) : '');
         setValue('direccion_entrega', pedido.direccion_entrega || '');
         setValue('comentarios', pedido.comentarios || '');
