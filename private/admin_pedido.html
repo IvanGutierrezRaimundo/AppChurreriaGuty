@@ -229,7 +229,14 @@
           <div class="pedido-grid">
             <div class="pedido-field"><p class="pedido-field-label">Requiere envio</p><label class="pedido-toggle"><input id="e_requiere_envio" type="checkbox" /> Envio</label></div>
             <div class="pedido-field"><p class="pedido-field-label">Direccion entrega</p><input id="e_direccion_entrega" class="pedido-input" /></div>
-            <div class="pedido-field"><p class="pedido-field-label">Metodo pago</p><input id="e_metodo_pago" class="pedido-input" /></div>
+            <div class="pedido-field">
+              <p class="pedido-field-label">Metodo pago</p>
+              <select id="e_metodo_pago" class="pedido-select">
+                <option value="transferencia">Transferencia bancaria</option>
+                <option value="local">Pago en el local</option>
+                <option value="entrega">Pago en la entrega</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="pedido-section pedido-section-brown">
@@ -423,8 +430,11 @@
       document.getElementById('e_hora').value = formatTime(p.hora);
       document.getElementById('e_requiere_envio').checked = !!p.requiere_envio;
       document.getElementById('e_direccion_entrega').value = p.direccion_entrega || '';
-      document.getElementById('e_metodo_pago').value = p.metodo_pago || '';
+      const metodoPagoRaw = String(p.metodo_pago || '').trim().toLowerCase();
+      const metodoPago = ['transferencia', 'local', 'entrega'].includes(metodoPagoRaw) ? metodoPagoRaw : 'transferencia';
+      document.getElementById('e_metodo_pago').value = metodoPago;
       document.getElementById('e_comentarios').value = p.comentarios || '';
+      updateEditEnvioFields();
       hydrateEditTotalFields();
       editError.textContent = '';
       detailBackdrop.classList.remove('is-open');
@@ -488,6 +498,15 @@
       }
     }
 
+    function updateEditEnvioFields(){
+      const envioChecked = !!document.getElementById('e_requiere_envio').checked;
+      const direccionEntregaInput = document.getElementById('e_direccion_entrega');
+      if(!direccionEntregaInput) return;
+      if(!envioChecked){
+        direccionEntregaInput.value = '';
+      }
+    }
+
     function hydrateEditTotalFields(){
       const autoTotal = calculateAutoTotal();
       const currentTotal = Number(currentPedido?.presupuesto_total);
@@ -542,8 +561,10 @@
         fecha: document.getElementById('e_fecha').value.trim(),
         hora: document.getElementById('e_hora').value.trim(),
         requiere_envio: !!document.getElementById('e_requiere_envio').checked,
-        direccion_entrega: document.getElementById('e_direccion_entrega').value.trim(),
-        metodo_pago: document.getElementById('e_metodo_pago').value.trim(),
+        direccion_entrega: !!document.getElementById('e_requiere_envio').checked
+          ? document.getElementById('e_direccion_entrega').value.trim()
+          : '',
+        metodo_pago: document.getElementById('e_metodo_pago').value,
         comentarios: document.getElementById('e_comentarios').value,
         presupuesto_total_manual: useManualTotal,
         presupuesto_total: useManualTotal ? Number(manualTotal.toFixed(2)) : null
@@ -706,7 +727,10 @@
       el.addEventListener('input', updateEditTotalFields);
       el.addEventListener('change', updateEditTotalFields);
     });
-    document.getElementById('e_requiere_envio').addEventListener('change', updateEditTotalFields);
+    document.getElementById('e_requiere_envio').addEventListener('change', () => {
+      updateEditEnvioFields();
+      updateEditTotalFields();
+    });
     document.getElementById('e_total_manual_enabled').addEventListener('change', updateEditTotalFields);
     document.getElementById('fallbackBackBtn').addEventListener('click', () => { location.href = '/admin/pedidos'; });
 
