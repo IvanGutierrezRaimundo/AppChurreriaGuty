@@ -497,6 +497,29 @@ app.put('/admin/api/clientes/:id', ensureAdmin, async (req, res) => {
   }
 });
 
+app.delete('/admin/api/clientes/:id', ensureAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ ok: false, error: 'ID invalido' });
+    }
+
+    const [rows] = await pool.execute('SELECT id FROM clientes WHERE id = ? LIMIT 1', [id]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Cliente no encontrado' });
+    }
+
+    const [result] = await pool.execute('DELETE FROM clientes WHERE id = ?', [id]);
+    return res.json({ ok: true, affectedRows: result.affectedRows });
+  } catch (err) {
+    if (err && (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED')) {
+      return res.status(400).json({ ok: false, error: 'No se puede eliminar el cliente porque tiene datos relacionados.' });
+    }
+    console.error('Error eliminando cliente:', err);
+    return res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
 // Obtener detalle de un pedido
 app.get('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
   try {

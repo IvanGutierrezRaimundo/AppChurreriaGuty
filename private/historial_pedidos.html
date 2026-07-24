@@ -256,6 +256,19 @@
     </div>
   </div>
 
+  <div id="actionConfirmModal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="actionConfirmTitle">
+      <div class="confirm-head">
+        <h2 id="actionConfirmTitle" class="confirm-title">Confirmación</h2>
+      </div>
+      <p id="actionConfirmText" class="confirm-status"></p>
+      <div class="confirm-actions">
+        <button type="button" id="actionConfirmCancel" class="ghost">Cancelar</button>
+        <button type="button" id="actionConfirmAccept">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.min.js"></script>
@@ -275,7 +288,14 @@
     const estadoModalError = document.getElementById('estadoModalError');
     const estadoModalCancel = document.getElementById('estadoModalCancel');
     const estadoModalSave = document.getElementById('estadoModalSave');
+    const actionConfirmModal = document.getElementById('actionConfirmModal');
+    const actionConfirmTitle = document.getElementById('actionConfirmTitle');
+    const actionConfirmText = document.getElementById('actionConfirmText');
+    const actionConfirmCancel = document.getElementById('actionConfirmCancel');
+    const actionConfirmAccept = document.getElementById('actionConfirmAccept');
     let editingEstadoId = null;
+    let actionConfirmResolver = null;
+    let actionConfirmMode = 'confirm';
     let currentView = 'tabla';
     let calendar = null;
     let currentRows = [];
@@ -511,6 +531,50 @@
       estadoModalSave.disabled = false;
       estadoModalCancel.disabled = false;
     }
+    function closeActionConfirmModal(accepted){
+      actionConfirmModal.classList.add('hidden');
+      actionConfirmModal.setAttribute('aria-hidden', 'true');
+      if(actionConfirmResolver){
+        const resolve = actionConfirmResolver;
+        actionConfirmResolver = null;
+        resolve(actionConfirmMode === 'alert' ? true : accepted);
+      }
+      actionConfirmCancel.classList.remove('hidden');
+      actionConfirmMode = 'confirm';
+      actionConfirmText.classList.remove('error');
+    }
+    function setActionMessageType(type){
+      actionConfirmText.classList.toggle('error', type === 'error');
+    }
+    function askActionConfirm({ title, message, acceptText }){
+      actionConfirmMode = 'confirm';
+      actionConfirmTitle.textContent = title || 'Confirmación';
+      actionConfirmText.textContent = message || 'Confirma esta accion para continuar.';
+      setActionMessageType('info');
+      actionConfirmAccept.textContent = acceptText || 'Aceptar';
+      actionConfirmCancel.classList.remove('hidden');
+      actionConfirmModal.classList.remove('hidden');
+      actionConfirmModal.setAttribute('aria-hidden', 'false');
+      actionConfirmAccept.focus();
+      return new Promise((resolve) => {
+        actionConfirmResolver = resolve;
+      });
+    }
+    function showActionAlert({ title, message, acceptText, type }){
+      actionConfirmMode = 'alert';
+      const resolvedType = type || ((title || '').toLowerCase() === 'error' ? 'error' : 'info');
+      actionConfirmTitle.textContent = title || (resolvedType === 'error' ? 'Error' : 'Aviso');
+      actionConfirmText.textContent = message || '';
+      setActionMessageType(resolvedType);
+      actionConfirmAccept.textContent = acceptText || 'Aceptar';
+      actionConfirmCancel.classList.add('hidden');
+      actionConfirmModal.classList.remove('hidden');
+      actionConfirmModal.setAttribute('aria-hidden', 'false');
+      actionConfirmAccept.focus();
+      return new Promise((resolve) => {
+        actionConfirmResolver = resolve;
+      });
+    }
     async function saveEstadoFromModal(){
       const id = Number(editingEstadoId);
       if(!Number.isFinite(id)) return;
@@ -561,11 +625,11 @@
     }
     function downloadHistorialPdf(){
       if(!window.jspdf || !window.jspdf.jsPDF || typeof window.jspdf.jsPDF !== 'function'){
-        alert('No se pudo cargar la libreria PDF. Intentalo de nuevo.');
+        showActionAlert({ title: 'Error', message: 'No se pudo cargar la libreria PDF. Intentalo de nuevo.' });
         return;
       }
       if(!Array.isArray(currentRows) || currentRows.length === 0){
-        alert('No hay pedidos en historial para exportar en PDF.');
+        showActionAlert({ title: 'Aviso', message: 'No hay pedidos en historial para exportar en PDF.' });
         return;
       }
 
@@ -618,7 +682,10 @@
       if (hasta) params.set('hasta', hasta);
       const res = await fetch(`/admin/api/pedidos?${params.toString()}`);
       const data = await res.json();
-      if (!data.ok) { alert(data.error || 'Error'); return; }
+      if (!data.ok) {
+        await showActionAlert({ title: 'Error', message: data.error || 'Error' });
+        return;
+      }
       // Client-side fallback sort to ensure visible reordering
       const rows = Array.isArray(data.data) ? data.data.slice() : [];
       const dirFactor = currentDir === 'asc' ? 1 : -1;
@@ -722,13 +789,19 @@
           const row = currentRows.find((r) => String(r.id) === String(id));
           const estado = row?.estado || 'Pendiente';
           if (estado !== 'Cancelado') {
-            alert('Solo se puede eliminar un pedido con estado Cancelado.');
+            await showActionAlert({ title: 'Aviso', message: 'Solo se puede eliminar un pedido con estado Cancelado.' });
             return;
           }
-          if (!confirm('Vas a eliminar el pedido #' + id + ' para siempre de la base de datos.\n\n¿Deseas continuar?')) return;
+          const confirmed = await askActionConfirm({
+            title: 'Confirmación',
+            message: 'Vas a eliminar el pedido #' + id + ' para siempre de la base de datos.\n\n¿Deseas continuar?',
+            acceptText: 'Eliminar'
+          });
+          if (!confirmed) return;
           const res = await fetch(`/admin/api/pedidos/${id}`, { method: 'DELETE' });
           const data = await res.json();
-          if (data.ok) load(); else alert(data.error || 'Error');
+          if (data.ok) load();
+          else await showActionAlert({ title: 'Error', message: data.error || 'Error' });
         });
       });
       document.querySelectorAll('button.open').forEach(btn => {
@@ -765,8 +838,20 @@
         closeEstadoModal();
       }
     });
+    actionConfirmCancel.addEventListener('click', () => closeActionConfirmModal(false));
+    actionConfirmAccept.addEventListener('click', () => closeActionConfirmModal(true));
+    actionConfirmModal.addEventListener('click', (ev) => {
+      if(ev.target === actionConfirmModal){
+        closeActionConfirmModal(false);
+      }
+    });
     document.addEventListener('keydown', (ev) => {
-      if(ev.key === 'Escape' && estadoModalBackdrop.classList.contains('is-open')){
+      if(ev.key !== 'Escape') return;
+      if(!actionConfirmModal.classList.contains('hidden')){
+        closeActionConfirmModal(false);
+        return;
+      }
+      if(estadoModalBackdrop.classList.contains('is-open')){
         closeEstadoModal();
       }
     });

@@ -246,14 +246,56 @@
     </div>
   </div>
 
+  <div id="actionAlertModal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="actionAlertTitle">
+      <div class="confirm-head">
+        <h2 id="actionAlertTitle" class="confirm-title">Aviso</h2>
+      </div>
+      <p id="actionAlertText" class="confirm-status"></p>
+      <div class="confirm-actions">
+        <button type="button" id="actionAlertAccept">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script>
     const detailBackdrop = document.getElementById('pedidoDetailBackdrop');
     const editBackdrop = document.getElementById('pedidoEditBackdrop');
     const editError = document.getElementById('pedidoEditError');
     const pageFallback = document.getElementById('pageFallback');
+    const actionAlertModal = document.getElementById('actionAlertModal');
+    const actionAlertTitle = document.getElementById('actionAlertTitle');
+    const actionAlertText = document.getElementById('actionAlertText');
+    const actionAlertAccept = document.getElementById('actionAlertAccept');
     const nf = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
     let currentPedido = null;
+    let actionAlertResolver = null;
+
+    function closeActionAlertModal(){
+      actionAlertModal.classList.add('hidden');
+      actionAlertModal.setAttribute('aria-hidden', 'true');
+      actionAlertText.classList.remove('error');
+      if(actionAlertResolver){
+        const resolve = actionAlertResolver;
+        actionAlertResolver = null;
+        resolve(true);
+      }
+    }
+
+    function showActionAlert({ title, message, acceptText, type }){
+      const resolvedType = type || ((title || '').toLowerCase() === 'error' ? 'error' : 'info');
+      actionAlertTitle.textContent = title || (resolvedType === 'error' ? 'Error' : 'Aviso');
+      actionAlertText.textContent = message || '';
+      actionAlertText.classList.toggle('error', resolvedType === 'error');
+      actionAlertAccept.textContent = acceptText || 'Aceptar';
+      actionAlertModal.classList.remove('hidden');
+      actionAlertModal.setAttribute('aria-hidden', 'false');
+      actionAlertAccept.focus();
+      return new Promise((resolve) => {
+        actionAlertResolver = resolve;
+      });
+    }
 
     function getIdFromPath(){
       const sp = new URLSearchParams(location.search);
@@ -541,11 +583,11 @@
 
     function downloadPedidoPdf(){
       if(!currentPedido){
-        alert('Todavía no hay datos del pedido para imprimir.');
+        showActionAlert({ title: 'Aviso', message: 'Todavía no hay datos del pedido para imprimir.' });
         return;
       }
       if(!window.jspdf || !window.jspdf.jsPDF){
-        alert('No se pudo cargar la librería PDF. Inténtalo de nuevo.');
+        showActionAlert({ title: 'Error', message: 'No se pudo cargar la librería PDF. Inténtalo de nuevo.' });
         return;
       }
 
@@ -636,7 +678,7 @@
     async function init(){
       const id = getIdFromPath();
       if(!Number.isFinite(id)){
-        alert('ID de pedido inválido.');
+        await showActionAlert({ title: 'Error', message: 'ID de pedido inválido.' });
         location.href = '/admin/pedidos';
         return;
       }
@@ -648,7 +690,7 @@
           location.href = '/admin';
           return;
         }
-        alert('No se pudo cargar el pedido.');
+        await showActionAlert({ title: 'Error', message: 'No se pudo cargar el pedido.' });
         location.href = '/admin/pedidos';
       }
     }
@@ -678,9 +720,19 @@
         closeDetailModal();
       }
     });
+    actionAlertAccept.addEventListener('click', closeActionAlertModal);
+    actionAlertModal.addEventListener('click', (ev) => {
+      if(ev.target === actionAlertModal){
+        closeActionAlertModal();
+      }
+    });
 
     document.addEventListener('keydown', (ev) => {
       if(ev.key !== 'Escape') return;
+      if(!actionAlertModal.classList.contains('hidden')){
+        closeActionAlertModal();
+        return;
+      }
       if(editBackdrop.classList.contains('is-open')){
         closeEditModal(true);
         return;
