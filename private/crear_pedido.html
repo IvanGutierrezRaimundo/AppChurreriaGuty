@@ -617,8 +617,12 @@
       const clientePickerCancel = document.getElementById('cliente-picker-cancel');
       const clientePickerClose = document.getElementById('cliente-picker-close');
       const MAX_COMENTARIOS = 200;
+      const CLIENTE_PICKER_LIMIT = 1000;
+      const CLIENTE_PICKER_DETECT_LIMIT = CLIENTE_PICKER_LIMIT + 1;
       let pedidosCliente = [];
+      let clientesPorTelefono = new Map();
       let pedidoSeleccionado = null;
+      let clientePickerLimitWarning = '';
 
       function normalizeSearchText(value){
         return String(value || '')
@@ -641,16 +645,17 @@
 
       function updateClientePickerStatus(filteredCount){
         if(!clientePickerStatus) return;
+        const warningSuffix = clientePickerLimitWarning ? ` ${clientePickerLimitWarning}` : '';
         if(filteredCount === 0){
-          clientePickerStatus.textContent = 'No hay coincidencias para la búsqueda actual.';
+          clientePickerStatus.textContent = `No hay coincidencias para la búsqueda actual.${warningSuffix}`;
           return;
         }
         const total = pedidosCliente.length;
         if(filteredCount === total){
-          clientePickerStatus.textContent = `${total} cliente(s) cargado(s). Selecciona uno y pulsa Aceptar.`;
+          clientePickerStatus.textContent = `${total} cliente(s) cargado(s). Selecciona uno y pulsa Aceptar.${warningSuffix}`;
           return;
         }
-        clientePickerStatus.textContent = `${filteredCount} resultado(s) de ${total} cliente(s).`;
+        clientePickerStatus.textContent = `${filteredCount} resultado(s) de ${total} cliente(s).${warningSuffix}`;
       }
 
       function renderClientePickerFiltered(){
@@ -709,23 +714,22 @@
         });
       }
 
-      function pickPedidoMasRecienteCercano(actual, candidato){
+      function pickPedidoMasRecienteRealizado(actual, candidato){
         if(!actual) return candidato;
 
-        const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
+        const tActual = Date.parse(String(actual?.created_at || ''));
+        const tCandidato = Date.parse(String(candidato?.created_at || ''));
+        const hasActual = Number.isFinite(tActual);
+        const hasCandidato = Number.isFinite(tCandidato);
 
-        const d1 = parsePedidoDateTime(actual.fecha, actual.hora);
-        const d2 = parsePedidoDateTime(candidato.fecha, candidato.hora);
-        const t1 = d1 ? d1.getTime() : 0;
-        const t2 = d2 ? d2.getTime() : 0;
-        const diff1 = Math.abs(t1 - hoy.getTime());
-        const diff2 = Math.abs(t2 - hoy.getTime());
-
-        if(diff2 < diff1) return candidato;
-        if(diff2 > diff1) return actual;
-        if(t2 > t1) return candidato;
-        if(t2 < t1) return actual;
+        if(hasActual && hasCandidato){
+          if(tCandidato > tActual) return candidato;
+          if(tCandidato < tActual) return actual;
+        } else if(hasCandidato && !hasActual){
+          return candidato;
+        } else if(!hasCandidato && hasActual){
+          return actual;
+        }
 
         return Number(candidato.id || 0) > Number(actual.id || 0) ? candidato : actual;
       }
@@ -737,12 +741,13 @@
         clientePickerModal.classList.remove('hidden');
         clientePickerModal.setAttribute('aria-hidden', 'false');
         clientePickerStatus.classList.remove('error');
+        clientePickerLimitWarning = '';
         if(clientePickerSearch) clientePickerSearch.value = '';
         clientePickerStatus.textContent = 'Cargando clientes...';
         renderClientePickerRows([]);
 
         try {
-          const resp = await fetch('/admin/api/pedidos?page=1&pageSize=500&sort=fecha&dir=desc', {
+          const resp = await fetch(`/admin/api/pedidos?page=1&pageSize=${CLIENTE_PICKER_DETECT_LIMIT}&sort=id&dir=desc`, {
             credentials: 'same-origin'
           });
           const data = await resp.json().catch(() => ({}));
@@ -750,19 +755,47 @@
             throw new Error(data.error || 'No se pudieron cargar los pedidos.');
           }
 
-          const pedidos = Array.isArray(data.data) ? data.data : [];
+          const pedidosRaw = Array.isArray(data.data) ? data.data : [];
+          const pedidos = pedidosRaw.slice(0, CLIENTE_PICKER_LIMIT);
           const porTelefono = new Map();
           pedidos.forEach((pedido) => {
             const tel = normalizePhone(pedido?.telefono || '');
             if(!/^\d{9}$/.test(tel)) return;
             const normalizado = { ...pedido, telefono: tel };
             const actual = porTelefono.get(tel);
-            porTelefono.set(tel, pickPedidoMasRecienteCercano(actual, normalizado));
+            porTelefono.set(tel, pickPedidoMasRecienteRealizado(actual, normalizado));
           });
 
           pedidosCliente = Array.from(porTelefono.values()).sort((a, b) => {
             return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { sensitivity: 'base' });
           });
+
+          clientesPorTelefono = new Map();
+          let clientesRawCount = 0;
+          try {
+            const clientesResp = await fetch(`/admin/api/clientes?page=1&pageSize=${CLIENTE_PICKER_DETECT_LIMIT}&sort=fecha_registro&dir=desc`, {
+              credentials: 'same-origin'
+            });
+            const clientesData = await clientesResp.json().catch(() => ({}));
+            if(clientesResp.ok && clientesData.ok !== false){
+              const clientesRaw = Array.isArray(clientesData.data) ? clientesData.data : [];
+              clientesRawCount = clientesRaw.length;
+              const clientes = clientesRaw.slice(0, CLIENTE_PICKER_LIMIT);
+              clientes.forEach((cliente) => {
+                const tel = normalizePhone(cliente?.telefono || '');
+                if(!/^\d{9}$/.test(tel)) return;
+                clientesPorTelefono.set(tel, { ...cliente, telefono: tel });
+              });
+            }
+          } catch (clienteErr) {
+            console.warn('No se pudieron cargar clientes para rellenar datos personales:', clienteErr);
+          }
+
+          const exceedsPedidos = pedidosRaw.length > CLIENTE_PICKER_LIMIT;
+          const exceedsClientes = clientesRawCount > CLIENTE_PICKER_LIMIT;
+          if(exceedsPedidos || exceedsClientes){
+            clientePickerLimitWarning = ` Aviso: hay más de ${CLIENTE_PICKER_LIMIT} registros. Se muestran los primeros ${CLIENTE_PICKER_LIMIT}.`;
+          }
 
           renderClientePickerFiltered();
           clientePickerSearch?.focus();
@@ -775,7 +808,7 @@
         }
       }
 
-      function applyPedidoSeleccionado(pedido){
+      function applyPedidoSeleccionado(pedido, cliente){
         if(!pedido) return;
 
         const setValue = (id, value) => {
@@ -784,14 +817,16 @@
           el.value = value ?? '';
         };
 
-        setValue('nombre', pedido.nombre || '');
-        setValue('telefono', normalizePhone(pedido.telefono || ''));
-        setValue('nif', pedido.nif || '');
-        setValue('email', pedido.email || '');
-        setValue('cp', pedido.cp || '');
-        setValue('direccion', pedido.direccion || '');
-        setValue('ciudad', pedido.ciudad || '');
-        setValue('provincia', pedido.provincia || '');
+        const telPedido = normalizePhone(pedido.telefono || '');
+        const basePersonal = cliente || {};
+        setValue('nombre', basePersonal.nombre || pedido.nombre || '');
+        setValue('telefono', normalizePhone(basePersonal.telefono || telPedido));
+        setValue('nif', basePersonal.nif || '');
+        setValue('email', basePersonal.email || '');
+        setValue('cp', basePersonal.cp || '');
+        setValue('direccion', basePersonal.direccion || '');
+        setValue('ciudad', basePersonal.ciudad || '');
+        setValue('provincia', basePersonal.provincia || '');
 
         setValue('personas', Number.isFinite(Number(pedido.personas)) ? Number(pedido.personas) : '');
         setValue('churros_por_persona', Number.isFinite(Number(pedido.churros_por_persona)) ? Number(pedido.churros_por_persona) : '');
@@ -863,7 +898,9 @@
       });
       clientePickerAccept?.addEventListener('click', () => {
         if(!pedidoSeleccionado) return;
-        applyPedidoSeleccionado(pedidoSeleccionado);
+        const tel = normalizePhone(pedidoSeleccionado.telefono || '');
+        const cliente = clientesPorTelefono.get(tel);
+        applyPedidoSeleccionado(pedidoSeleccionado, cliente);
         closeClientePickerModal();
       });
       clientePickerSearch?.addEventListener('input', () => {

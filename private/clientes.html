@@ -134,6 +134,15 @@
     @media (max-width: 560px){
       .cards-grid{ grid-template-columns: 1fr; }
     }
+    .infinite-status{
+      max-width: 1200px;
+      margin: 10px auto 0;
+      color: var(--color-muted);
+      font-weight: 600;
+      text-align: center;
+      display: none;
+    }
+    .infinite-status.is-visible{ display: block; }
   </style>
 </head>
 <body>
@@ -159,6 +168,7 @@
           <option>20</option>
           <option>50</option>
           <option>100</option>
+          <option value="all">Todos</option>
         </select>
       </div>
       <div class="field">
@@ -188,6 +198,7 @@
         <tbody id="tbody"></tbody>
       </table>
       <div id="cardsGrid" class="cards-grid"></div>
+      <p id="infiniteStatus" class="infinite-status" aria-live="polite"></p>
     </div>
   </div>
 
@@ -253,6 +264,8 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.min.js"></script>
   <script>
     const tbody = document.getElementById('tbody');
     const pageSizeSel = document.getElementById('pageSize');
@@ -273,6 +286,7 @@
     const actionConfirmText = document.getElementById('actionConfirmText');
     const actionConfirmCancel = document.getElementById('actionConfirmCancel');
     const actionConfirmAccept = document.getElementById('actionConfirmAccept');
+    const infiniteStatus = document.getElementById('infiniteStatus');
     let actionConfirmResolver = null;
     let actionConfirmMode = 'confirm';
     let currentRows = [];
@@ -281,6 +295,11 @@
     let currentView = 'tabla';
     let currentSort = 'fecha_registro';
     let currentDir = 'desc';
+    let infiniteMode = false;
+    let infinitePage = 1;
+    let infiniteHasMore = true;
+    let infiniteLoading = false;
+    const INFINITE_BATCH_SIZE = 100;
 
     function escapeHtml(value){
       return String(value ?? '')
@@ -317,6 +336,12 @@
       updateViewButtons();
     }
 
+    function setInfiniteStatus(text, visible){
+      if(!infiniteStatus) return;
+      infiniteStatus.textContent = text || '';
+      infiniteStatus.classList.toggle('is-visible', !!visible);
+    }
+
     function renderCard(r){
       return `
         <article class="cliente-card">
@@ -341,6 +366,85 @@
         if(th.getAttribute('data-sort') === currentSort){ th.setAttribute('data-dir', currentDir); }
         else { th.removeAttribute('data-dir'); }
       });
+    }
+
+    async function downloadClientesCsv(){
+      try {
+        const resp = await fetch('/admin/api/clientes/export.csv', { credentials: 'same-origin' });
+        if (resp.status === 401) {
+          location.href = '/admin';
+          return;
+        }
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(text || 'No se pudo exportar clientes.');
+        }
+
+        const blob = await resp.blob();
+        const disposition = resp.headers.get('content-disposition') || '';
+        const match = /filename="?([^";]+)"?/i.exec(disposition);
+        const filename = (match && match[1]) ? match[1] : 'clientes.csv';
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        await showActionAlert({ title: 'Error', message: err?.message || 'No se pudo exportar clientes.' });
+      }
+    }
+
+    function downloadClientesPdf(){
+      if(!window.jspdf || !window.jspdf.jsPDF || typeof window.jspdf.jsPDF !== 'function'){
+        showActionAlert({ title: 'Error', message: 'No se pudo cargar la libreria PDF. Intentalo de nuevo.' });
+        return;
+      }
+      if(!Array.isArray(currentRows) || currentRows.length === 0){
+        showActionAlert({ title: 'Aviso', message: 'No hay clientes para exportar en PDF.' });
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+
+      doc.setFontSize(16);
+      doc.text('Lista de Clientes', 40, 40);
+      doc.setFontSize(10);
+      doc.text(`Generado: ${now.toLocaleString('es-ES')}`, 40, 58);
+
+      const headers = [[
+        'ID', 'NIF', 'Nombre', 'Telefono', 'Email', 'Direccion', 'Ciudad', 'Provincia', 'CP', 'Registro'
+      ]];
+      const body = currentRows.map((r) => [
+        r.id ?? '',
+        r.nif ?? '',
+        r.nombre ?? '',
+        r.telefono ?? '',
+        r.email ?? '',
+        r.direccion ?? '',
+        r.ciudad ?? '',
+        r.provincia ?? '',
+        r.cp ?? '',
+        formatDateTime(r.fecha_registro)
+      ]);
+
+      doc.autoTable({
+        head: headers,
+        body,
+        startY: 72,
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46] },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+        theme: 'striped'
+      });
+
+      doc.save(`clientes_${stamp}.pdf`);
     }
 
     function isValidNIF(value){
@@ -652,8 +756,27 @@
 
     async function load(){
       const q = document.getElementById('q').value.trim();
-      const pageSize = Number(pageSizeSel.value);
-      const params = new URLSearchParams({ page: '1', pageSize, sort: currentSort, dir: currentDir });
+      const pageSizeValue = pageSizeSel.value;
+
+      if (pageSizeValue === 'all') {
+        infiniteMode = true;
+        infinitePage = 1;
+        infiniteHasMore = true;
+        currentRows = [];
+        tbody.innerHTML = '';
+        cardsGrid.innerHTML = '';
+        setInfiniteStatus('Cargando más resultados...', true);
+        await loadClientesInfiniteNext();
+        if(currentRows.length === 0 && !infiniteHasMore){
+          setInfiniteStatus('No hay resultados', true);
+        }
+        return;
+      }
+
+      infiniteMode = false;
+      setInfiniteStatus('', false);
+      const pageSize = Number(pageSizeValue);
+      const params = new URLSearchParams({ page: '1', pageSize: String(pageSize), sort: currentSort, dir: currentDir });
       if (q) params.set('q', q);
 
       const res = await fetch('/admin/api/clientes?' + params.toString());
@@ -664,7 +787,7 @@
       }
 
       tbody.innerHTML = '';
-  cardsGrid.innerHTML = '';
+      cardsGrid.innerHTML = '';
       const rows = Array.isArray(data.data) ? data.data : [];
       currentRows = rows;
       for (const r of rows){
@@ -693,6 +816,66 @@
       applyCurrentView();
     }
 
+    async function loadClientesInfiniteNext(){
+      if(!infiniteMode || infiniteLoading || !infiniteHasMore) return;
+      infiniteLoading = true;
+      setInfiniteStatus('Cargando más resultados...', true);
+      try {
+        const q = document.getElementById('q').value.trim();
+        const params = new URLSearchParams({
+          page: String(infinitePage),
+          pageSize: String(INFINITE_BATCH_SIZE),
+          sort: currentSort,
+          dir: currentDir
+        });
+        if (q) params.set('q', q);
+
+        const res = await fetch('/admin/api/clientes?' + params.toString());
+        const data = await res.json();
+        if (!data.ok) {
+          await showActionAlert({ title: 'Error', message: data.error || 'Error cargando clientes.' });
+          infiniteHasMore = false;
+          return;
+        }
+
+        const chunk = Array.isArray(data.data) ? data.data : [];
+        currentRows = currentRows.concat(chunk);
+        if (chunk.length < INFINITE_BATCH_SIZE) infiniteHasMore = false;
+        infinitePage += 1;
+
+        tbody.innerHTML = '';
+        cardsGrid.innerHTML = '';
+        for (const r of currentRows){
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${escapeHtml(r.id)}</td>
+            <td>${escapeHtml(r.nif)}</td>
+            <td>${escapeHtml(r.nombre)}</td>
+            <td>${escapeHtml(r.telefono)}</td>
+            <td>${escapeHtml(r.email)}</td>
+            <td>${escapeHtml(r.direccion)}</td>
+            <td>${escapeHtml(r.ciudad)}</td>
+            <td>
+              <span class="btn-row">
+                <button data-id="${escapeHtml(r.id)}" class="open">Abrir</button>
+                <button data-id="${escapeHtml(r.id)}" class="del">Eliminar</button>
+              </span>
+            </td>
+          `;
+          tbody.appendChild(tr);
+          cardsGrid.insertAdjacentHTML('beforeend', renderCard(r));
+        }
+
+        bindActions();
+        updateSortIndicators();
+        applyCurrentView();
+        if(!infiniteHasMore) setInfiniteStatus('Fin de resultados', true);
+        else setInfiniteStatus('Desplázate para cargar más', true);
+      } finally {
+        infiniteLoading = false;
+      }
+    }
+
     const thead = document.querySelector('table thead');
     if (thead) {
       thead.addEventListener('click', (ev) => {
@@ -710,6 +893,12 @@
 
     document.getElementById('searchBtn').addEventListener('click', load);
     pageSizeSel.addEventListener('change', load);
+    window.addEventListener('scroll', () => {
+      if (!infiniteMode) return;
+      if ((window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 300)) {
+        loadClientesInfiniteNext();
+      }
+    });
 
     document.getElementById('menuBtn').addEventListener('click', () => {
       location.href = '/admin';
@@ -718,11 +907,11 @@
     document.getElementById('createClienteBtn').addEventListener('click', openCreateModal);
 
     document.getElementById('exportBtn').addEventListener('click', () => {
-      showActionAlert({ title: 'Aviso', message: 'Exportar clientes aun no disponible.' });
+      downloadClientesCsv();
     });
 
     document.getElementById('printPdfBtn').addEventListener('click', () => {
-      showActionAlert({ title: 'Aviso', message: 'Imprimir PDF de clientes aun no disponible.' });
+      downloadClientesPdf();
     });
 
     viewTablaBtn.addEventListener('click', () => {

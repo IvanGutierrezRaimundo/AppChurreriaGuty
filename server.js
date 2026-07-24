@@ -684,6 +684,9 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     const priceEnvio = envioBool ? 25 : 0;
     const presupuestoAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
     const manualEnabled = !!body.presupuesto_total_manual;
+    const overwriteCliente = !!body.overwrite_cliente;
+    const telefonoAnterior = normalizeSpanishPhone(current.telefono || '');
+    const telefonoNuevo = String(merged.telefono || '').trim();
 
     if (manualEnabled) {
       const manualRaw = body.presupuesto_total;
@@ -705,6 +708,22 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+
+      if (telefonoNuevo !== telefonoAnterior) {
+        const [clienteExistenteRows] = await conn.execute(
+          'SELECT id FROM clientes WHERE telefono = ? LIMIT 1',
+          [telefonoNuevo]
+        );
+        const clienteExistente = Array.isArray(clienteExistenteRows) && clienteExistenteRows.length > 0;
+        if (clienteExistente && !overwriteCliente) {
+          await conn.rollback();
+          return res.status(409).json({
+            ok: false,
+            code: 'CLIENTE_TELEFONO_EXISTE',
+            error: 'Ya existe un cliente con ese telefono. Confirma si quieres sobrescribirlo.'
+          });
+        }
+      }
 
       const [result] = await conn.execute(sql, params);
 
@@ -759,6 +778,31 @@ app.get('/admin/api/export.csv', ensureAdmin, async (req, res) => {
     res.send(header + body);
   } catch (err) {
     console.error('Error exportando pedidos:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.get('/admin/api/clientes/export.csv', ensureAdmin, async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT id, nif, nombre, telefono, email, direccion, ciudad, provincia, cp, fecha_registro FROM clientes ORDER BY fecha_registro DESC, id DESC');
+    const header = 'id;nif;nombre;telefono;email;direccion;ciudad;provincia;cp;fecha_registro\n';
+    const body = rows.map(r => [
+      r.id,
+      r.nif || '',
+      r.nombre || '',
+      r.telefono || '',
+      r.email || '',
+      r.direccion || '',
+      r.ciudad || '',
+      r.provincia || '',
+      r.cp || '',
+      r.fecha_registro || ''
+    ].join(';')).join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="clientes.csv"');
+    res.send(header + body);
+  } catch (err) {
+    console.error('Error exportando clientes:', err);
     res.status(500).json({ ok: false, error: 'Error interno' });
   }
 });

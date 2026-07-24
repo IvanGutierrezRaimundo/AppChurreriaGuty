@@ -52,6 +52,11 @@
     .pedido-section-blue{ box-shadow: 0 6px 16px rgba(37, 99, 235, 0.14); }
     .pedido-section-rose{ box-shadow: 0 6px 16px rgba(244, 63, 94, 0.14); }
     .pedido-section-brown{ box-shadow: 0 6px 16px rgba(91, 58, 46, 0.16); }
+    .pedido-section-expired{
+      background: #FEE2E2;
+      border-color: #FCA5A5;
+      box-shadow: 0 8px 20px rgba(220, 38, 38, 0.18);
+    }
     .pedido-field{
       border: 1px solid var(--color-border);
       border-radius: 8px;
@@ -130,7 +135,7 @@
         <h2 id="pedidoDetailTitle">Detalle de pedido</h2>
       </div>
       <div class="pedido-sections">
-        <div class="pedido-section pedido-section-amber">
+        <div id="pedidoTopSection" class="pedido-section pedido-section-amber">
           <div class="pedido-grid">
             <div class="pedido-field"><p class="pedido-field-label">ID</p><p id="d_id" class="pedido-field-value"></p></div>
             <div class="pedido-field"><p class="pedido-field-label">Estado</p><div id="d_estado" class="pedido-field-value"></div></div>
@@ -260,6 +265,7 @@
       </div>
       <p id="actionAlertText" class="confirm-status"></p>
       <div class="confirm-actions">
+        <button type="button" id="actionAlertCancel" class="ghost">Cancelar</button>
         <button type="button" id="actionAlertAccept">Aceptar</button>
       </div>
     </div>
@@ -274,28 +280,51 @@
     const actionAlertModal = document.getElementById('actionAlertModal');
     const actionAlertTitle = document.getElementById('actionAlertTitle');
     const actionAlertText = document.getElementById('actionAlertText');
+    const actionAlertCancel = document.getElementById('actionAlertCancel');
     const actionAlertAccept = document.getElementById('actionAlertAccept');
+    const pedidoTopSection = document.getElementById('pedidoTopSection');
     const nf = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
     let currentPedido = null;
     let actionAlertResolver = null;
+    let actionAlertMode = 'alert';
+    const PEDIDO_EXPIRADO_MSG = 'Pedido expirado, cambie el estado a realizado, cobrado o cancelado';
 
-    function closeActionAlertModal(){
+    function closeActionAlertModal(accepted){
       actionAlertModal.classList.add('hidden');
       actionAlertModal.setAttribute('aria-hidden', 'true');
       actionAlertText.classList.remove('error');
       if(actionAlertResolver){
         const resolve = actionAlertResolver;
         actionAlertResolver = null;
-        resolve(true);
+        resolve(actionAlertMode === 'alert' ? true : !!accepted);
       }
+      actionAlertCancel.classList.remove('hidden');
+      actionAlertMode = 'alert';
     }
 
     function showActionAlert({ title, message, acceptText, type }){
+      actionAlertMode = 'alert';
       const resolvedType = type || ((title || '').toLowerCase() === 'error' ? 'error' : 'info');
       actionAlertTitle.textContent = title || (resolvedType === 'error' ? 'Error' : 'Aviso');
       actionAlertText.textContent = message || '';
       actionAlertText.classList.toggle('error', resolvedType === 'error');
       actionAlertAccept.textContent = acceptText || 'Aceptar';
+      actionAlertCancel.classList.add('hidden');
+      actionAlertModal.classList.remove('hidden');
+      actionAlertModal.setAttribute('aria-hidden', 'false');
+      actionAlertAccept.focus();
+      return new Promise((resolve) => {
+        actionAlertResolver = resolve;
+      });
+    }
+
+    function askActionConfirm({ title, message, acceptText }){
+      actionAlertMode = 'confirm';
+      actionAlertTitle.textContent = title || 'Confirmación';
+      actionAlertText.textContent = message || 'Confirma esta acción para continuar.';
+      actionAlertText.classList.remove('error');
+      actionAlertAccept.textContent = acceptText || 'Aceptar';
+      actionAlertCancel.classList.remove('hidden');
       actionAlertModal.classList.remove('hidden');
       actionAlertModal.setAttribute('aria-hidden', 'false');
       actionAlertAccept.focus();
@@ -340,12 +369,42 @@
       return m ? `${m[1]}:${m[2]}` : String(value);
     }
 
+    function toDateInputValue(value){
+      if(!value) return '';
+      const raw = String(value).trim();
+      if(!raw) return '';
+      const isoMatch = /^(\d{4}-\d{2}-\d{2})/.exec(raw);
+      if(isoMatch) return isoMatch[1];
+
+      const date = value instanceof Date ? value : new Date(raw);
+      if(Number.isNaN(date.getTime())) return '';
+      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+    }
+
     function valueText(v){
       if(v === null || typeof v === 'undefined' || v === '') return '-';
       return String(v);
     }
 
     function boolText(v){ return v ? 'Sí' : 'No'; }
+
+    function isPedidoFechaAnteriorAHoy(fechaRaw){
+      if(!fechaRaw) return false;
+      let fecha = null;
+      const raw = String(fechaRaw).trim();
+      if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+        fecha = new Date(`${raw}T00:00:00`);
+      } else {
+        const base = raw.includes('T') ? raw.slice(0, 10) : raw;
+        if(/^\d{4}-\d{2}-\d{2}$/.test(base)) fecha = new Date(`${base}T00:00:00`);
+        else fecha = new Date(raw);
+      }
+      if(!fecha || Number.isNaN(fecha.getTime())) return false;
+      fecha.setHours(0, 0, 0, 0);
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      return fecha.getTime() < hoy.getTime();
+    }
 
     function getEstadoBadgeClass(estadoRaw){
       const estado = estadoRaw || 'Pendiente';
@@ -372,6 +431,12 @@
     function renderDetail(){
       if(!currentPedido) return;
       const p = currentPedido;
+      const isExpirado = (p.estado || 'Pendiente') === 'Pendiente' && isPedidoFechaAnteriorAHoy(p.fecha);
+      if(pedidoTopSection){
+        pedidoTopSection.classList.toggle('pedido-section-expired', isExpirado);
+        if(isExpirado) pedidoTopSection.setAttribute('title', PEDIDO_EXPIRADO_MSG);
+        else pedidoTopSection.removeAttribute('title');
+      }
       document.getElementById('pedidoDetailTitle').textContent = p.nombre ? `Detalle de pedido - ${p.nombre}` : 'Detalle de pedido';
       setValue('d_id', p.id);
       document.getElementById('d_estado').innerHTML = renderEstadoBadge(p.estado);
@@ -426,7 +491,7 @@
       document.getElementById('e_personas').value = p.personas ?? '';
       document.getElementById('e_churros').value = p.churros_por_persona ?? '';
       document.getElementById('e_chocolates').value = p.chocolates ?? '';
-      document.getElementById('e_fecha').value = (p.fecha || '').toString().slice(0,10);
+      document.getElementById('e_fecha').value = toDateInputValue(p.fecha);
       document.getElementById('e_hora').value = formatTime(p.hora);
       document.getElementById('e_requiere_envio').checked = !!p.requiere_envio;
       document.getElementById('e_direccion_entrega').value = p.direccion_entrega || '';
@@ -576,24 +641,44 @@
       cancelBtn.disabled = true;
       editError.textContent = '';
       try {
-        const resp = await fetch(`/admin/api/pedidos/${currentPedido.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify(payload)
-        });
-        if(resp.status === 401){
-          location.href = '/admin';
-          return;
+        let overwriteCliente = false;
+        while (true) {
+          const resp = await fetch(`/admin/api/pedidos/${currentPedido.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ ...payload, overwrite_cliente: overwriteCliente })
+          });
+          if(resp.status === 401){
+            location.href = '/admin';
+            return;
+          }
+          const data = await resp.json().catch(() => ({}));
+
+          if(resp.status === 409 && data?.code === 'CLIENTE_TELEFONO_EXISTE' && !overwriteCliente){
+            const confirmar = await askActionConfirm({
+              title: 'Confirmación',
+              message: 'Ya existe un cliente con ese teléfono. ¿Quieres sobrescribirlo con los datos de este pedido?',
+              acceptText: 'Sobrescribir'
+            });
+            if(!confirmar){
+              editError.textContent = 'Operación cancelada. No se sobrescribió el cliente existente.';
+              return;
+            }
+            overwriteCliente = true;
+            continue;
+          }
+
+          if(!data || !data.ok || !data.data){
+            editError.textContent = data?.error || 'No se pudo guardar el pedido.';
+            return;
+          }
+
+          currentPedido = data.data;
+          closeEditModal(false);
+          openDetailModal();
+          break;
         }
-        const data = await resp.json();
-        if(!data || !data.ok || !data.data){
-          editError.textContent = data?.error || 'No se pudo guardar el pedido.';
-          return;
-        }
-        currentPedido = data.data;
-        closeEditModal(false);
-        openDetailModal();
       } catch(_err) {
         editError.textContent = 'Error guardando pedido.';
       } finally {
@@ -744,17 +829,18 @@
         closeDetailModal();
       }
     });
-    actionAlertAccept.addEventListener('click', closeActionAlertModal);
+    actionAlertCancel.addEventListener('click', () => closeActionAlertModal(false));
+    actionAlertAccept.addEventListener('click', () => closeActionAlertModal(true));
     actionAlertModal.addEventListener('click', (ev) => {
       if(ev.target === actionAlertModal){
-        closeActionAlertModal();
+        closeActionAlertModal(false);
       }
     });
 
     document.addEventListener('keydown', (ev) => {
       if(ev.key !== 'Escape') return;
       if(!actionAlertModal.classList.contains('hidden')){
-        closeActionAlertModal();
+        closeActionAlertModal(false);
         return;
       }
       if(editBackdrop.classList.contains('is-open')){

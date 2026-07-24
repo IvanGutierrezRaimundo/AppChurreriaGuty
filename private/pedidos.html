@@ -142,6 +142,16 @@
     }
     .estado-cell{ cursor: pointer; }
     .estado-cell .pedido-estado-badge{ pointer-events: none; }
+    td.estado-cell.estado-expirado{
+      background: #FEE2E2;
+      box-shadow: inset 0 0 0 1px #FCA5A5;
+    }
+    .pedido-card-head .estado-cell.estado-expirado{
+      background: #FEE2E2;
+      border: 1px solid #FCA5A5;
+      border-radius: 10px;
+      padding: 4px 8px;
+    }
     .estado-modal-backdrop{
       position: fixed;
       inset: 0;
@@ -165,6 +175,15 @@
     .estado-modal p{ margin: 0 0 16px; color: var(--color-muted); }
     .estado-modal-actions{ display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
     .estado-modal-error{ min-height: 1.5em; margin-top: 10px; color: #B91C1C; font-weight: 600; }
+    .infinite-status{
+      max-width: 1200px;
+      margin: 10px auto 0;
+      color: var(--color-muted);
+      font-weight: 600;
+      text-align: center;
+      display: none;
+    }
+    .infinite-status.is-visible{ display: block; }
   </style>
 </head>
 <body>
@@ -199,6 +218,7 @@
         <option>20</option>
         <option>50</option>
         <option>100</option>
+        <option value="all">Todos</option>
       </select>
     </div>
     <div class="field">
@@ -232,6 +252,7 @@
   <div id="cardsGrid" class="cards-grid"></div>
   <div id="calendarView" class="calendar-view"></div>
   <div id="calendarEmpty" class="calendar-empty"></div>
+  <p id="infiniteStatus" class="infinite-status" aria-live="polite"></p>
   </div>
   </div>
 
@@ -293,12 +314,18 @@
     const actionConfirmText = document.getElementById('actionConfirmText');
     const actionConfirmCancel = document.getElementById('actionConfirmCancel');
     const actionConfirmAccept = document.getElementById('actionConfirmAccept');
+    const infiniteStatus = document.getElementById('infiniteStatus');
     let editingEstadoId = null;
     let actionConfirmResolver = null;
     let actionConfirmMode = 'confirm';
     let currentView = 'tabla';
     let calendar = null;
     let currentRows = [];
+    let infiniteMode = false;
+    let infinitePage = 1;
+    let infiniteHasMore = true;
+    let infiniteLoading = false;
+    const INFINITE_BATCH_SIZE = 100;
     function formatDate(value){
       if(!value) return '';
       try{
@@ -352,6 +379,24 @@
     function renderEstadoBadge(estadoRaw){
       const estado = estadoRaw || 'Pendiente';
       return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${estado}</span>`;
+    }
+    const PEDIDO_EXPIRADO_MSG = 'Pedido expirado, cambie el estado a realizado, cobrado o cancelado';
+    function isPedidoFechaAnteriorAHoy(fechaRaw){
+      if(!fechaRaw) return false;
+      let fecha = null;
+      const raw = String(fechaRaw).trim();
+      if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+        fecha = new Date(`${raw}T00:00:00`);
+      } else {
+        const base = raw.includes('T') ? raw.slice(0, 10) : raw;
+        if(/^\d{4}-\d{2}-\d{2}$/.test(base)) fecha = new Date(`${base}T00:00:00`);
+        else fecha = new Date(raw);
+      }
+      if(!fecha || Number.isNaN(fecha.getTime())) return false;
+      fecha.setHours(0, 0, 0, 0);
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      return fecha.getTime() < hoy.getTime();
     }
     function updateViewButtons(){
       const isTabla = currentView === 'tabla';
@@ -492,11 +537,15 @@
       updateViewButtons();
     }
     function renderCard(r){
+      const estado = (r.estado || 'Pendiente');
+      const isExpirado = estado === 'Pendiente' && isPedidoFechaAnteriorAHoy(r.fecha);
+      const estadoCellClass = isExpirado ? ' estado-expirado' : '';
+      const estadoTitle = isExpirado ? PEDIDO_EXPIRADO_MSG : 'Cambiar estado';
       return `
         <article class="pedido-card">
           <div class="pedido-card-head">
             <span class="pedido-card-id">#${r.id}</span>
-            <span class="estado-cell" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="Cambiar estado">${renderEstadoBadge(r.estado)}</span>
+            <span class="estado-cell${estadoCellClass}" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="${estadoTitle}">${renderEstadoBadge(r.estado)}</span>
           </div>
           <div class="pedido-card-grid">
             <div class="pedido-card-row"><span class="pedido-card-label">Cliente</span><span class="pedido-card-value">${r.nombre || ''}</span></div>
@@ -617,6 +666,145 @@
     }
     let currentSort = 'fecha';
     let currentDir = 'desc';
+
+    function sortPedidosRows(rows){
+      const dirFactor = currentDir === 'asc' ? 1 : -1;
+      function toNumber(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
+      function toDate(v){
+        if(!v) return 0;
+        if(typeof v === 'string'){
+          let s = v; if(s.includes('T')) s = s.slice(0,10);
+          if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s).getTime();
+        }
+        const d = new Date(v); return isNaN(d) ? 0 : d.getTime();
+      }
+      function toMinutes(v){
+        if(typeof v === 'string'){
+          const m = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(v);
+          if(m){ return Number(m[1])*60 + Number(m[2]); }
+        }
+        return 0;
+      }
+      rows.sort((a,b) => {
+        let cmp = 0;
+        switch(currentSort){
+          case 'id': cmp = toNumber(a.id) - toNumber(b.id); break;
+          case 'presupuesto_total': cmp = toNumber(a.presupuesto_total) - toNumber(b.presupuesto_total); break;
+          case 'fecha': cmp = toDate(a.fecha) - toDate(b.fecha); break;
+          case 'hora': cmp = toMinutes(a.hora) - toMinutes(b.hora); break;
+          case 'estado': {
+            const av = (a.estado||'').toString().toLowerCase();
+            const bv = (b.estado||'').toString().toLowerCase();
+            cmp = av.localeCompare(bv, 'es');
+            break;
+          }
+          case 'personas': cmp = toNumber(a.personas) - toNumber(b.personas); break;
+          case 'churros_por_persona': cmp = toNumber(a.churros_por_persona) - toNumber(b.churros_por_persona); break;
+          case 'chocolates': cmp = toNumber(a.chocolates) - toNumber(b.chocolates); break;
+          case 'nombre':
+          default: {
+            const av = (a.nombre||'').toString().toLowerCase();
+            const bv = (b.nombre||'').toString().toLowerCase();
+            cmp = av.localeCompare(bv, 'es');
+            break;
+          }
+        }
+        return dirFactor * cmp;
+      });
+    }
+
+    function renderPedidosRows(rows){
+      tbody.innerHTML = '';
+      cardsGrid.innerHTML = '';
+      for (const r of rows) {
+        const estado = (r.estado || 'Pendiente');
+        const isExpirado = estado === 'Pendiente' && isPedidoFechaAnteriorAHoy(r.fecha);
+        const estadoCellClass = isExpirado ? ' estado-expirado' : '';
+        const estadoTitle = isExpirado ? PEDIDO_EXPIRADO_MSG : 'Cambiar estado';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.id}</td>
+          <td>${r.nombre}</td>
+          <td>${r.personas ?? ''}</td>
+          <td>${r.churros_por_persona ?? ''}</td>
+          <td>${r.chocolates ?? ''}</td>
+          <td>${formatDate(r.fecha)}</td>
+          <td>${formatTime(r.hora)}</td>
+          <td>${r.presupuesto_total}</td>
+          <td class="estado-cell${estadoCellClass}" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="${estadoTitle}">${renderEstadoBadge(r.estado)}</td>
+          <td>
+            <span class="btn-row">
+              <button data-id="${r.id}" class="open">Abrir</button>
+              <button data-id="${r.id}" class="del">Eliminar</button>
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        cardsGrid.insertAdjacentHTML('beforeend', renderCard(r));
+      }
+      bindActions();
+      updateSortIndicators();
+      applyCurrentView();
+    }
+
+    function getPedidosBaseParams(pageSize){
+      const q = document.getElementById('q').value.trim();
+      const desde = document.getElementById('desde').value;
+      const hasta = document.getElementById('hasta').value;
+      const params = new URLSearchParams({ pageSize: String(pageSize), sort: currentSort, dir: currentDir });
+      if (q) params.set('q', q);
+      if (desde) params.set('desde', desde);
+      if (hasta) params.set('hasta', hasta);
+      return params;
+    }
+
+    function setInfiniteStatus(text, visible){
+      if(!infiniteStatus) return;
+      infiniteStatus.textContent = text || '';
+      infiniteStatus.classList.toggle('is-visible', !!visible);
+    }
+
+    async function loadPedidosInfiniteNext(){
+      if(!infiniteMode || infiniteLoading || !infiniteHasMore) return;
+      infiniteLoading = true;
+      setInfiniteStatus('Cargando más resultados...', true);
+      try {
+        const params = getPedidosBaseParams(INFINITE_BATCH_SIZE);
+        params.set('page', String(infinitePage));
+        const res = await fetch(`/admin/api/pedidos?${params.toString()}`);
+        const data = await res.json();
+        if (!data.ok) {
+          await showActionAlert({ title: 'Error', message: data.error || 'Error' });
+          infiniteHasMore = false;
+          return;
+        }
+        const chunk = Array.isArray(data.data) ? data.data : [];
+        const visible = chunk.filter((r) => (r?.estado || 'Pendiente') !== 'Cobrado');
+        currentRows = currentRows.concat(visible);
+        sortPedidosRows(currentRows);
+        renderPedidosRows(currentRows);
+        if (chunk.length < INFINITE_BATCH_SIZE) infiniteHasMore = false;
+        infinitePage += 1;
+        if(!infiniteHasMore) setInfiniteStatus('Fin de resultados', true);
+        else setInfiniteStatus('Desplázate para cargar más', true);
+      } finally {
+        infiniteLoading = false;
+      }
+    }
+
+    async function startPedidosInfiniteLoad(){
+      infiniteMode = true;
+      infinitePage = 1;
+      infiniteHasMore = true;
+      currentRows = [];
+      renderPedidosRows(currentRows);
+      setInfiniteStatus('Cargando más resultados...', true);
+      await loadPedidosInfiniteNext();
+      if(currentRows.length === 0 && !infiniteHasMore){
+        setInfiniteStatus('No hay resultados', true);
+      }
+    }
+
     function updateSortIndicators(){
       document.querySelectorAll('th.sortable').forEach(th => {
         if(th.getAttribute('data-sort') === currentSort){ th.setAttribute('data-dir', currentDir); }
@@ -671,104 +859,43 @@
       doc.save(`pedidos_${stamp}.pdf`);
     }
     async function load() {
-      const q = document.getElementById('q').value.trim();
-      const desde = document.getElementById('desde').value;
-      const hasta = document.getElementById('hasta').value;
-      const pageSize = Number(pageSizeSel.value);
-      const params = new URLSearchParams({ page: '1', pageSize, sort: currentSort, dir: currentDir });
-      if (q) params.set('q', q);
-      if (desde) params.set('desde', desde);
-      if (hasta) params.set('hasta', hasta);
-      const res = await fetch(`/admin/api/pedidos?${params.toString()}`);
-      const data = await res.json();
-      if (!data.ok) {
-        await showActionAlert({ title: 'Error', message: data.error || 'Error' });
+      if (pageSizeSel.value === 'all') {
+        await startPedidosInfiniteLoad();
         return;
       }
-      // Client-side fallback sort to ensure visible reordering
-      const rows = Array.isArray(data.data)
-        ? data.data.filter((r) => (r?.estado || 'Pendiente') !== 'Cobrado')
-        : [];
-      const dirFactor = currentDir === 'asc' ? 1 : -1;
-      function toNumber(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
-      function toDate(v){
-        if(!v) return 0;
-        if(typeof v === 'string'){
-          let s = v; if(s.includes('T')) s = s.slice(0,10);
-          if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s).getTime();
+      infiniteMode = false;
+      setInfiniteStatus('', false);
+      const pageSize = Number(pageSizeSel.value);
+      const baseParams = getPedidosBaseParams(pageSize);
+
+      // Se excluyen "Cobrado" en esta vista. Para no perder filas visibles,
+      // se piden más páginas hasta reunir pageSize resultados no cobrados.
+      const rows = [];
+      let page = 1;
+      let reachedEnd = false;
+      while (rows.length < pageSize && !reachedEnd) {
+        const params = new URLSearchParams(baseParams);
+        params.set('page', String(page));
+        const res = await fetch(`/admin/api/pedidos?${params.toString()}`);
+        const data = await res.json();
+        if (!data.ok) {
+          await showActionAlert({ title: 'Error', message: data.error || 'Error' });
+          return;
         }
-        const d = new Date(v); return isNaN(d) ? 0 : d.getTime();
-      }
-      function toMinutes(v){
-        if(typeof v === 'string'){
-          const m = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(v);
-          if(m){ return Number(m[1])*60 + Number(m[2]); }
+        const chunk = Array.isArray(data.data) ? data.data : [];
+        rows.push(...chunk.filter((r) => (r?.estado || 'Pendiente') !== 'Cobrado'));
+        if (chunk.length < pageSize) {
+          reachedEnd = true;
+        } else {
+          page += 1;
+          if (page > 50) reachedEnd = true;
         }
-        return 0;
       }
-      rows.sort((a,b) => {
-        let cmp = 0;
-        switch(currentSort){
-          case 'id': cmp = toNumber(a.id) - toNumber(b.id); break;
-          case 'presupuesto_total': cmp = toNumber(a.presupuesto_total) - toNumber(b.presupuesto_total); break;
-          case 'fecha': cmp = toDate(a.fecha) - toDate(b.fecha); break;
-          case 'hora': cmp = toMinutes(a.hora) - toMinutes(b.hora); break;
-          case 'estado': {
-            const av = (a.estado||'').toString().toLowerCase();
-            const bv = (b.estado||'').toString().toLowerCase();
-            cmp = av.localeCompare(bv, 'es');
-            break;
-          }
-          case 'personas': {
-            cmp = toNumber(a.personas) - toNumber(b.personas);
-            break;
-          }
-          case 'churros_por_persona': {
-            cmp = toNumber(a.churros_por_persona) - toNumber(b.churros_por_persona);
-            break;
-          }
-          case 'chocolates': {
-            cmp = toNumber(a.chocolates) - toNumber(b.chocolates);
-            break;
-          }
-          case 'nombre':
-          default: {
-            const av = (a.nombre||'').toString().toLowerCase();
-            const bv = (b.nombre||'').toString().toLowerCase();
-            cmp = av.localeCompare(bv, 'es');
-            break;
-          }
-        }
-        return dirFactor * cmp;
-      });
-      currentRows = rows;
-      tbody.innerHTML = '';
-      cardsGrid.innerHTML = '';
-      for (const r of rows) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${r.id}</td>
-          <td>${r.nombre}</td>
-          <td>${r.personas ?? ''}</td>
-          <td>${r.churros_por_persona ?? ''}</td>
-          <td>${r.chocolates ?? ''}</td>
-          <td>${formatDate(r.fecha)}</td>
-          <td>${formatTime(r.hora)}</td>
-          <td>${r.presupuesto_total}</td>
-          <td class="estado-cell" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="Cambiar estado">${renderEstadoBadge(r.estado)}</td>
-          <td>
-            <span class="btn-row">
-              <button data-id="${r.id}" class="open">Abrir</button>
-              <button data-id="${r.id}" class="del">Eliminar</button>
-            </span>
-          </td>
-        `;
-        tbody.appendChild(tr);
-        cardsGrid.insertAdjacentHTML('beforeend', renderCard(r));
-      }
-      bindActions();
-      updateSortIndicators();
-      applyCurrentView();
+
+      const visibleRows = rows.slice(0, pageSize);
+      sortPedidosRows(visibleRows);
+      currentRows = visibleRows;
+      renderPedidosRows(currentRows);
     }
     // Interacciones de ordenación en cabecera (delegadas)
     const thead = document.querySelector('table thead');
@@ -858,6 +985,12 @@
 
     document.getElementById('searchBtn').addEventListener('click', load);
     pageSizeSel.addEventListener('change', load);
+    window.addEventListener('scroll', () => {
+      if (!infiniteMode) return;
+      if ((window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 300)) {
+        loadPedidosInfiniteNext();
+      }
+    });
     load();
 
     document.getElementById('exportBtn').addEventListener('click', () => {
