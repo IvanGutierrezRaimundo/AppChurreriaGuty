@@ -145,6 +145,13 @@ app.get('/admin/clientes', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de proveedores (ficha del menú admin)
+app.get('/admin/proveedores', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'proveedores.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 // Página de creación de pedidos desde administración
 app.get('/admin/crear-pedido', ensureAdmin, (_req, res) => {
   return res.sendFile(path.join(__dirname, 'private', 'crear_pedido.html'), {
@@ -561,6 +568,218 @@ app.delete('/admin/api/clientes/:id', ensureAdmin, async (req, res) => {
   }
 });
 
+app.get('/admin/api/proveedores', ensureAdmin, async (req, res) => {
+  try {
+    const { q, page = 1, pageSize = 20 } = req.query;
+    const sortMap = {
+      id: 'id',
+      nif: 'nif',
+      nombre: 'nombre',
+      telefono: 'telefono',
+      email: 'email',
+      direccion: 'direccion',
+      ciudad: 'ciudad',
+      provincia: 'provincia',
+      cp: 'cp',
+      fecha_registro: 'fecha_registro'
+    };
+    const sortParam = (req.query.sort || 'fecha_registro').toString();
+    const dirParam = (req.query.dir || 'desc').toString().toLowerCase();
+    const sortCol = sortMap[sortParam] || 'fecha_registro';
+    const sortDir = dirParam === 'asc' ? 'ASC' : 'DESC';
+
+    const where = [];
+    const params = [];
+    if (q) {
+      where.push('(nombre LIKE ? OR nif LIKE ? OR telefono LIKE ? OR email LIKE ? OR direccion LIKE ? OR ciudad LIKE ? OR provincia LIKE ? OR cp LIKE ?)');
+      const like = `%${q}%`;
+      params.push(like, like, like, like, like, like, like, like);
+    }
+
+    const safePageSize = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 500);
+    const safePage = Math.max(parseInt(page, 10) || 1, 1);
+    const offset = (safePage - 1) * safePageSize;
+
+    const sql = `SELECT id, nif, nombre, telefono, email, direccion, ciudad, provincia, cp, fecha_registro
+      FROM proveedores
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY ${sortCol} ${sortDir}, id DESC
+      LIMIT ${safePageSize} OFFSET ${offset}`;
+
+    const [rows] = await pool.execute(sql, params);
+    res.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error('Error listando proveedores:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.post('/admin/api/proveedores', ensureAdmin, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const nullIfEmpty = (v) => {
+      if (typeof v === 'undefined' || v === null) return null;
+      const s = String(v).trim();
+      return s === '' ? null : s;
+    };
+
+    const nif = nullIfEmpty(body.nif);
+    const nombre = nullIfEmpty(body.nombre);
+    const telefono = nullIfEmpty(body.telefono);
+    const email = nullIfEmpty(body.email);
+    const direccion = nullIfEmpty(body.direccion);
+    const ciudad = nullIfEmpty(body.ciudad);
+    const provincia = nullIfEmpty(body.provincia);
+    const cp = nullIfEmpty(body.cp);
+
+    if (!nombre) {
+      return res.status(400).json({ ok: false, error: 'El nombre es obligatorio.' });
+    }
+    if (!telefono || !isValidSpanishPhone(telefono)) {
+      return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
+    }
+    if (nif && !isValidSpanishNif(nif)) {
+      return res.status(400).json({ ok: false, error: 'Introduce un NIF/DNI/NIE/CIF valido.' });
+    }
+    if (email && !isValidEmail(email)) {
+      return res.status(400).json({ ok: false, error: 'Introduce un email valido.' });
+    }
+
+    const [result] = await pool.execute(
+      `INSERT INTO proveedores (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nif ? String(nif).toUpperCase() : null,
+        nombre,
+        String(telefono).trim(),
+        email ? String(email).trim() : null,
+        direccion,
+        ciudad,
+        provincia,
+        cp
+      ]
+    );
+
+    const [rows] = await pool.execute(
+      'SELECT id, nif, nombre, telefono, email, direccion, ciudad, provincia, cp, fecha_registro FROM proveedores WHERE id = ? LIMIT 1',
+      [result.insertId]
+    );
+    res.status(201).json({ ok: true, data: rows[0] || null });
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ ok: false, error: 'El NIF ya existe en otro proveedor.' });
+    }
+    console.error('Error creando proveedor:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.put('/admin/api/proveedores/:id', ensureAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'ID invalido' });
+
+    const [rows] = await pool.execute('SELECT * FROM proveedores WHERE id = ? LIMIT 1', [id]);
+    if (!rows || rows.length === 0) return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' });
+
+    const body = req.body || {};
+    const current = rows[0];
+
+    const nullIfEmpty = (v) => {
+      if (typeof v === 'undefined' || v === null) return null;
+      const s = String(v).trim();
+      return s === '' ? null : s;
+    };
+
+    const payload = {
+      nif: nullIfEmpty(body.nif),
+      nombre: nullIfEmpty(body.nombre),
+      telefono: nullIfEmpty(body.telefono),
+      email: nullIfEmpty(body.email),
+      direccion: nullIfEmpty(body.direccion),
+      ciudad: nullIfEmpty(body.ciudad),
+      provincia: nullIfEmpty(body.provincia),
+      cp: nullIfEmpty(body.cp)
+    };
+
+    const nombreFinal = payload.nombre || current.nombre;
+    if (!nombreFinal) {
+      return res.status(400).json({ ok: false, error: 'El nombre es obligatorio.' });
+    }
+
+    const has = (key) => Object.prototype.hasOwnProperty.call(body, key);
+    const nifFinal = has('nif') ? payload.nif : (current.nif || null);
+    const telefonoFinal = has('telefono') ? payload.telefono : (current.telefono || null);
+    const emailFinal = has('email') ? payload.email : (current.email || null);
+    const direccionFinal = has('direccion') ? payload.direccion : (current.direccion || null);
+    const ciudadFinal = has('ciudad') ? payload.ciudad : (current.ciudad || null);
+    const provinciaFinal = has('provincia') ? payload.provincia : (current.provincia || null);
+    const cpFinal = has('cp') ? payload.cp : (current.cp || null);
+
+    if (nifFinal && !isValidSpanishNif(nifFinal)) {
+      return res.status(400).json({ ok: false, error: 'Introduce un NIF/DNI/NIE/CIF valido.' });
+    }
+    if (!telefonoFinal || !isValidSpanishPhone(telefonoFinal)) {
+      return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
+    }
+    if (emailFinal && !isValidEmail(emailFinal)) {
+      return res.status(400).json({ ok: false, error: 'Introduce un email valido.' });
+    }
+
+    await pool.execute(
+      `UPDATE proveedores
+       SET nif = ?, nombre = ?, telefono = ?, email = ?, direccion = ?, ciudad = ?, provincia = ?, cp = ?
+       WHERE id = ?`,
+      [
+        nifFinal ? String(nifFinal).toUpperCase() : null,
+        nombreFinal,
+        String(telefonoFinal).trim(),
+        emailFinal ? String(emailFinal).trim() : null,
+        direccionFinal,
+        ciudadFinal,
+        provinciaFinal,
+        cpFinal,
+        id
+      ]
+    );
+
+    const [updatedRows] = await pool.execute(
+      'SELECT id, nif, nombre, telefono, email, direccion, ciudad, provincia, cp, fecha_registro FROM proveedores WHERE id = ? LIMIT 1',
+      [id]
+    );
+    res.json({ ok: true, data: updatedRows[0] || null });
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ ok: false, error: 'El NIF ya existe en otro proveedor.' });
+    }
+    console.error('Error actualizando proveedor:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.delete('/admin/api/proveedores/:id', ensureAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ ok: false, error: 'ID invalido' });
+    }
+
+    const [rows] = await pool.execute('SELECT id FROM proveedores WHERE id = ? LIMIT 1', [id]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Proveedor no encontrado' });
+    }
+
+    const [result] = await pool.execute('DELETE FROM proveedores WHERE id = ?', [id]);
+    return res.json({ ok: true, affectedRows: result.affectedRows });
+  } catch (err) {
+    if (err && (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED')) {
+      return res.status(400).json({ ok: false, error: 'No se puede eliminar el proveedor porque tiene datos relacionados.' });
+    }
+    console.error('Error eliminando proveedor:', err);
+    return res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
 // Obtener detalle de un pedido
 app.get('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
   try {
@@ -807,6 +1026,31 @@ app.get('/admin/api/clientes/export.csv', ensureAdmin, async (req, res) => {
   }
 });
 
+app.get('/admin/api/proveedores/export.csv', ensureAdmin, async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT id, nif, nombre, telefono, email, direccion, ciudad, provincia, cp, fecha_registro FROM proveedores ORDER BY fecha_registro DESC, id DESC');
+    const header = 'id;nif;nombre;telefono;email;direccion;ciudad;provincia;cp;fecha_registro\n';
+    const body = rows.map(r => [
+      r.id,
+      r.nif || '',
+      r.nombre || '',
+      r.telefono || '',
+      r.email || '',
+      r.direccion || '',
+      r.ciudad || '',
+      r.provincia || '',
+      r.cp || '',
+      r.fecha_registro || ''
+    ].join(';')).join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="proveedores.csv"');
+    res.send(header + body);
+  } catch (err) {
+    console.error('Error exportando proveedores:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
 // Página de detalle del pedido (protegida)
 app.get('/admin/pedido/:id', ensureAdmin, (req, res) => {
   const id = Number(req.params.id);
@@ -891,9 +1135,25 @@ async function ensureSchema() {
       UNIQUE KEY uk_clientes_telefono (telefono)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `;
+  const ddlProveedores = `
+    CREATE TABLE IF NOT EXISTS proveedores (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      nif VARCHAR(15),
+      nombre VARCHAR(100) NOT NULL,
+      telefono VARCHAR(15),
+      email VARCHAR(100),
+      direccion VARCHAR(255),
+      ciudad VARCHAR(50),
+      provincia VARCHAR(50),
+      cp VARCHAR(10),
+      fecha_registro TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_proveedores_nif (nif)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `;
   try {
     await pool.execute(ddlPedidos);
     await pool.execute(ddlClientes);
+    await pool.execute(ddlProveedores);
     // Compatibilidad: en algunas BBDD antiguas existe un CHECK que fuerza presupuesto >= 100.
     // Se elimina para permitir importes inferiores en edición de pedidos desde admin.
     const [checkRows] = await pool.execute(

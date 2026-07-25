@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Proveedores</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .admin-bar{ max-width: 1200px; margin: 0 auto var(--space-lg); display:flex; align-items:center; justify-content: space-between; }
+    .admin-grid{ display:grid; grid-template-columns: 2.5fr 1fr auto; gap: 12px; align-items:end; }
+    .admin-table-wrap{ max-width: 1200px; margin: 0 auto; }
+    .admin-doc{ max-width: 1200px; margin: 0 auto; }
+    th.sortable{ cursor: pointer; user-select: none; }
+    th .sort-icons{ margin-left: 6px; font-size: 0.82rem; color: var(--color-muted); display:inline-flex; gap:2px; }
+    th[data-dir="asc"] .arrow-up{ color: var(--color-brown); }
+    th[data-dir="desc"] .arrow-down{ color: var(--color-brown); }
+    .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
+    .view-switch{ display: flex; justify-content: flex-start; gap: 8px; margin: 0 0 10px; }
+    .view-toggle{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 96px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--color-border);
+      background: var(--color-primary);
+      color: var(--color-brown);
+      font-weight: 800;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease;
+    }
+    .view-toggle:hover{ border-color: var(--color-brown); }
+    .view-toggle.is-active{
+      background: #E5E7EB;
+      border-color: #D1D5DB;
+      color: #374151;
+    }
+    .cards-grid{
+      display: none;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .cards-grid.is-visible{ display: grid; }
+    .proveedor-card{
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      background: #FFF;
+      padding: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .proveedor-card-head{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .proveedor-card-id{ font-weight: 800; color: var(--color-brown); }
+    .proveedor-card-grid{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .proveedor-card-row{
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+    }
+    .proveedor-card-label{ color: var(--color-muted); font-size: 0.9rem; }
+    .proveedor-card-value{ font-weight: 700; text-align: right; }
+    .proveedor-modal-backdrop{
+      position: fixed;
+      inset: 0;
+      background: rgba(43, 30, 24, 0.42);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1000;
+    }
+    .proveedor-modal-backdrop.is-open{ display: flex; }
+    .proveedor-modal{
+      width: min(100%, 640px);
+      background: #FFF;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      padding: 14px;
+      max-height: calc(100vh - 34px);
+      overflow: auto;
+    }
+    .proveedor-modal-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .proveedor-modal-head h2{ margin: 0; color: var(--color-brown); font-size: 1.08rem; }
+    .proveedor-modal-grid{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 10px;
+    }
+    .proveedor-detail{
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: #FFF;
+      padding: 8px;
+      min-height: 48px;
+    }
+    .proveedor-detail-label{ margin: 0 0 3px; color: var(--color-muted); font-size: 0.78rem; }
+    .proveedor-detail-value{ margin: 0; color: var(--color-brown); font-size: 0.93rem; font-weight: 700; word-break: break-word; }
+    .proveedor-modal-actions{ display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .proveedor-edit-input{
+      width: 100%;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      font: inherit;
+      font-size: 0.92rem;
+      color: var(--color-brown);
+      background: #FFF;
+    }
+    .proveedor-edit-error{ min-height: 1.2em; margin-top: 8px; font-size: 0.9rem; color: #B91C1C; font-weight: 600; }
+    @media (max-width: 680px){
+      .proveedor-modal-grid{ grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px){
+      .cards-grid{ grid-template-columns: 1fr; }
+    }
+    .infinite-status{
+      max-width: 1200px;
+      margin: 10px auto 0;
+      color: var(--color-muted);
+      font-weight: 600;
+      text-align: center;
+      display: none;
+    }
+    .infinite-status.is-visible{ display: block; }
+  </style>
+</head>
+<body>
+  <div class="admin-bar">
+    <h1>Proveedores</h1>
+    <div class="actions">
+      <button type="button" id="menuBtn" title="Menu">Menu</button>
+      <button type="button" id="createProveedorBtn" title="Crear Proveedor">Crear Proveedor</button>
+      <button type="button" id="exportBtn" title="Exportar CSV">Exportar</button>
+      <button type="button" id="printPdfBtn" title="Imprimir PDF">Imprimir PDF</button>
+    </div>
+  </div>
+
+  <div class="doc admin-doc">
+    <section class="admin-grid">
+      <div class="field">
+        <label for="q">Buscar</label>
+        <input id="q" placeholder="nombre, nif, teléfono, email, dirección, ciudad, provincia, cp" />
+      </div>
+      <div class="field">
+        <label for="pageSize">Resultados</label>
+        <select id="pageSize">
+          <option>20</option>
+          <option>50</option>
+          <option>100</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="searchBtn">Buscar</button>
+      </div>
+    </section>
+
+    <div class="admin-table-wrap">
+      <div class="view-switch" aria-label="Cambiar vista de proveedores">
+        <button type="button" id="viewTablaBtn" class="view-toggle is-active" aria-current="page">Tabla</button>
+        <button type="button" id="viewFichasBtn" class="view-toggle">Fichas</button>
+      </div>
+      <table id="proveedoresTable">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="id">ID <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="nif">NIF <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="nombre">Nombre <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="telefono">Teléfono <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="email">Email <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="direccion">Dirección <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="sortable" data-sort="ciudad">Ciudad <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div id="cardsGrid" class="cards-grid"></div>
+      <p id="infiniteStatus" class="infinite-status" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div id="proveedorModalBackdrop" class="proveedor-modal-backdrop" aria-hidden="true">
+    <div class="proveedor-modal" role="dialog" aria-modal="true" aria-labelledby="proveedorModalTitle">
+      <div class="proveedor-modal-head">
+        <h2 id="proveedorModalTitle">Detalle de proveedor</h2>
+      </div>
+      <div class="proveedor-modal-grid">
+        <div class="proveedor-detail"><p class="proveedor-detail-label">ID</p><p id="d_id" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">NIF</p><p id="d_nif" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Nombre</p><p id="d_nombre" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Telefono</p><p id="d_telefono" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Email</p><p id="d_email" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Direccion</p><p id="d_direccion" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Ciudad</p><p id="d_ciudad" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Provincia</p><p id="d_provincia" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">CP</p><p id="d_cp" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Registro</p><p id="d_registro" class="proveedor-detail-value"></p></div>
+      </div>
+      <div class="proveedor-modal-actions">
+        <button type="button" id="proveedorModalClose">Cerrar</button>
+        <button type="button" id="proveedorModalEdit">Editar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="proveedorEditBackdrop" class="proveedor-modal-backdrop" aria-hidden="true">
+    <div class="proveedor-modal" role="dialog" aria-modal="true" aria-labelledby="proveedorEditTitle">
+      <div class="proveedor-modal-head">
+        <h2 id="proveedorEditTitle">Editar proveedor</h2>
+      </div>
+      <div class="proveedor-modal-grid">
+        <div class="proveedor-detail"><p class="proveedor-detail-label">ID</p><p id="e_id" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">NIF</p><input id="e_nif" class="proveedor-edit-input" maxlength="15" /></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Nombre</p><input id="e_nombre" class="proveedor-edit-input" /></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Telefono</p><input id="e_telefono" class="proveedor-edit-input" inputmode="numeric" maxlength="9" /></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Email</p><input id="e_email" class="proveedor-edit-input" type="email" /></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Direccion</p><input id="e_direccion" class="proveedor-edit-input" /></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Ciudad</p><input id="e_ciudad" class="proveedor-edit-input" /></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Provincia</p><input id="e_provincia" class="proveedor-edit-input" /></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">CP</p><input id="e_cp" class="proveedor-edit-input" /></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">Registro</p><p id="e_registro" class="proveedor-detail-value"></p></div>
+      </div>
+      <div id="proveedorEditError" class="proveedor-edit-error"></div>
+      <div class="proveedor-modal-actions">
+        <button type="button" id="proveedorEditCancel">Cancelar</button>
+        <button type="button" id="proveedorEditSubmit">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="actionConfirmModal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="actionConfirmTitle">
+      <div class="confirm-head">
+        <h2 id="actionConfirmTitle" class="confirm-title">Confirmación</h2>
+      </div>
+      <p id="actionConfirmText" class="confirm-status"></p>
+      <div class="confirm-actions">
+        <button type="button" id="actionConfirmCancel" class="ghost">Cancelar</button>
+        <button type="button" id="actionConfirmAccept">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.min.js"></script>
+  <script>
+    const tbody = document.getElementById('tbody');
+    const pageSizeSel = document.getElementById('pageSize');
+    const proveedoresTable = document.getElementById('proveedoresTable');
+    const cardsGrid = document.getElementById('cardsGrid');
+    const viewTablaBtn = document.getElementById('viewTablaBtn');
+    const viewFichasBtn = document.getElementById('viewFichasBtn');
+    const proveedorModalBackdrop = document.getElementById('proveedorModalBackdrop');
+    const proveedorModalClose = document.getElementById('proveedorModalClose');
+    const proveedorModalEdit = document.getElementById('proveedorModalEdit');
+    const proveedorEditBackdrop = document.getElementById('proveedorEditBackdrop');
+    const proveedorEditCancel = document.getElementById('proveedorEditCancel');
+    const proveedorEditSubmit = document.getElementById('proveedorEditSubmit');
+    const proveedorEditError = document.getElementById('proveedorEditError');
+    const proveedorEditTitle = document.getElementById('proveedorEditTitle');
+    const actionConfirmModal = document.getElementById('actionConfirmModal');
+    const actionConfirmTitle = document.getElementById('actionConfirmTitle');
+    const actionConfirmText = document.getElementById('actionConfirmText');
+    const actionConfirmCancel = document.getElementById('actionConfirmCancel');
+    const actionConfirmAccept = document.getElementById('actionConfirmAccept');
+    const infiniteStatus = document.getElementById('infiniteStatus');
+    let actionConfirmResolver = null;
+    let actionConfirmMode = 'confirm';
+    let currentRows = [];
+    let activeDetailClientId = null;
+    let editMode = 'edit';
+    let currentView = 'tabla';
+    let currentSort = 'fecha_registro';
+    let currentDir = 'desc';
+    let infiniteMode = false;
+    let infinitePage = 1;
+    let infiniteHasMore = true;
+    let infiniteLoading = false;
+    const INFINITE_BATCH_SIZE = 100;
+
+    function escapeHtml(value){
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatDateTime(value){
+      if(!value) return '';
+      const dt = new Date(value);
+      if(isNaN(dt)) return String(value);
+      return dt.toLocaleString('es-ES');
+    }
+
+    function updateViewButtons(){
+      const isTabla = currentView === 'tabla';
+      const isFichas = currentView === 'fichas';
+      viewTablaBtn.classList.toggle('is-active', isTabla);
+      viewFichasBtn.classList.toggle('is-active', isFichas);
+      if(isTabla) viewTablaBtn.setAttribute('aria-current', 'page');
+      else viewTablaBtn.removeAttribute('aria-current');
+      if(isFichas) viewFichasBtn.setAttribute('aria-current', 'page');
+      else viewFichasBtn.removeAttribute('aria-current');
+    }
+
+    function applyCurrentView(){
+      const showTabla = currentView === 'tabla';
+      const showFichas = currentView === 'fichas';
+      proveedoresTable.style.display = showTabla ? 'table' : 'none';
+      cardsGrid.classList.toggle('is-visible', showFichas);
+      updateViewButtons();
+    }
+
+    function setInfiniteStatus(text, visible){
+      if(!infiniteStatus) return;
+      infiniteStatus.textContent = text || '';
+      infiniteStatus.classList.toggle('is-visible', !!visible);
+    }
+
+    function renderCard(r){
+      return `
+        <article class="proveedor-card">
+          <div class="proveedor-card-head">
+            <span class="proveedor-card-id">#${escapeHtml(r.id)}</span>
+          </div>
+          <div class="proveedor-card-grid">
+            <div class="proveedor-card-row"><span class="proveedor-card-label">Nombre</span><span class="proveedor-card-value">${escapeHtml(r.nombre)}</span></div>
+            <div class="proveedor-card-row"><span class="proveedor-card-label">Telefono</span><span class="proveedor-card-value">${escapeHtml(r.telefono)}</span></div>
+            <div class="proveedor-card-row"><span class="proveedor-card-label">NIF</span><span class="proveedor-card-value">${escapeHtml(r.nif)}</span></div>
+          </div>
+          <span class="btn-row">
+            <button data-id="${escapeHtml(r.id)}" class="open">Abrir</button>
+            <button data-id="${escapeHtml(r.id)}" class="del">Eliminar</button>
+          </span>
+        </article>
+      `;
+    }
+
+    function updateSortIndicators(){
+      document.querySelectorAll('th.sortable').forEach((th) => {
+        if(th.getAttribute('data-sort') === currentSort){ th.setAttribute('data-dir', currentDir); }
+        else { th.removeAttribute('data-dir'); }
+      });
+    }
+
+    async function downloadProveedoresCsv(){
+      try {
+        const resp = await fetch('/admin/api/proveedores/export.csv', { credentials: 'same-origin' });
+        if (resp.status === 401) {
+          location.href = '/admin';
+          return;
+        }
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(text || 'No se pudo exportar proveedores.');
+        }
+
+        const blob = await resp.blob();
+        const disposition = resp.headers.get('content-disposition') || '';
+        const match = /filename="?([^";]+)"?/i.exec(disposition);
+        const filename = (match && match[1]) ? match[1] : 'proveedores.csv';
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        await showActionAlert({ title: 'Error', message: err?.message || 'No se pudo exportar proveedores.' });
+      }
+    }
+
+    function downloadProveedoresPdf(){
+      if(!window.jspdf || !window.jspdf.jsPDF || typeof window.jspdf.jsPDF !== 'function'){
+        showActionAlert({ title: 'Error', message: 'No se pudo cargar la libreria PDF. Intentalo de nuevo.' });
+        return;
+      }
+      if(!Array.isArray(currentRows) || currentRows.length === 0){
+        showActionAlert({ title: 'Aviso', message: 'No hay proveedores para exportar en PDF.' });
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+
+      doc.setFontSize(16);
+      doc.text('Lista de Proveedores', 40, 40);
+      doc.setFontSize(10);
+      doc.text(`Generado: ${now.toLocaleString('es-ES')}`, 40, 58);
+
+      const headers = [[
+        'ID', 'NIF', 'Nombre', 'Telefono', 'Email', 'Direccion', 'Ciudad', 'Provincia', 'CP', 'Registro'
+      ]];
+      const body = currentRows.map((r) => [
+        r.id ?? '',
+        r.nif ?? '',
+        r.nombre ?? '',
+        r.telefono ?? '',
+        r.email ?? '',
+        r.direccion ?? '',
+        r.ciudad ?? '',
+        r.provincia ?? '',
+        r.cp ?? '',
+        formatDateTime(r.fecha_registro)
+      ]);
+
+      doc.autoTable({
+        head: headers,
+        body,
+        startY: 72,
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46] },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+        theme: 'striped'
+      });
+
+      doc.save(`proveedores_${stamp}.pdf`);
+    }
+
+    function isValidNIF(value){
+      if(!value) return false;
+      const v = String(value).trim().toUpperCase();
+      const dni = /^\d{8}[A-Z]$/;
+      const nie = /^[XYZ]\d{7}[A-Z]$/;
+      const cif = /^[ABCDEFGHJNPQRSUVW]\d{7}[A-Z0-9]$/;
+      const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+      if(dni.test(v)){
+        const num = parseInt(v.slice(0,8), 10);
+        return letters[num % 23] === v.slice(8);
+      }
+      if(nie.test(v)){
+        const map = { X: '0', Y: '1', Z: '2' };
+        const num = parseInt(map[v[0]] + v.slice(1,8), 10);
+        return letters[num % 23] === v.slice(8);
+      }
+      return cif.test(v);
+    }
+
+    function isValidPhone(value){
+      return /^\d{9}$/.test(String(value || '').trim());
+    }
+
+    function isValidEmail(value){
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+    }
+
+    function setDetail(fieldId, value){
+      const el = document.getElementById(fieldId);
+      if (!el) return;
+      el.textContent = value == null || value === '' ? '-' : String(value);
+    }
+
+    function openProveedorModal(proveedor){
+      activeDetailClientId = Number(proveedor.id);
+      setDetail('d_id', proveedor.id);
+      setDetail('d_nif', proveedor.nif);
+      setDetail('d_nombre', proveedor.nombre);
+      setDetail('d_telefono', proveedor.telefono);
+      setDetail('d_email', proveedor.email);
+      setDetail('d_direccion', proveedor.direccion);
+      setDetail('d_ciudad', proveedor.ciudad);
+      setDetail('d_provincia', proveedor.provincia);
+      setDetail('d_cp', proveedor.cp);
+      setDetail('d_registro', formatDateTime(proveedor.fecha_registro));
+      proveedorModalBackdrop.classList.add('is-open');
+      proveedorModalBackdrop.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeProveedorModal(){
+      activeDetailClientId = null;
+      proveedorModalBackdrop.classList.remove('is-open');
+      proveedorModalBackdrop.setAttribute('aria-hidden', 'true');
+    }
+
+    function openEditModal(proveedor){
+      editMode = 'edit';
+      proveedorEditTitle.textContent = 'Editar proveedor';
+      setDetail('e_id', proveedor.id);
+      setDetail('e_registro', formatDateTime(proveedor.fecha_registro));
+      document.getElementById('e_nif').value = proveedor.nif || '';
+      document.getElementById('e_nombre').value = proveedor.nombre || '';
+      document.getElementById('e_telefono').value = proveedor.telefono || '';
+      document.getElementById('e_email').value = proveedor.email || '';
+      document.getElementById('e_direccion').value = proveedor.direccion || '';
+      document.getElementById('e_ciudad').value = proveedor.ciudad || '';
+      document.getElementById('e_provincia').value = proveedor.provincia || '';
+      document.getElementById('e_cp').value = proveedor.cp || '';
+      proveedorEditError.textContent = '';
+      proveedorEditBackdrop.classList.add('is-open');
+      proveedorEditBackdrop.setAttribute('aria-hidden', 'false');
+      document.getElementById('e_nif').focus();
+    }
+
+    function openCreateModal(){
+      editMode = 'create';
+      activeDetailClientId = null;
+      proveedorEditTitle.textContent = 'Crear proveedor';
+      setDetail('e_id', '-');
+      setDetail('e_registro', '-');
+      document.getElementById('e_nif').value = '';
+      document.getElementById('e_nombre').value = '';
+      document.getElementById('e_telefono').value = '';
+      document.getElementById('e_email').value = '';
+      document.getElementById('e_direccion').value = '';
+      document.getElementById('e_ciudad').value = '';
+      document.getElementById('e_provincia').value = '';
+      document.getElementById('e_cp').value = '';
+      proveedorEditError.textContent = '';
+      proveedorEditBackdrop.classList.add('is-open');
+      proveedorEditBackdrop.setAttribute('aria-hidden', 'false');
+      document.getElementById('e_nif').focus();
+    }
+
+    function closeEditModal(){
+      proveedorEditBackdrop.classList.remove('is-open');
+      proveedorEditBackdrop.setAttribute('aria-hidden', 'true');
+      proveedorEditError.textContent = '';
+      proveedorEditSubmit.disabled = false;
+      proveedorEditCancel.disabled = false;
+    }
+
+    function closeActionConfirmModal(accepted){
+      actionConfirmModal.classList.add('hidden');
+      actionConfirmModal.setAttribute('aria-hidden', 'true');
+      if(actionConfirmResolver){
+        const resolve = actionConfirmResolver;
+        actionConfirmResolver = null;
+        resolve(actionConfirmMode === 'alert' ? true : accepted);
+      }
+      actionConfirmCancel.classList.remove('hidden');
+      actionConfirmMode = 'confirm';
+      actionConfirmText.classList.remove('error');
+    }
+
+    function setActionMessageType(type){
+      actionConfirmText.classList.toggle('error', type === 'error');
+    }
+
+    function askActionConfirm({ title, message, acceptText }){
+      actionConfirmMode = 'confirm';
+      actionConfirmTitle.textContent = title || 'Confirmación';
+      actionConfirmText.textContent = message || 'Confirma esta accion para continuar.';
+      setActionMessageType('info');
+      actionConfirmAccept.textContent = acceptText || 'Aceptar';
+      actionConfirmCancel.classList.remove('hidden');
+      actionConfirmModal.classList.remove('hidden');
+      actionConfirmModal.setAttribute('aria-hidden', 'false');
+      actionConfirmAccept.focus();
+      return new Promise((resolve) => {
+        actionConfirmResolver = resolve;
+      });
+    }
+
+    function showActionAlert({ title, message, acceptText, type }){
+      actionConfirmMode = 'alert';
+      const resolvedType = type || ((title || '').toLowerCase() === 'error' ? 'error' : 'info');
+      actionConfirmTitle.textContent = title || (resolvedType === 'error' ? 'Error' : 'Aviso');
+      actionConfirmText.textContent = message || '';
+      setActionMessageType(resolvedType);
+      actionConfirmAccept.textContent = acceptText || 'Aceptar';
+      actionConfirmCancel.classList.add('hidden');
+      actionConfirmModal.classList.remove('hidden');
+      actionConfirmModal.setAttribute('aria-hidden', 'false');
+      actionConfirmAccept.focus();
+      return new Promise((resolve) => {
+        actionConfirmResolver = resolve;
+      });
+    }
+
+    function reopenDetailFromActive(){
+      const proveedor = currentRows.find((r) => Number(r.id) === Number(activeDetailClientId));
+      if (proveedor) openProveedorModal(proveedor);
+    }
+
+    function handleEditFromDetail(){
+      const proveedor = currentRows.find((r) => Number(r.id) === Number(activeDetailClientId));
+      if (!proveedor) {
+        showActionAlert({ title: 'Error', message: 'No se pudo cargar el proveedor para editar.' });
+        return;
+      }
+      proveedorModalBackdrop.classList.remove('is-open');
+      proveedorModalBackdrop.setAttribute('aria-hidden', 'true');
+      openEditModal(proveedor);
+    }
+
+    async function submitProveedorEdit(){
+      const nifValue = document.getElementById('e_nif').value.trim().toUpperCase();
+      const nombreValue = document.getElementById('e_nombre').value.trim();
+      const telefonoValue = document.getElementById('e_telefono').value.trim();
+      const emailValue = document.getElementById('e_email').value.trim();
+      const payload = {
+        nif: nifValue,
+        nombre: nombreValue,
+        telefono: telefonoValue,
+        email: emailValue,
+        direccion: document.getElementById('e_direccion').value.trim(),
+        ciudad: document.getElementById('e_ciudad').value.trim(),
+        provincia: document.getElementById('e_provincia').value.trim(),
+        cp: document.getElementById('e_cp').value.trim()
+      };
+
+      if (!nombreValue) {
+        proveedorEditError.textContent = 'El nombre es obligatorio.';
+        document.getElementById('e_nombre').focus();
+        return;
+      }
+      if (nifValue && !isValidNIF(nifValue)) {
+        proveedorEditError.textContent = 'Introduce un NIF/DNI/NIE/CIF valido.';
+        document.getElementById('e_nif').focus();
+        return;
+      }
+      if (!isValidPhone(telefonoValue)) {
+        proveedorEditError.textContent = 'El telefono debe tener exactamente 9 digitos.';
+        document.getElementById('e_telefono').focus();
+        return;
+      }
+      if (emailValue && !isValidEmail(emailValue)) {
+        proveedorEditError.textContent = 'Introduce un email valido.';
+        document.getElementById('e_email').focus();
+        return;
+      }
+
+      proveedorEditSubmit.disabled = true;
+      proveedorEditCancel.disabled = true;
+      proveedorEditError.textContent = '';
+      try {
+        const isCreate = editMode === 'create';
+        const id = Number(activeDetailClientId);
+        const url = isCreate ? '/admin/api/proveedores' : ('/admin/api/proveedores/' + id);
+        const method = isCreate ? 'POST' : 'PUT';
+        if (!isCreate && !Number.isFinite(id)) {
+          proveedorEditError.textContent = 'No se pudo identificar el proveedor a editar.';
+          return;
+        }
+        const resp = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        });
+        if (resp.status === 401) {
+          location.href = '/admin';
+          return;
+        }
+        const data = await resp.json();
+        if (!data || !data.ok || !data.data) {
+          proveedorEditError.textContent = data?.error || (isCreate ? 'No se pudo crear el proveedor.' : 'No se pudo actualizar el proveedor.');
+          return;
+        }
+        const updated = data.data;
+        await load();
+        closeEditModal();
+        openProveedorModal(updated);
+      } catch (_err) {
+        proveedorEditError.textContent = editMode === 'create' ? 'Error creando proveedor.' : 'Error actualizando proveedor.';
+      } finally {
+        if (proveedorEditBackdrop.classList.contains('is-open')) {
+          proveedorEditSubmit.disabled = false;
+          proveedorEditCancel.disabled = false;
+        }
+      }
+    }
+
+    async function deleteProveedorById(id){
+      const numericId = Number(id);
+      if (!Number.isFinite(numericId)) {
+        await showActionAlert({ title: 'Error', message: 'No se pudo identificar el proveedor a eliminar.' });
+        return;
+      }
+
+      const proveedor = currentRows.find((r) => Number(r.id) === numericId);
+      const nombre = proveedor?.nombre ? ` (${proveedor.nombre})` : '';
+      const confirmed = await askActionConfirm({
+        title: 'Confirmación',
+        message: `Vas a eliminar el proveedor #${numericId}${nombre} de la base de datos.\n\n¿Deseas continuar?`,
+        acceptText: 'Eliminar'
+      });
+      if (!confirmed) return;
+
+      try {
+        const resp = await fetch(`/admin/api/proveedores/${numericId}`, {
+          method: 'DELETE',
+          credentials: 'same-origin'
+        });
+
+        if (resp.status === 401) {
+          location.href = '/admin';
+          return;
+        }
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          await showActionAlert({ title: 'Error', message: data?.error || 'No se pudo eliminar el proveedor.' });
+          return;
+        }
+
+        if (Number(activeDetailClientId) === numericId) {
+          closeProveedorModal();
+        }
+        closeEditModal();
+        await load();
+      } catch (_err) {
+        await showActionAlert({ title: 'Error', message: 'Error eliminando proveedor.' });
+      }
+    }
+
+    function bindActions(){
+      document.querySelectorAll('button.open').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          const proveedor = currentRows.find((r) => String(r.id) === String(id));
+          if (!proveedor) {
+            showActionAlert({ title: 'Error', message: 'No se pudo cargar el detalle del proveedor.' });
+            return;
+          }
+          openProveedorModal(proveedor);
+        });
+      });
+      document.querySelectorAll('button.del').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          await deleteProveedorById(id);
+        });
+      });
+    }
+
+    async function load(){
+      const q = document.getElementById('q').value.trim();
+      const pageSizeValue = pageSizeSel.value;
+
+      if (pageSizeValue === 'all') {
+        infiniteMode = true;
+        infinitePage = 1;
+        infiniteHasMore = true;
+        currentRows = [];
+        tbody.innerHTML = '';
+        cardsGrid.innerHTML = '';
+        setInfiniteStatus('Cargando más resultados...', true);
+        await loadProveedoresInfiniteNext();
+        if(currentRows.length === 0 && !infiniteHasMore){
+          setInfiniteStatus('No hay resultados', true);
+        }
+        return;
+      }
+
+      infiniteMode = false;
+      setInfiniteStatus('', false);
+      const pageSize = Number(pageSizeValue);
+      const params = new URLSearchParams({ page: '1', pageSize: String(pageSize), sort: currentSort, dir: currentDir });
+      if (q) params.set('q', q);
+
+      const res = await fetch('/admin/api/proveedores?' + params.toString());
+      const data = await res.json();
+      if (!data.ok) {
+        await showActionAlert({ title: 'Error', message: data.error || 'Error cargando proveedores.' });
+        return;
+      }
+
+      tbody.innerHTML = '';
+      cardsGrid.innerHTML = '';
+      const rows = Array.isArray(data.data) ? data.data : [];
+      currentRows = rows;
+      for (const r of rows){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(r.id)}</td>
+          <td>${escapeHtml(r.nif)}</td>
+          <td>${escapeHtml(r.nombre)}</td>
+          <td>${escapeHtml(r.telefono)}</td>
+          <td>${escapeHtml(r.email)}</td>
+          <td>${escapeHtml(r.direccion)}</td>
+          <td>${escapeHtml(r.ciudad)}</td>
+          <td>
+            <span class="btn-row">
+              <button data-id="${escapeHtml(r.id)}" class="open">Abrir</button>
+              <button data-id="${escapeHtml(r.id)}" class="del">Eliminar</button>
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        cardsGrid.insertAdjacentHTML('beforeend', renderCard(r));
+      }
+
+      bindActions();
+      updateSortIndicators();
+      applyCurrentView();
+    }
+
+    async function loadProveedoresInfiniteNext(){
+      if(!infiniteMode || infiniteLoading || !infiniteHasMore) return;
+      infiniteLoading = true;
+      setInfiniteStatus('Cargando más resultados...', true);
+      try {
+        const q = document.getElementById('q').value.trim();
+        const params = new URLSearchParams({
+          page: String(infinitePage),
+          pageSize: String(INFINITE_BATCH_SIZE),
+          sort: currentSort,
+          dir: currentDir
+        });
+        if (q) params.set('q', q);
+
+        const res = await fetch('/admin/api/proveedores?' + params.toString());
+        const data = await res.json();
+        if (!data.ok) {
+          await showActionAlert({ title: 'Error', message: data.error || 'Error cargando proveedores.' });
+          infiniteHasMore = false;
+          return;
+        }
+
+        const chunk = Array.isArray(data.data) ? data.data : [];
+        currentRows = currentRows.concat(chunk);
+        if (chunk.length < INFINITE_BATCH_SIZE) infiniteHasMore = false;
+        infinitePage += 1;
+
+        tbody.innerHTML = '';
+        cardsGrid.innerHTML = '';
+        for (const r of currentRows){
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${escapeHtml(r.id)}</td>
+            <td>${escapeHtml(r.nif)}</td>
+            <td>${escapeHtml(r.nombre)}</td>
+            <td>${escapeHtml(r.telefono)}</td>
+            <td>${escapeHtml(r.email)}</td>
+            <td>${escapeHtml(r.direccion)}</td>
+            <td>${escapeHtml(r.ciudad)}</td>
+            <td>
+              <span class="btn-row">
+                <button data-id="${escapeHtml(r.id)}" class="open">Abrir</button>
+                <button data-id="${escapeHtml(r.id)}" class="del">Eliminar</button>
+              </span>
+            </td>
+          `;
+          tbody.appendChild(tr);
+          cardsGrid.insertAdjacentHTML('beforeend', renderCard(r));
+        }
+
+        bindActions();
+        updateSortIndicators();
+        applyCurrentView();
+        if(!infiniteHasMore) setInfiniteStatus('Fin de resultados', true);
+        else setInfiniteStatus('Desplázate para cargar más', true);
+      } finally {
+        infiniteLoading = false;
+      }
+    }
+
+    const thead = document.querySelector('table thead');
+    if (thead) {
+      thead.addEventListener('click', (ev) => {
+        const th = ev.target.closest('th.sortable');
+        if (!th) return;
+        const col = th.getAttribute('data-sort');
+        if (col === currentSort) currentDir = currentDir === 'asc' ? 'desc' : 'asc';
+        else {
+          currentSort = col;
+          currentDir = 'asc';
+        }
+        load();
+      });
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', load);
+    pageSizeSel.addEventListener('change', load);
+    window.addEventListener('scroll', () => {
+      if (!infiniteMode) return;
+      if ((window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 300)) {
+        loadProveedoresInfiniteNext();
+      }
+    });
+
+    document.getElementById('menuBtn').addEventListener('click', () => {
+      location.href = '/admin';
+    });
+
+    document.getElementById('createProveedorBtn').addEventListener('click', openCreateModal);
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      downloadProveedoresCsv();
+    });
+
+    document.getElementById('printPdfBtn').addEventListener('click', () => {
+      downloadProveedoresPdf();
+    });
+
+    viewTablaBtn.addEventListener('click', () => {
+      currentView = 'tabla';
+      applyCurrentView();
+    });
+    viewFichasBtn.addEventListener('click', () => {
+      currentView = 'fichas';
+      applyCurrentView();
+    });
+
+    proveedorModalClose.addEventListener('click', closeProveedorModal);
+    proveedorModalEdit.addEventListener('click', handleEditFromDetail);
+    proveedorModalBackdrop.addEventListener('click', (ev) => {
+      if (ev.target === proveedorModalBackdrop) closeProveedorModal();
+    });
+    proveedorEditCancel.addEventListener('click', () => {
+      closeEditModal();
+      if (editMode === 'edit') reopenDetailFromActive();
+    });
+    proveedorEditSubmit.addEventListener('click', submitProveedorEdit);
+    proveedorEditBackdrop.addEventListener('click', (ev) => {
+      if (ev.target === proveedorEditBackdrop) {
+        closeEditModal();
+        if (editMode === 'edit') reopenDetailFromActive();
+      }
+    });
+    actionConfirmCancel.addEventListener('click', () => closeActionConfirmModal(false));
+    actionConfirmAccept.addEventListener('click', () => closeActionConfirmModal(true));
+    actionConfirmModal.addEventListener('click', (ev) => {
+      if(ev.target === actionConfirmModal){
+        closeActionConfirmModal(false);
+      }
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Escape') return;
+      if (!actionConfirmModal.classList.contains('hidden')) {
+        closeActionConfirmModal(false);
+        return;
+      }
+      if (proveedorEditBackdrop.classList.contains('is-open')) {
+        closeEditModal();
+        if (editMode === 'edit') reopenDetailFromActive();
+        return;
+      }
+      if (proveedorModalBackdrop.classList.contains('is-open')) {
+        closeProveedorModal();
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>
