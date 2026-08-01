@@ -315,6 +315,11 @@
     const actionConfirmCancel = document.getElementById('actionConfirmCancel');
     const actionConfirmAccept = document.getElementById('actionConfirmAccept');
     const infiniteStatus = document.getElementById('infiniteStatus');
+    const FACTURA_IVA_RATE_PRODUCTOS = 0.10;
+    const FACTURA_IVA_RATE_ENVIO = 0.21;
+    const FACTURA_PRICE_CHURRO_SIN_IVA_CALC = 0.22727272727;
+    const FACTURA_PRICE_CHOCOLATE_SIN_IVA_CALC = 1.3636363636;
+    const FACTURA_PRICE_ENVIO = 25;
     let editingEstadoId = null;
     let actionConfirmResolver = null;
     let actionConfirmMode = 'confirm';
@@ -624,6 +629,253 @@
         actionConfirmResolver = resolve;
       });
     }
+
+    function roundMoney(value){
+      return Number((Number(value || 0)).toFixed(2));
+    }
+
+    function formatMoney(value){
+      return `${roundMoney(value).toFixed(2).replace('.', ',')} €`;
+    }
+
+    function formatUnitMoney(value){
+      const num = Number(value || 0);
+      const truncated = Math.trunc(num * 1000) / 1000;
+      return `${truncated.toFixed(3).replace('.', ',')} €`;
+    }
+
+    function formatInvoiceDate(value){
+      if(!value) return formatDate(new Date());
+      return formatDate(value);
+    }
+
+    function generateFacturaNumero(pedido){
+      const fechaRaw = String(pedido?.fecha || '').trim();
+      const fechaCompacta = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw)
+        ? fechaRaw.replace(/-/g, '')
+        : `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`;
+      const randomPart = Math.random().toString(36).slice(2, 6).toUpperCase();
+      const idPart = String(pedido?.id || '').padStart(4, '0');
+      return `FAC-${fechaCompacta}-${idPart}-${randomPart}`;
+    }
+
+    async function fetchPedidoById(id){
+      const resp = await fetch(`/admin/api/pedidos/${id}`, { credentials: 'same-origin' });
+      if(resp.status === 401) throw new Error('SESSION');
+      const data = await resp.json().catch(() => ({}));
+      if(!data || !data.ok || !data.data) throw new Error(data?.error || 'No se pudo cargar el pedido');
+      return data.data;
+    }
+
+    async function loadFacturaLogo(){
+      try {
+        const resp = await fetch('/img/logo_nuevo_churre.jpeg', { cache: 'no-store' });
+        if(!resp.ok) return null;
+        const blob = await resp.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('No se pudo leer el logo'));
+          reader.readAsDataURL(blob);
+        });
+      } catch(_err){
+        return null;
+      }
+    }
+
+    function buildFacturaItems(pedido){
+      const items = [];
+      const personas = Number(pedido?.personas || 0);
+      const churrosPorPersona = Number(pedido?.churros_por_persona || 0);
+      const chocolates = Number(pedido?.chocolates || 0);
+      const requiereEnvio = !!pedido?.requiere_envio;
+
+      const cantidadChurros = Number.isFinite(personas) && Number.isFinite(churrosPorPersona)
+        ? Math.max(0, roundMoney(personas * churrosPorPersona))
+        : 0;
+      if(cantidadChurros > 0){
+        items.push({
+          concepto: 'Churros',
+          cantidad: cantidadChurros,
+          precioUnitarioSinIva: FACTURA_PRICE_CHURRO_SIN_IVA_CALC,
+          ivaRate: FACTURA_IVA_RATE_PRODUCTOS,
+          esEnvio: false
+        });
+      }
+
+      const cantidadChocolate = Number.isFinite(chocolates) ? Math.max(0, roundMoney(chocolates)) : 0;
+      if(cantidadChocolate > 0){
+        items.push({
+          concepto: 'Chocolate',
+          cantidad: cantidadChocolate,
+          precioUnitarioSinIva: FACTURA_PRICE_CHOCOLATE_SIN_IVA_CALC,
+          ivaRate: FACTURA_IVA_RATE_PRODUCTOS,
+          esEnvio: false
+        });
+      }
+
+      if(requiereEnvio){
+        items.push({
+          concepto: 'Envío',
+          cantidad: 1,
+          precioUnitarioSinIva: FACTURA_PRICE_ENVIO / (1 + FACTURA_IVA_RATE_ENVIO),
+          ivaRate: FACTURA_IVA_RATE_ENVIO,
+          esEnvio: true
+        });
+      }
+
+      return items.map((item) => {
+        const precioUnitarioSinIva = Number(item.precioUnitarioSinIva || 0);
+        const totalSinIva = roundMoney(precioUnitarioSinIva * item.cantidad);
+        const ivaImporte = roundMoney(totalSinIva * item.ivaRate);
+        const totalConIva = roundMoney(totalSinIva + ivaImporte);
+        return {
+          ...item,
+          precioUnitarioSinIva,
+          totalSinIva,
+          ivaImporte,
+          totalConIva
+        };
+      });
+    }
+
+    async function downloadFacturaPdf(pedidoId){
+      if(!window.jspdf || !window.jspdf.jsPDF || typeof window.jspdf.jsPDF !== 'function'){
+        await showActionAlert({ title: 'Error', message: 'No se pudo cargar la librería PDF. Inténtalo de nuevo.' });
+        return;
+      }
+
+      let pedido = null;
+      try {
+        pedido = await fetchPedidoById(pedidoId);
+      } catch(err){
+        if(err && err.message === 'SESSION'){
+          location.href = '/admin';
+          return;
+        }
+        await showActionAlert({ title: 'Error', message: 'No se pudo cargar el pedido para generar la factura.' });
+        return;
+      }
+
+      const items = buildFacturaItems(pedido);
+      if(items.length === 0){
+        await showActionAlert({ title: 'Aviso', message: 'El pedido no tiene conceptos facturables para generar la factura.' });
+        return;
+      }
+
+      const subtotalSinIva = roundMoney(items.reduce((acc, item) => acc + item.totalSinIva, 0));
+      const ivaTotal = roundMoney(items.reduce((acc, item) => acc + item.ivaImporte, 0));
+      const totalConIva = roundMoney(subtotalSinIva + ivaTotal);
+      const envioItem = items.find((item) => item.esEnvio);
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const logoDataUrl = await loadFacturaLogo();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      const empresaLineas = [
+        'Roizmundo C.B.',
+        'N.I.F. E44632735',
+        'C/General Elorza nº69',
+        '33001 Oviedo',
+        'Tlfn: 985221435'
+      ];
+
+      let y = 48;
+      if(logoDataUrl){
+        try {
+          doc.addImage(logoDataUrl, 'JPEG', pageWidth - 180, 30, 130, 65);
+        } catch(_err){
+          // Si falla el logo, la factura se genera igualmente.
+        }
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.text('FACTURA', 40, y);
+      y += 18;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10.5);
+      empresaLineas.forEach((linea) => {
+        doc.text(linea, 40, y);
+        y += 14;
+      });
+
+      const facturaNumero = generateFacturaNumero(pedido);
+      const fechaFactura = formatInvoiceDate(pedido.fecha);
+      const bloqueFacturaY = 48;
+      doc.setFont('helvetica', 'bold');
+      doc.text('Número de factura:', 320, bloqueFacturaY);
+      doc.text('Fecha pedido:', 320, bloqueFacturaY + 18);
+      doc.setFont('helvetica', 'normal');
+      doc.text(facturaNumero, 430, bloqueFacturaY);
+      doc.text(fechaFactura, 430, bloqueFacturaY + 18);
+
+      const clienteY = 150;
+      doc.setDrawColor(210, 210, 210);
+      doc.rect(40, clienteY, pageWidth - 80, 102);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('Datos del cliente', 50, clienteY + 18);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      const clienteLineas = [
+        `Nombre: ${pedido.nombre || '-'}`,
+        `NIF: ${pedido.nif || '-'}`,
+        `Teléfono: ${pedido.telefono || '-'}`,
+        `Email: ${pedido.email || '-'}`,
+        `Dirección: ${pedido.direccion || '-'}${pedido.cp ? `, ${pedido.cp}` : ''}${pedido.ciudad ? `, ${pedido.ciudad}` : ''}${pedido.provincia ? `, ${pedido.provincia}` : ''}`
+      ];
+      let clienteLineY = clienteY + 38;
+      clienteLineas.forEach((linea) => {
+        const wrapped = doc.splitTextToSize(linea, pageWidth - 100);
+        doc.text(wrapped, 50, clienteLineY);
+        clienteLineY += wrapped.length * 13;
+      });
+
+      const bodyRows = items.map((item) => [
+        item.concepto,
+        String(item.cantidad),
+        formatUnitMoney(item.precioUnitarioSinIva),
+        formatMoney(item.totalSinIva)
+      ]);
+
+      doc.autoTable({
+        startY: 272,
+        head: [['Descripción / Concepto', 'Cantidad', 'Precio unidad (sin IVA)', 'Precio total (sin IVA)']],
+        body: bodyRows,
+        margin: { left: 40, right: 40 },
+        styles: { fontSize: 10, cellPadding: 6 },
+        headStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46] },
+        theme: 'grid'
+      });
+
+      const tableEndY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 272;
+      let resumenY = tableEndY + 26;
+      const resumenXLabel = pageWidth - 260;
+      const resumenXValue = pageWidth - 40;
+
+      function drawResumenLine(label, value, bold){
+        doc.setFont('helvetica', bold ? 'bold' : 'normal');
+        doc.text(label, resumenXLabel, resumenY);
+        doc.text(value, resumenXValue, resumenY, { align: 'right' });
+        resumenY += 16;
+      }
+
+      drawResumenLine('Subtotal (sin IVA):', formatMoney(subtotalSinIva), false);
+      drawResumenLine('Tasa de impuesto productos:', '10%', false);
+      drawResumenLine('IVA total:', formatMoney(ivaTotal), false);
+      if(envioItem){
+        drawResumenLine('Base envío (sin IVA):', formatMoney(envioItem.totalSinIva), false);
+        drawResumenLine('IVA envío (21%):', formatMoney(envioItem.ivaImporte), false);
+      }
+      drawResumenLine('TOTAL:', formatMoney(totalConIva), true);
+
+      const fileSafeNumero = facturaNumero.replace(/[^A-Za-z0-9-]/g, '');
+      doc.save(`factura_${fileSafeNumero}.pdf`);
+    }
+
     async function saveEstadoFromModal(){
       const id = Number(editingEstadoId);
       if(!Number.isFinite(id)) return;
@@ -911,25 +1163,11 @@
     }
 
     function bindActions() {
-      document.querySelectorAll('button.del').forEach(btn => {
+      document.querySelectorAll('button.factura').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');
-          const row = currentRows.find((r) => String(r.id) === String(id));
-          const estado = row?.estado || 'Pendiente';
-          if (estado !== 'Cancelado') {
-            await showActionAlert({ title: 'Aviso', message: 'Solo se puede eliminar un pedido con estado Cancelado.' });
-            return;
-          }
-          const confirmed = await askActionConfirm({
-            title: 'Confirmación',
-            message: 'Vas a eliminar el pedido #' + id + ' para siempre de la base de datos.\n\n¿Deseas continuar?',
-            acceptText: 'Eliminar'
-          });
-          if (!confirmed) return;
-          const res = await fetch(`/admin/api/pedidos/${id}`, { method: 'DELETE' });
-          const data = await res.json();
-          if (data.ok) load();
-          else await showActionAlert({ title: 'Error', message: data.error || 'Error' });
+          if(!id) return;
+          await downloadFacturaPdf(Number(id));
         });
       });
       document.querySelectorAll('button.open').forEach(btn => {
