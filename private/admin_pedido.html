@@ -179,6 +179,7 @@
       </div>
       <div class="pedido-modal-actions">
         <button type="button" id="pedidoEditBtn">Editar</button>
+        <button type="button" id="pedidoDeleteBtn">Eliminar</button>
         <button type="button" id="pedidoPrintBtn">Imprimir PDF</button>
         <button type="button" id="pedidoCloseBtn">Cerrar</button>
       </div>
@@ -253,7 +254,7 @@
       <div id="pedidoEditError" class="pedido-edit-error"></div>
       <div class="pedido-modal-actions">
         <button type="button" id="pedidoEditCancelBtn">Cancelar</button>
-        <button type="button" id="pedidoEditSubmitBtn">Enviar</button>
+        <button type="button" id="pedidoEditSubmitBtn">Guardar</button>
       </div>
     </div>
   </div>
@@ -781,6 +782,39 @@
       doc.save(`pedido_${valueText(p.id)}_${stamp}.pdf`);
     }
 
+    async function deleteCurrentPedido(){
+      if(!currentPedido || !currentPedido.id) return;
+      const estado = currentPedido.estado || 'Pendiente';
+      if(estado !== 'Cancelado'){
+        await showActionAlert({ title: 'Aviso', message: 'Solo se puede eliminar un pedido con estado Cancelado.' });
+        return;
+      }
+
+      const id = currentPedido.id;
+      const confirmed = await askActionConfirm({
+        title: 'Confirmación',
+        message: 'Vas a eliminar el pedido #' + id + ' para siempre de la base de datos.\n\n¿Deseas continuar?',
+        acceptText: 'Eliminar'
+      });
+      if(!confirmed) return;
+
+      try {
+        const res = await fetch(`/admin/api/pedidos/${id}`, { method: 'DELETE' });
+        if(res.status === 401){
+          location.href = '/admin';
+          return;
+        }
+        const data = await res.json();
+        if(!data || !data.ok){
+          await showActionAlert({ title: 'Error', message: data?.error || 'Error' });
+          return;
+        }
+        location.href = '/admin/pedidos';
+      } catch(_err){
+        await showActionAlert({ title: 'Error', message: 'Error eliminando pedido.' });
+      }
+    }
+
     async function init(){
       const id = getIdFromPath();
       if(!Number.isFinite(id)){
@@ -803,6 +837,7 @@
 
     document.getElementById('pedidoCloseBtn').addEventListener('click', closeDetailModal);
     document.getElementById('pedidoEditBtn').addEventListener('click', openEditModal);
+    document.getElementById('pedidoDeleteBtn').addEventListener('click', deleteCurrentPedido);
     document.getElementById('pedidoPrintBtn').addEventListener('click', downloadPedidoPdf);
     document.getElementById('pedidoEditCancelBtn').addEventListener('click', () => closeEditModal(true));
     document.getElementById('pedidoEditSubmitBtn').addEventListener('click', submitEdit);
