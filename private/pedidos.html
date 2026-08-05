@@ -764,10 +764,24 @@
       const envioItem = items.find((item) => item.esEnvio);
       const productosItems = items.filter((item) => !item.esEnvio);
       const baseProductosSinIva = roundMoney(productosItems.reduce((acc, item) => acc + item.totalSinIva, 0));
-      const ivaProductos = roundMoney(productosItems.reduce((acc, item) => acc + item.ivaImporte, 0));
+      const ivaProductosBase = roundMoney(productosItems.reduce((acc, item) => acc + item.ivaImporte, 0));
       const baseEnvioSinIva = roundMoney(envioItem ? envioItem.totalSinIva : 0);
       const ivaEnvio = roundMoney(envioItem ? envioItem.ivaImporte : 0);
-      const subtotalSinIva = roundMoney(baseProductosSinIva + baseEnvioSinIva);
+      const totalProductosConIvaBase = roundMoney(baseProductosSinIva + ivaProductosBase);
+      const totalEnvasesConIva = roundMoney(baseEnvioSinIva + ivaEnvio);
+      const totalRealPedidoRaw = String(pedido?.presupuesto_total ?? '').trim();
+      const totalRealPedido = Number(totalRealPedidoRaw.replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.')) || 0;
+      let descuentoImporte = 0;
+      let baseProductosSinIvaConDescuento = baseProductosSinIva;
+      let ivaProductos = ivaProductosBase;
+      if(Number.isFinite(totalRealPedido) && totalRealPedido > 0){
+        const totalProductosConIvaConDescuento = roundMoney(Math.max(0, totalRealPedido - totalEnvasesConIva));
+        descuentoImporte = roundMoney(Math.max(0, totalProductosConIvaBase - totalProductosConIvaConDescuento));
+        const baseProductosSinIvaTrasDescuento = totalProductosConIvaConDescuento / (1 + FACTURA_IVA_RATE_PRODUCTOS);
+        baseProductosSinIvaConDescuento = roundMoney(Math.max(0, baseProductosSinIvaTrasDescuento));
+        ivaProductos = roundMoney(baseProductosSinIvaConDescuento * FACTURA_IVA_RATE_PRODUCTOS);
+      }
+      const subtotalSinIva = roundMoney(baseProductosSinIvaConDescuento + baseEnvioSinIva);
       const ivaTotal = roundMoney(ivaProductos + ivaEnvio);
       const totalConIva = roundMoney(subtotalSinIva + ivaTotal);
 
@@ -875,7 +889,10 @@
         resumenY += 16;
       }
 
-      drawResumenLine('Base productos (sin IVA):', formatMoney(baseProductosSinIva), false);
+      if(descuentoImporte > 0){
+        drawResumenLine('Descuento:', formatMoney(descuentoImporte), false);
+      }
+      drawResumenLine('Base productos (sin IVA):', formatMoney(baseProductosSinIvaConDescuento), false);
       if(envioItem){
         drawResumenLine('Base gestión de envases (sin IVA):', formatMoney(baseEnvioSinIva), false);
       }
