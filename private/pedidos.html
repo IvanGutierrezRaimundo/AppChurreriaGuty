@@ -651,12 +651,10 @@
 
     function generateFacturaNumero(pedido){
       const fechaRaw = String(pedido?.fecha || '').trim();
-      const fechaCompacta = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw)
-        ? fechaRaw.replace(/-/g, '')
-        : `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`;
-      const randomPart = Math.random().toString(36).slice(2, 6).toUpperCase();
-      const idPart = String(pedido?.id || '').padStart(4, '0');
-      return `FAC-${fechaCompacta}-${idPart}-${randomPart}`;
+      const fecha = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw) ? new Date(fechaRaw) : new Date();
+      const anio = fecha.getFullYear();
+      const numeroPedido = String(pedido?.id || '').trim();
+      return numeroPedido ? `${numeroPedido}/${anio}` : `${anio}`;
     }
 
     async function fetchPedidoById(id){
@@ -716,7 +714,7 @@
 
       if(requiereEnvio){
         items.push({
-          concepto: 'Envío',
+          concepto: 'Gestión de envases',
           cantidad: 1,
           precioUnitarioSinIva: FACTURA_PRICE_ENVIO / (1 + FACTURA_IVA_RATE_ENVIO),
           ivaRate: FACTURA_IVA_RATE_ENVIO,
@@ -763,15 +761,21 @@
         return;
       }
 
-      const subtotalSinIva = roundMoney(items.reduce((acc, item) => acc + item.totalSinIva, 0));
-      const ivaTotal = roundMoney(items.reduce((acc, item) => acc + item.ivaImporte, 0));
-      const totalConIva = roundMoney(subtotalSinIva + ivaTotal);
       const envioItem = items.find((item) => item.esEnvio);
+      const productosItems = items.filter((item) => !item.esEnvio);
+      const baseProductosSinIva = roundMoney(productosItems.reduce((acc, item) => acc + item.totalSinIva, 0));
+      const ivaProductos = roundMoney(productosItems.reduce((acc, item) => acc + item.ivaImporte, 0));
+      const baseEnvioSinIva = roundMoney(envioItem ? envioItem.totalSinIva : 0);
+      const ivaEnvio = roundMoney(envioItem ? envioItem.ivaImporte : 0);
+      const subtotalSinIva = roundMoney(baseProductosSinIva + baseEnvioSinIva);
+      const ivaTotal = roundMoney(ivaProductos + ivaEnvio);
+      const totalConIva = roundMoney(subtotalSinIva + ivaTotal);
 
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
       const logoDataUrl = await loadFacturaLogo();
       const pageWidth = doc.internal.pageSize.getWidth();
+      const logoBox = { x: pageWidth - 40 - 260, y: 24, maxW: 260, maxH: 130 };
 
       const empresaLineas = [
         'Roizmundo C.B.',
@@ -784,7 +788,15 @@
       let y = 48;
       if(logoDataUrl){
         try {
-          doc.addImage(logoDataUrl, 'JPEG', pageWidth - 180, 30, 130, 65);
+          const logoProps = doc.getImageProperties(logoDataUrl);
+          const logoW = Number(logoProps?.width) || logoBox.maxW;
+          const logoH = Number(logoProps?.height) || logoBox.maxH;
+          const scale = Math.min(logoBox.maxW / logoW, logoBox.maxH / logoH);
+          const drawW = logoW * scale;
+          const drawH = logoH * scale;
+          const drawX = pageWidth - 40 - drawW;
+          const drawY = logoBox.y + ((logoBox.maxH - drawH) / 2);
+          doc.addImage(logoDataUrl, 'JPEG', drawX, drawY, drawW, drawH);
         } catch(_err){
           // Si falla el logo, la factura se genera igualmente.
         }
@@ -804,15 +816,15 @@
 
       const facturaNumero = generateFacturaNumero(pedido);
       const fechaFactura = formatInvoiceDate(pedido.fecha);
-      const bloqueFacturaY = 48;
+      const bloqueFacturaY = 170;
       doc.setFont('helvetica', 'bold');
-      doc.text('Número de factura:', 320, bloqueFacturaY);
-      doc.text('Fecha pedido:', 320, bloqueFacturaY + 18);
+      doc.text('Número de factura:', 40, bloqueFacturaY);
+      doc.text('Fecha:', 40, bloqueFacturaY + 18);
       doc.setFont('helvetica', 'normal');
-      doc.text(facturaNumero, 430, bloqueFacturaY);
-      doc.text(fechaFactura, 430, bloqueFacturaY + 18);
+      doc.text(facturaNumero, 170, bloqueFacturaY);
+      doc.text(fechaFactura, 170, bloqueFacturaY + 18);
 
-      const clienteY = 150;
+      const clienteY = 210;
       doc.setDrawColor(210, 210, 210);
       doc.rect(40, clienteY, pageWidth - 80, 102);
       doc.setFont('helvetica', 'bold');
@@ -842,7 +854,7 @@
       ]);
 
       doc.autoTable({
-        startY: 272,
+        startY: 320,
         head: [['Descripción / Concepto', 'Cantidad', 'Precio unidad (sin IVA)', 'Precio total (sin IVA)']],
         body: bodyRows,
         margin: { left: 40, right: 40 },
@@ -863,17 +875,32 @@
         resumenY += 16;
       }
 
-      drawResumenLine('Subtotal (sin IVA):', formatMoney(subtotalSinIva), false);
-      drawResumenLine('Tasa de impuesto productos:', '10%', false);
-      drawResumenLine('IVA total:', formatMoney(ivaTotal), false);
+      drawResumenLine('Base productos (sin IVA):', formatMoney(baseProductosSinIva), false);
       if(envioItem){
-        drawResumenLine('Base envío (sin IVA):', formatMoney(envioItem.totalSinIva), false);
-        drawResumenLine('IVA envío (21%):', formatMoney(envioItem.ivaImporte), false);
+        drawResumenLine('Base gestión de envases (sin IVA):', formatMoney(baseEnvioSinIva), false);
       }
+      drawResumenLine('IVA productos (10%):', formatMoney(ivaProductos), false);
+      if(envioItem){
+        drawResumenLine('IVA gestión de envases (21%):', formatMoney(ivaEnvio), false);
+      }
+      drawResumenLine('Subtotal (sin IVA):', formatMoney(subtotalSinIva), false);
+      drawResumenLine('IVA total:', formatMoney(ivaTotal), false);
       drawResumenLine('TOTAL:', formatMoney(totalConIva), true);
 
-      const fileSafeNumero = facturaNumero.replace(/[^A-Za-z0-9-]/g, '');
-      doc.save(`factura_${fileSafeNumero}.pdf`);
+      const metodoPago = String(pedido?.metodo_pago || '').trim().toLowerCase();
+      const esTransferencia = metodoPago === 'transferencia' || metodoPago.includes('transferencia');
+      if(esTransferencia){
+        const footerY = 760;
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(12);
+        doc.text('Esta factura no tendrá validez sin el recibo de ingreso a la cuenta bancaria:', 40, footerY);
+        doc.text('ES50 3059 0090 0135 3459 7822 Caja Rural Asturias', 40, footerY + 12);
+      }
+
+      const fileSafeNumero = String(pedido?.id || '').trim();
+      const fileSafeAnio = String(new Date(pedido?.fecha || new Date()).getFullYear() || '').trim();
+      const fileSafeCliente = String(pedido?.nombre || 'cliente').trim().replace(/[^A-Za-z0-9.-]/g, '_');
+      doc.save(`${fileSafeNumero}-${fileSafeAnio}-${fileSafeCliente}.pdf`);
     }
 
     async function saveEstadoFromModal(){
