@@ -779,7 +779,8 @@
         descuentoImporte = roundMoney(Math.max(0, totalProductosConIvaBase - totalProductosConIvaConDescuento));
         const baseProductosSinIvaTrasDescuento = totalProductosConIvaConDescuento / (1 + FACTURA_IVA_RATE_PRODUCTOS);
         baseProductosSinIvaConDescuento = roundMoney(Math.max(0, baseProductosSinIvaTrasDescuento));
-        ivaProductos = roundMoney(baseProductosSinIvaConDescuento * FACTURA_IVA_RATE_PRODUCTOS);
+        // Ajusta el IVA como complemento del total con IVA para evitar desfases de 0,01 por redondeo.
+        ivaProductos = roundMoney(totalProductosConIvaConDescuento - baseProductosSinIvaConDescuento);
       }
       const subtotalSinIva = roundMoney(baseProductosSinIvaConDescuento + baseEnvioSinIva);
       const ivaTotal = roundMoney(ivaProductos + ivaEnvio);
