@@ -82,6 +82,34 @@ LOCK TABLES `proveedores` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `precios`
+--
+
+DROP TABLE IF EXISTS `precios`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `precios` (
+  `id` int NOT NULL,
+  `precio_churro` decimal(10,2) NOT NULL,
+  `precio_chocolate` decimal(10,2) NOT NULL,
+  `precio_envio` decimal(10,2) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `chk_precios_singleton` CHECK ((`id` = 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `precios`
+--
+
+LOCK TABLES `precios` WRITE;
+/*!40000 ALTER TABLE `precios` DISABLE KEYS */;
+INSERT INTO `precios` VALUES (1,0.25,1.50,25.00,CURRENT_TIMESTAMP);
+/*!40000 ALTER TABLE `precios` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `pedidos`
 --
 

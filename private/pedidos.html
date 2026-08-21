@@ -317,9 +317,22 @@
     const infiniteStatus = document.getElementById('infiniteStatus');
     const FACTURA_IVA_RATE_PRODUCTOS = 0.10;
     const FACTURA_IVA_RATE_ENVIO = 0.21;
-    const FACTURA_PRICE_CHURRO_SIN_IVA_CALC = 0.22727272727;
-    const FACTURA_PRICE_CHOCOLATE_SIN_IVA_CALC = 1.3636363636;
-    const FACTURA_PRICE_ENVIO = 25;
+    // Precios vigentes (con IVA), cargados siempre desde la base de datos (nunca hardcodeados aquí).
+    let preciosCache = null;
+    async function getPrecios(){
+      if(preciosCache) return preciosCache;
+      const resp = await fetch('/api/precios');
+      const data = await resp.json().catch(() => ({}));
+      if(!resp.ok || data.ok === false || !data.precios){
+        throw new Error(data.error || 'No se pudieron cargar los precios.');
+      }
+      preciosCache = {
+        churro: Number(data.precios.churro),
+        chocolate: Number(data.precios.chocolate),
+        envio: Number(data.precios.envio)
+      };
+      return preciosCache;
+    }
     let editingEstadoId = null;
     let actionConfirmResolver = null;
     let actionConfirmMode = 'confirm';
@@ -681,8 +694,9 @@
       }
     }
 
-    function buildFacturaItems(pedido){
+    async function buildFacturaItems(pedido){
       const items = [];
+      const precios = await getPrecios();
       const personas = Number(pedido?.personas || 0);
       const churrosPorPersona = Number(pedido?.churros_por_persona || 0);
       const chocolates = Number(pedido?.chocolates || 0);
@@ -695,7 +709,7 @@
         items.push({
           concepto: 'Churros',
           cantidad: cantidadChurros,
-          precioUnitarioSinIva: FACTURA_PRICE_CHURRO_SIN_IVA_CALC,
+          precioUnitarioSinIva: precios.churro / (1 + FACTURA_IVA_RATE_PRODUCTOS),
           ivaRate: FACTURA_IVA_RATE_PRODUCTOS,
           esEnvio: false
         });
@@ -706,7 +720,7 @@
         items.push({
           concepto: 'Chocolate',
           cantidad: cantidadChocolate,
-          precioUnitarioSinIva: FACTURA_PRICE_CHOCOLATE_SIN_IVA_CALC,
+          precioUnitarioSinIva: precios.chocolate / (1 + FACTURA_IVA_RATE_PRODUCTOS),
           ivaRate: FACTURA_IVA_RATE_PRODUCTOS,
           esEnvio: false
         });
@@ -716,7 +730,7 @@
         items.push({
           concepto: 'Gestión de envases',
           cantidad: 1,
-          precioUnitarioSinIva: FACTURA_PRICE_ENVIO / (1 + FACTURA_IVA_RATE_ENVIO),
+          precioUnitarioSinIva: precios.envio / (1 + FACTURA_IVA_RATE_ENVIO),
           ivaRate: FACTURA_IVA_RATE_ENVIO,
           esEnvio: true
         });
@@ -755,7 +769,7 @@
         return;
       }
 
-      const items = buildFacturaItems(pedido);
+      const items = await buildFacturaItems(pedido);
       if(items.length === 0){
         await showActionAlert({ title: 'Aviso', message: 'El pedido no tiene conceptos facturables para generar la factura.' });
         return;

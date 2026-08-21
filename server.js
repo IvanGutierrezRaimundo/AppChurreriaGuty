@@ -72,6 +72,22 @@ function isValidSpanishPhone(value) {
   return /^\d{9}$/.test(String(value).trim());
 }
 
+// Precios vigentes leídos siempre desde la BD (tabla `precios`, fila única id=1).
+async function getPrecios() {
+  const [rows] = await pool.execute(
+    'SELECT precio_churro, precio_chocolate, precio_envio FROM precios WHERE id = 1 LIMIT 1'
+  );
+  const row = rows && rows[0];
+  if (!row) {
+    throw new Error('No hay precios configurados en la base de datos.');
+  }
+  return {
+    churro: Number(row.precio_churro),
+    chocolate: Number(row.precio_chocolate),
+    envio: Number(row.precio_envio)
+  };
+}
+
 function normalizeSpanishPhone(value) {
   let digits = String(value || '').replace(/\D/g, '');
   if (digits.length === 11 && digits.startsWith('34')) {
@@ -160,6 +176,55 @@ app.get('/admin/crear-pedido', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de informacion de empresa
+app.get('/admin/informacion-empresa', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'informacion_empresa.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
+// Precios vigentes (público: necesario para calcular el presupuesto en los formularios).
+app.get('/api/precios', async (_req, res) => {
+  try {
+    const precios = await getPrecios();
+    res.json({ ok: true, precios });
+  } catch (err) {
+    console.error('Error al obtener precios:', err);
+    res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+app.get('/admin/api/precios', ensureAdmin, async (_req, res) => {
+  try {
+    const precios = await getPrecios();
+    res.json({ ok: true, precios });
+  } catch (err) {
+    console.error('Error al obtener precios:', err);
+    res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+app.put('/admin/api/precios', ensureAdmin, async (req, res) => {
+  try {
+    const { churro, chocolate, envio } = req.body || {};
+    const churroNum = Number(churro);
+    const chocolateNum = Number(chocolate);
+    const envioNum = Number(envio);
+    if (![churroNum, chocolateNum, envioNum].every((n) => Number.isFinite(n) && n >= 0)) {
+      return res.status(400).json({ ok: false, error: 'Los precios deben ser números válidos mayores o iguales a 0.' });
+    }
+    await pool.execute(
+      'UPDATE precios SET precio_churro = ?, precio_chocolate = ?, precio_envio = ? WHERE id = 1',
+      [churroNum.toFixed(2), chocolateNum.toFixed(2), envioNum.toFixed(2)]
+    );
+    const precios = await getPrecios();
+    res.json({ ok: true, precios });
+  } catch (err) {
+    console.error('Error al actualizar precios:', err);
+    res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
 app.post('/api/pedidos', async (req, res) => {
   try {
     const {
@@ -209,9 +274,10 @@ app.post('/api/pedidos', async (req, res) => {
     if (Number.isFinite(personasNum) && personasNum > 0 && !churrosOk) {
       return res.status(400).json({ ok: false, error: `Si indicas personas, churros por persona debe estar entre ${minChurros} y ${maxChurros}.` });
     }
-    const priceChurros = churrosOk ? personasNum * churrosPorNum * 0.25 : 0;
-    const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * 1.5 : 0;
-    const priceEnvio = envioBool ? 25 : 0;
+    const precios = await getPrecios();
+    const priceChurros = churrosOk ? personasNum * churrosPorNum * precios.churro : 0;
+    const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * precios.chocolate : 0;
+    const priceEnvio = envioBool ? precios.envio : 0;
     const presupuestoAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
     const manualEnabled = isAdminCreate && !!presupuesto_total_manual;
     let presupuestoFinal = presupuestoAuto;
@@ -899,9 +965,10 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     const chocolatesNum = Number(merged.chocolates);
     const envioBool = !!merged.requiere_envio;
     const churrosOk = Number.isFinite(personasNum) && personasNum > 0 && Number.isFinite(churrosPorNum) && churrosPorNum >= 1 && churrosPorNum <= 100;
-    const priceChurros = churrosOk ? personasNum * churrosPorNum * 0.25 : 0;
-    const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * 1.5 : 0;
-    const priceEnvio = envioBool ? 25 : 0;
+    const precios = await getPrecios();
+    const priceChurros = churrosOk ? personasNum * churrosPorNum * precios.churro : 0;
+    const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * precios.chocolate : 0;
+    const priceEnvio = envioBool ? precios.envio : 0;
     const presupuestoAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
     const manualEnabled = !!body.presupuesto_total_manual;
     const overwriteCliente = !!body.overwrite_cliente;
@@ -1151,10 +1218,24 @@ async function ensureSchema() {
       UNIQUE KEY uk_proveedores_nif (nif)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `;
+  const ddlPrecios = `
+    CREATE TABLE IF NOT EXISTS precios (
+      id INT NOT NULL PRIMARY KEY,
+      precio_churro DECIMAL(10,2) NOT NULL,
+      precio_chocolate DECIMAL(10,2) NOT NULL,
+      precio_envio DECIMAL(10,2) NOT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `;
   try {
     await pool.execute(ddlPedidos);
     await pool.execute(ddlClientes);
     await pool.execute(ddlProveedores);
+    await pool.execute(ddlPrecios);
+    // Fila única de precios vigentes; se siembra solo si la tabla está vacía.
+    await pool.execute(
+      'INSERT INTO precios (id, precio_churro, precio_chocolate, precio_envio) SELECT 1, 0.25, 1.50, 25.00 WHERE NOT EXISTS (SELECT 1 FROM precios WHERE id = 1)'
+    );
     // Compatibilidad: en algunas BBDD antiguas existe un CHECK que fuerza presupuesto >= 100.
     // Se elimina para permitir importes inferiores en edición de pedidos desde admin.
     const [checkRows] = await pool.execute(

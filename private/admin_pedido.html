@@ -290,6 +290,19 @@
     let actionAlertMode = 'alert';
     const PEDIDO_EXPIRADO_MSG = 'Pedido expirado, cambie el estado a realizado, cobrado o cancelado';
 
+    // Precios vigentes, cargados siempre desde la base de datos (nunca hardcodeados aquí).
+    const PRECIOS = { churro: null, chocolate: null, envio: null };
+    async function cargarPrecios(){
+      const resp = await fetch('/api/precios');
+      const data = await resp.json().catch(() => ({}));
+      if(!resp.ok || data.ok === false || !data.precios){
+        throw new Error(data.error || 'No se pudieron cargar los precios.');
+      }
+      PRECIOS.churro = Number(data.precios.churro);
+      PRECIOS.chocolate = Number(data.precios.chocolate);
+      PRECIOS.envio = Number(data.precios.envio);
+    }
+
     function closeActionAlertModal(accepted){
       actionAlertModal.classList.add('hidden');
       actionAlertModal.setAttribute('aria-hidden', 'true');
@@ -545,9 +558,9 @@
       const envio = !!document.getElementById('e_requiere_envio').checked;
 
       const churrosOk = Number.isFinite(personas) && personas > 0 && Number.isFinite(churrosPor) && churrosPor >= 1 && churrosPor <= 100;
-      const priceChurros = churrosOk ? personas * churrosPor * 0.25 : 0;
-      const priceChoco = Number.isFinite(chocolates) && chocolates >= 0 ? chocolates * 1.5 : 0;
-      const priceEnvio = envio ? 25 : 0;
+      const priceChurros = churrosOk ? personas * churrosPor * PRECIOS.churro : 0;
+      const priceChoco = Number.isFinite(chocolates) && chocolates >= 0 ? chocolates * PRECIOS.chocolate : 0;
+      const priceEnvio = envio ? PRECIOS.envio : 0;
       return Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
     }
 
@@ -823,6 +836,7 @@
         return;
       }
       try {
+        await cargarPrecios();
         currentPedido = await fetchPedido(id);
         openDetailModal();
       } catch (err) {

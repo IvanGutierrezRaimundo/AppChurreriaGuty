@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Informacion de empresa</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .info-wrap{ max-width: 900px; margin: 0 auto; }
+    .info-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: var(--space-lg);
+    }
+    .info-head h1{ margin: 0; color: var(--color-brown); }
+    .info-company{
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      background: #fff;
+      padding: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+    .info-company p{ margin: 0; font-weight: 700; color: var(--color-brown); }
+    .info-actions{ margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .info-add-box{
+      margin-top: 12px;
+      display: none;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .info-add-box.is-visible{ display: flex; }
+    .info-input{
+      flex: 1;
+      min-width: 220px;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+      color: var(--color-brown);
+      background: #fff;
+    }
+    .info-list{
+      margin-top: 14px;
+      display: grid;
+      gap: 8px;
+    }
+    .info-item{
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px;
+      color: var(--color-brown);
+      word-break: break-word;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .info-item-text{ flex: 1; }
+    .info-remove-btn{
+      border: 1px solid #DC2626;
+      background: #FEE2E2;
+      color: #B91C1C;
+      border-radius: 999px;
+      width: 24px;
+      height: 24px;
+      line-height: 1;
+      font-weight: 800;
+      cursor: pointer;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .info-remove-btn:hover{
+      background: #FCA5A5;
+      color: #7F1D1D;
+    }
+  </style>
+</head>
+<body>
+  <div class="info-wrap">
+    <section class="doc">
+      <div class="info-head">
+        <h1>Informacion de empresa</h1>
+        <button type="button" id="menuBtn" title="Menu">Menu</button>
+      </div>
+
+      <div class="info-company">
+        <p>Roizmundo C.B.</p>
+
+        <div id="infoList" class="info-list" aria-live="polite"></div>
+
+        <div class="info-actions">
+          <button type="button" id="showAddBtn">Añadir Información</button>
+        </div>
+
+        <div id="addBox" class="info-add-box" aria-hidden="true">
+          <input id="infoInput" class="info-input" type="text" placeholder="Escribe la información" />
+          <button type="button" id="addInfoBtn">Añadir</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'empresa_info_items_v1';
+    const showAddBtn = document.getElementById('showAddBtn');
+    const addBox = document.getElementById('addBox');
+    const infoInput = document.getElementById('infoInput');
+    const addInfoBtn = document.getElementById('addInfoBtn');
+    const infoList = document.getElementById('infoList');
+    const menuBtn = document.getElementById('menuBtn');
+
+    function getItems(){
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch(_err){
+        return [];
+      }
+    }
+
+    function saveItems(items){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    }
+
+    function deleteInfoAt(index){
+      const items = getItems();
+      if(index < 0 || index >= items.length) return;
+      const confirmed = confirm('¿Deseas eliminar esta información?');
+      if(!confirmed) return;
+      items.splice(index, 1);
+      saveItems(items);
+      renderItems();
+    }
+
+    function renderItems(){
+      const items = getItems();
+      infoList.innerHTML = '';
+      items.forEach((text, index) => {
+        const item = document.createElement('div');
+        item.className = 'info-item';
+
+        const itemText = document.createElement('div');
+        itemText.className = 'info-item-text';
+        itemText.textContent = text;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'info-remove-btn';
+        removeBtn.textContent = 'X';
+        removeBtn.setAttribute('title', 'Eliminar');
+        removeBtn.setAttribute('aria-label', 'Eliminar información');
+        removeBtn.addEventListener('click', () => deleteInfoAt(index));
+
+        item.appendChild(itemText);
+        item.appendChild(removeBtn);
+        infoList.appendChild(item);
+      });
+    }
+
+    showAddBtn.addEventListener('click', () => {
+      addBox.classList.add('is-visible');
+      addBox.setAttribute('aria-hidden', 'false');
+      infoInput.focus();
+    });
+
+    function addInfo(){
+      const value = String(infoInput.value || '').trim();
+      if(!value) return;
+      const items = getItems();
+      items.push(value);
+      saveItems(items);
+      infoInput.value = '';
+      renderItems();
+      infoInput.focus();
+    }
+
+    addInfoBtn.addEventListener('click', addInfo);
+    infoInput.addEventListener('keydown', (ev) => {
+      if(ev.key === 'Enter') addInfo();
+    });
+
+    menuBtn.addEventListener('click', () => {
+      location.href = '/admin';
+    });
+
+    renderItems();
+  </script>
+</body>
+</html>
