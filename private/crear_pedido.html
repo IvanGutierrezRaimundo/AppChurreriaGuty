@@ -165,13 +165,6 @@
       return `${y}-${m}-${d}`;
     }
 
-    function toDecimalOrNull(value){
-      const raw = String(value ?? '').trim();
-      if(raw === '') return null;
-      const parsed = Number(raw.replace(',', '.'));
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-
     function normalizePhone(value){
       let digits = String(value || '').replace(/\D/g, '');
       if(digits.length === 11 && digits.startsWith('34')){
@@ -279,6 +272,7 @@
         <li><span>Churros</span><strong>${formatCurrency(Math.max(0, (payload.personas || 0) * (Number.isFinite(payload.churros_por_persona) ? payload.churros_por_persona : 0) * PRECIOS.churro))}</strong></li>
         <li><span>Chocolate</span><strong>${formatCurrency((payload.chocolates || 0) * PRECIOS.chocolate)}</strong></li>
         <li><span>Envío</span><strong>${formatCurrency(envioSi ? PRECIOS.envio : 0)}</strong></li>
+        ${payload.descuento > 0 ? `<li><span>Descuento</span><strong>-${formatCurrency(payload.descuento)}</strong></li>` : ''}
         <li class="confirm-total"><span>Total</span><strong>${formatCurrency(totalPresupuesto)}</strong></li>`;
       order.textContent = provisionalId;
       modal.classList.remove('hidden');
@@ -334,8 +328,8 @@
       const elCo = document.getElementById('pres-chocolate');
       const elEn = document.getElementById('pres-envio');
       const elTo = document.getElementById('pres-total');
-      const totalManualToggle = document.getElementById('total_manual_enabled');
-      const totalManualInput = document.getElementById('total_manual');
+      const elDeRow = document.getElementById('pres-descuento-row');
+      const descuentoInput = document.getElementById('descuento');
       const emailInput = document.getElementById('email');
       const emailErr = document.getElementById('email-error');
 
@@ -353,11 +347,8 @@
       if(elCo) elCo.textContent = '0,00 €';
       if(elEn) elEn.textContent = '0,00 €';
       if(elTo) elTo.textContent = '0,00 €';
-      if(totalManualToggle) totalManualToggle.checked = false;
-      if(totalManualInput){
-        totalManualInput.value = '';
-        totalManualInput.disabled = true;
-      }
+      if(elDeRow) elDeRow.classList.add('hidden');
+      if(descuentoInput) descuentoInput.value = '';
       if(emailInput) emailInput.setCustomValidity('');
       if(emailErr){ emailErr.textContent=''; emailErr.classList.add('hidden'); }
       if(typeof updateChurrosRequirement === 'function') updateChurrosRequirement();
@@ -430,8 +421,6 @@
       const honeypot = document.getElementById('hp').value;
       const facturaOn = document.getElementById('factura')?.checked || false;
       const metodoPago = document.querySelector('input[name="pago"]:checked')?.value || '';
-      const useManualTotal = !!document.getElementById('total_manual_enabled')?.checked;
-      const manualTotal = toDecimalOrNull(document.getElementById('total_manual')?.value || '');
       const MAX_DIRECCION = 100;
 
       // Reglas de obligatoriedad para Datos personales según factura
@@ -568,19 +557,29 @@
       churrosEl?.setCustomValidity('');
       if(!okChocolates){ chocolatesEl?.reportValidity(); status.textContent = 'Chocolates debe ser entre 0 y 1000.'; return; }
 
-      if(useManualTotal && (manualTotal === null || manualTotal < 0)){
-        const msg = 'Introduce un total manual válido (0 o superior).';
+      const descuentoEl = document.getElementById('descuento');
+      const descuentoRaw = (descuentoEl?.value || '').toString().trim();
+      const descuento = descuentoRaw === '' ? 0 : Number(descuentoRaw);
+      if(descuentoRaw !== '' && (!Number.isFinite(descuento) || descuento < 0)){
+        const msg = 'El descuento debe ser un número válido mayor o igual a 0.';
         status.textContent = msg;
-        document.getElementById('total_manual')?.setCustomValidity(msg);
-        document.getElementById('total_manual')?.reportValidity();
+        descuentoEl?.setCustomValidity(msg);
+        descuentoEl?.reportValidity();
         return;
       }
-      document.getElementById('total_manual')?.setCustomValidity('');
+      descuentoEl?.setCustomValidity('');
 
-      const totalPresupuestoAuto = (Number.isFinite(personas) && Number.isFinite(churrosPorPersona) ? personas * churrosPorPersona * PRECIOS.churro : 0)
+      const subtotalPresupuesto = (Number.isFinite(personas) && Number.isFinite(churrosPorPersona) ? personas * churrosPorPersona * PRECIOS.churro : 0)
         + (Number.isFinite(chocolates) ? chocolates * PRECIOS.chocolate : 0)
         + (requiereEnvio ? PRECIOS.envio : 0);
-      const totalPresupuesto = useManualTotal ? Number(manualTotal.toFixed(2)) : totalPresupuestoAuto;
+      if(descuento > subtotalPresupuesto){
+        const msg = 'El descuento no puede ser mayor que el total del presupuesto.';
+        status.textContent = msg;
+        descuentoEl?.setCustomValidity(msg);
+        descuentoEl?.reportValidity();
+        return;
+      }
+      const totalPresupuesto = Math.max(0, subtotalPresupuesto - descuento);
 
       const payload = {
         nombre,
@@ -601,8 +600,7 @@
         direccion_entrega: direccionEntrega,
         metodo_pago: metodoPago,
         comentarios,
-        presupuesto_total_manual: useManualTotal,
-        presupuesto_total: useManualTotal ? Number(manualTotal.toFixed(2)) : null
+        descuento
       };
 
       showConfirmModal(payload, totalPresupuesto, 'Se asignará al confirmar');
@@ -856,6 +854,7 @@
         setValue('hora', pedido.hora ? String(pedido.hora).slice(0, 5) : '');
         setValue('direccion_entrega', pedido.direccion_entrega || '');
         setValue('comentarios', pedido.comentarios || '');
+        setValue('descuento', Number(pedido.descuento) > 0 ? Number(pedido.descuento).toFixed(2) : '');
 
         const factura = document.getElementById('factura');
         if(factura){
@@ -870,31 +869,6 @@
         if(pagoValue){
           const pagoRadio = document.querySelector(`input[name="pago"][value="${pagoValue}"]`);
           if(pagoRadio) pagoRadio.checked = true;
-        }
-
-        const totalManualToggle = document.getElementById('total_manual_enabled');
-        const totalManualInput = document.getElementById('total_manual');
-        const personasVal = Number(pedido.personas);
-        const churrosPorVal = Number(pedido.churros_por_persona);
-        const chocolatesVal = Number(pedido.chocolates);
-        const envioSi = pedido.requiere_envio === true || pedido.requiere_envio === 1 || String(pedido.requiere_envio) === '1';
-        const churrosOk = Number.isFinite(personasVal) && personasVal > 0 && Number.isFinite(churrosPorVal) && churrosPorVal >= 2 && churrosPorVal <= 100;
-        const priceChurros = churrosOk ? personasVal * churrosPorVal * PRECIOS.churro : 0;
-        const priceChoco = Number.isFinite(chocolatesVal) && chocolatesVal >= 0 ? chocolatesVal * PRECIOS.chocolate : 0;
-        const priceEnvio = envioSi ? PRECIOS.envio : 0;
-        const totalAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
-        const totalHistorico = toDecimalOrNull(pedido.presupuesto_total);
-
-        // Si el histórico no coincide con el total automático, forzamos sobreescritura con el valor real guardado.
-        if(totalManualToggle && totalManualInput){
-          if(totalHistorico !== null && Math.abs(totalHistorico - totalAuto) > 0.009){
-            totalManualToggle.checked = true;
-            totalManualInput.value = totalHistorico.toFixed(2);
-          } else {
-            totalManualToggle.checked = false;
-            totalManualInput.value = '';
-          }
-          if(typeof updateManualTotalUI === 'function') updateManualTotalUI();
         }
 
         const statusEl = document.getElementById('status');
@@ -1104,53 +1078,40 @@
         const v = Number(raw);
         return Number.isFinite(v) ? v : NaN;
       }
-      function updateManualTotalUI(){
-        const toggle = document.getElementById('total_manual_enabled');
-        const input = document.getElementById('total_manual');
-        if(!toggle || !input) return;
-        input.disabled = !toggle.checked;
-        if(!toggle.checked){
-          input.value = '';
-          input.setCustomValidity('');
-        }
-      }
       function updateBudget(){
         const personasVal = safeNumber(document.getElementById('personas'));
         const churrosPorVal = safeNumber(document.getElementById('churros_por_persona'));
         const chocolatesVal = safeNumber(document.getElementById('chocolates'));
         const envioSi = document.querySelector('input[name="envio"]:checked')?.value === 'si';
+        const descuentoVal = safeNumber(document.getElementById('descuento'));
 
         const churrosOk = Number.isFinite(personasVal) && personasVal > 0 && Number.isFinite(churrosPorVal) && churrosPorVal >= 2 && churrosPorVal <= 100;
         const priceChurros = churrosOk ? personasVal * churrosPorVal * PRECIOS.churro : 0;
         const priceChoco = Number.isFinite(chocolatesVal) && chocolatesVal >= 0 ? chocolatesVal * PRECIOS.chocolate : 0;
         const priceEnvio = envioSi ? PRECIOS.envio : 0;
-        const totalAuto = priceChurros + priceChoco + priceEnvio;
-        const useManual = !!document.getElementById('total_manual_enabled')?.checked;
-        const manualVal = toDecimalOrNull(document.getElementById('total_manual')?.value || '');
-        const total = useManual && manualVal !== null && manualVal >= 0 ? manualVal : totalAuto;
+        const subtotal = priceChurros + priceChoco + priceEnvio;
+        const descuento = Number.isFinite(descuentoVal) && descuentoVal > 0 ? descuentoVal : 0;
+        const total = Math.max(0, subtotal - descuento);
 
         const elCh = document.getElementById('pres-churros');
         const elCo = document.getElementById('pres-chocolate');
         const elEn = document.getElementById('pres-envio');
+        const elDe = document.getElementById('pres-descuento');
+        const elDeRow = document.getElementById('pres-descuento-row');
         const elTo = document.getElementById('pres-total');
         if(elCh) elCh.textContent = nf.format(priceChurros);
         if(elCo) elCo.textContent = nf.format(priceChoco);
         if(elEn) elEn.textContent = nf.format(priceEnvio);
+        if(elDeRow) elDeRow.classList.toggle('hidden', descuento <= 0);
+        if(elDe) elDe.textContent = `-${nf.format(descuento)}`;
         if(elTo) elTo.textContent = nf.format(total);
       }
-      ['personas','churros_por_persona','chocolates','fecha_text','hora'].forEach(id => {
+      ['personas','churros_por_persona','chocolates','fecha_text','hora','descuento'].forEach(id => {
         const el = document.getElementById(id);
         el?.addEventListener('input', updateBudget);
         el?.addEventListener('change', updateBudget);
       });
       document.querySelectorAll('input[name="envio"]').forEach(r => r.addEventListener('change', updateBudget));
-      document.getElementById('total_manual_enabled')?.addEventListener('change', () => {
-        updateManualTotalUI();
-        updateBudget();
-      });
-      document.getElementById('total_manual')?.addEventListener('input', updateBudget);
-      document.getElementById('total_manual')?.addEventListener('change', updateBudget);
-      updateManualTotalUI();
       updateBudget();
 
       // Botón Reiniciar: limpia el formulario y restaura estado de UI
@@ -1347,15 +1308,13 @@
             <div class="budget-row"><span>Churros</span><span id="pres-churros">0,00 €</span></div>
             <div class="budget-row"><span>Chocolate</span><span id="pres-chocolate">0,00 €</span></div>
             <div class="budget-row"><span>Envío</span><span id="pres-envio">0,00 €</span></div>
+            <div class="budget-row hidden" id="pres-descuento-row"><span>Descuento</span><span id="pres-descuento">-0,00 €</span></div>
             <div class="budget-sep"></div>
             <div class="budget-row total"><span>Total (IVA inc.)</span><span id="pres-total">0,00 €</span></div>
           </div>
           <div class="field" style="margin-top:10px;">
-            <label><input type="checkbox" id="total_manual_enabled"> Sobrescribir total</label>
-          </div>
-          <div class="field">
-            <label for="total_manual">Total manual (€)</label>
-            <input id="total_manual" type="number" min="0" step="0.01" placeholder="Ej: 85,50" disabled>
+            <label for="descuento">Descuento (€) <span class="hint">(opcional)</span></label>
+            <input id="descuento" type="number" min="0" step="0.01" placeholder="Ej: 10,00">
           </div>
           <div id="budget-warning" class="warning hidden" aria-live="polite"></div>
           <div class="hint">Los precios incluyen IVA.</div>

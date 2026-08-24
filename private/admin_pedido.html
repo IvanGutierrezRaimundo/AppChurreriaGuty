@@ -226,9 +226,8 @@
             <div class="pedido-field"><p class="pedido-field-label">Personas</p><input id="e_personas" class="pedido-input" type="number" min="0" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Churros por persona</p><input id="e_churros" class="pedido-input" type="number" min="1" max="100" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Chocolates</p><input id="e_chocolates" class="pedido-input" type="number" min="0" /></div>
+            <div class="pedido-field"><p class="pedido-field-label">Descuento (€)</p><input id="e_descuento" class="pedido-input" type="number" min="0" step="0.01" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Total automatico</p><p id="e_total_auto" class="pedido-field-value">-</p></div>
-            <div class="pedido-field"><p class="pedido-field-label">Editar total manual</p><label class="pedido-toggle"><input id="e_total_manual_enabled" type="checkbox" /> Sobrescribir total</label></div>
-            <div class="pedido-field"><p class="pedido-field-label">Total manual (€)</p><input id="e_total_manual" class="pedido-input" type="number" min="0" step="0.01" disabled /></div>
           </div>
         </div>
         <div class="pedido-section pedido-section-rose">
@@ -505,6 +504,7 @@
       document.getElementById('e_personas').value = p.personas ?? '';
       document.getElementById('e_churros').value = p.churros_por_persona ?? '';
       document.getElementById('e_chocolates').value = p.chocolates ?? '';
+      document.getElementById('e_descuento').value = Number(p.descuento) > 0 ? Number(p.descuento).toFixed(2) : '';
       document.getElementById('e_fecha').value = toDateInputValue(p.fecha);
       document.getElementById('e_hora').value = formatTime(p.hora);
       document.getElementById('e_requiere_envio').checked = !!p.requiere_envio;
@@ -536,13 +536,6 @@
       return Number.isFinite(n) ? n : null;
     }
 
-    function toDecimalOrNull(v){
-      const s = String(v ?? '').trim();
-      if(s === '') return null;
-      const n = Number(s.replace(',', '.'));
-      return Number.isFinite(n) ? n : null;
-    }
-
     function normalizePhone(value){
       let digits = String(value || '').replace(/\D/g, '');
       if(digits.length === 11 && digits.startsWith('34')){
@@ -556,25 +549,20 @@
       const churrosPor = toNumOrNull(document.getElementById('e_churros').value);
       const chocolates = toNumOrNull(document.getElementById('e_chocolates').value);
       const envio = !!document.getElementById('e_requiere_envio').checked;
+      const descuento = toNumOrNull(document.getElementById('e_descuento').value) || 0;
 
       const churrosOk = Number.isFinite(personas) && personas > 0 && Number.isFinite(churrosPor) && churrosPor >= 1 && churrosPor <= 100;
       const priceChurros = churrosOk ? personas * churrosPor * PRECIOS.churro : 0;
       const priceChoco = Number.isFinite(chocolates) && chocolates >= 0 ? chocolates * PRECIOS.chocolate : 0;
       const priceEnvio = envio ? PRECIOS.envio : 0;
-      return Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
+      const subtotal = priceChurros + priceChoco + priceEnvio;
+      return Number(Math.max(0, subtotal - descuento).toFixed(2));
     }
 
     function updateEditTotalFields(){
       const autoTotal = calculateAutoTotal();
       const autoEl = document.getElementById('e_total_auto');
       if(autoEl) autoEl.textContent = nf.format(autoTotal);
-
-      const manualEnabled = !!document.getElementById('e_total_manual_enabled').checked;
-      const manualInput = document.getElementById('e_total_manual');
-      manualInput.disabled = !manualEnabled;
-      if(!manualEnabled){
-        manualInput.value = autoTotal.toFixed(2);
-      }
     }
 
     function updateEditEnvioFields(){
@@ -587,14 +575,6 @@
     }
 
     function hydrateEditTotalFields(){
-      const autoTotal = calculateAutoTotal();
-      const currentTotal = Number(currentPedido?.presupuesto_total);
-      const hasManualTotal = Number.isFinite(currentTotal) && Math.abs(currentTotal - autoTotal) > 0.01;
-
-      const toggle = document.getElementById('e_total_manual_enabled');
-      const input = document.getElementById('e_total_manual');
-      toggle.checked = hasManualTotal;
-      input.value = Number.isFinite(currentTotal) ? currentTotal.toFixed(2) : autoTotal.toFixed(2);
       updateEditTotalFields();
     }
 
@@ -616,10 +596,11 @@
         return;
       }
       if(phoneInput) phoneInput.value = telefonoNormalizado;
-      const useManualTotal = !!document.getElementById('e_total_manual_enabled').checked;
-      const manualTotal = toDecimalOrNull(document.getElementById('e_total_manual').value);
-      if(useManualTotal && (manualTotal === null || manualTotal < 0)){
-        editError.textContent = 'Introduce un total manual valido.';
+
+      const descuentoRaw = document.getElementById('e_descuento').value;
+      const descuento = toNumOrNull(descuentoRaw) || 0;
+      if(descuentoRaw.trim() !== '' && (descuento === null || descuento < 0)){
+        editError.textContent = 'El descuento debe ser un número válido mayor o igual a 0.';
         return;
       }
 
@@ -637,6 +618,7 @@
         personas: toNumOrNull(document.getElementById('e_personas').value),
         churros_por_persona: toNumOrNull(document.getElementById('e_churros').value),
         chocolates: toNumOrNull(document.getElementById('e_chocolates').value),
+        descuento,
         fecha: document.getElementById('e_fecha').value.trim(),
         hora: document.getElementById('e_hora').value.trim(),
         requiere_envio: !!document.getElementById('e_requiere_envio').checked,
@@ -644,9 +626,7 @@
           ? document.getElementById('e_direccion_entrega').value.trim()
           : '',
         metodo_pago: document.getElementById('e_metodo_pago').value,
-        comentarios: document.getElementById('e_comentarios').value,
-        presupuesto_total_manual: useManualTotal,
-        presupuesto_total: useManualTotal ? Number(manualTotal.toFixed(2)) : null
+        comentarios: document.getElementById('e_comentarios').value
       };
 
       const submitBtn = document.getElementById('pedidoEditSubmitBtn');
@@ -855,7 +835,7 @@
     document.getElementById('pedidoPrintBtn').addEventListener('click', downloadPedidoPdf);
     document.getElementById('pedidoEditCancelBtn').addEventListener('click', () => closeEditModal(true));
     document.getElementById('pedidoEditSubmitBtn').addEventListener('click', submitEdit);
-    ['e_personas','e_churros','e_chocolates'].forEach((id) => {
+    ['e_personas','e_churros','e_chocolates','e_descuento'].forEach((id) => {
       const el = document.getElementById(id);
       if(!el) return;
       el.addEventListener('input', updateEditTotalFields);
@@ -865,7 +845,6 @@
       updateEditEnvioFields();
       updateEditTotalFields();
     });
-    document.getElementById('e_total_manual_enabled').addEventListener('change', updateEditTotalFields);
     document.getElementById('fallbackBackBtn').addEventListener('click', () => { location.href = '/admin/pedidos'; });
 
     editBackdrop.addEventListener('click', (ev) => {

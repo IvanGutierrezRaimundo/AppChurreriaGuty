@@ -108,7 +108,6 @@
   </div>
 
   <script>
-    const STORAGE_KEY = 'empresa_info_items_v1';
     const showAddBtn = document.getElementById('showAddBtn');
     const addBox = document.getElementById('addBox');
     const infoInput = document.getElementById('infoInput');
@@ -116,40 +115,37 @@
     const infoList = document.getElementById('infoList');
     const menuBtn = document.getElementById('menuBtn');
 
-    function getItems(){
+    async function requestApi(url, options){
+      const response = await fetch(url, options);
+      const result = await response.json();
+      if(!response.ok || !result.ok){
+        throw new Error(result.error || 'No se pudo completar la operación.');
+      }
+      return result;
+    }
+
+    async function deleteInfo(id){
+      const confirmed = confirm('¿Deseas eliminar esta información?');
+      if(!confirmed) return;
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed : [];
-      } catch(_err){
-        return [];
+        await requestApi(`/admin/api/info-empresa/${id}`, { method: 'DELETE' });
+        await renderItems();
+      } catch(err){
+        alert(err.message);
       }
     }
 
-    function saveItems(items){
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    }
-
-    function deleteInfoAt(index){
-      const items = getItems();
-      if(index < 0 || index >= items.length) return;
-      const confirmed = confirm('¿Deseas eliminar esta información?');
-      if(!confirmed) return;
-      items.splice(index, 1);
-      saveItems(items);
-      renderItems();
-    }
-
-    function renderItems(){
-      const items = getItems();
+    async function renderItems(){
+      const result = await requestApi('/admin/api/info-empresa');
+      const items = result.data || [];
       infoList.innerHTML = '';
-      items.forEach((text, index) => {
+      items.forEach((itemData) => {
         const item = document.createElement('div');
         item.className = 'info-item';
 
         const itemText = document.createElement('div');
         itemText.className = 'info-item-text';
-        itemText.textContent = text;
+        itemText.textContent = itemData.informacion;
 
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
@@ -157,7 +153,7 @@
         removeBtn.textContent = 'X';
         removeBtn.setAttribute('title', 'Eliminar');
         removeBtn.setAttribute('aria-label', 'Eliminar información');
-        removeBtn.addEventListener('click', () => deleteInfoAt(index));
+        removeBtn.addEventListener('click', () => deleteInfo(itemData.id));
 
         item.appendChild(itemText);
         item.appendChild(removeBtn);
@@ -171,15 +167,21 @@
       infoInput.focus();
     });
 
-    function addInfo(){
+    async function addInfo(){
       const value = String(infoInput.value || '').trim();
       if(!value) return;
-      const items = getItems();
-      items.push(value);
-      saveItems(items);
-      infoInput.value = '';
-      renderItems();
-      infoInput.focus();
+      try {
+        await requestApi('/admin/api/info-empresa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ informacion: value })
+        });
+        infoInput.value = '';
+        await renderItems();
+        infoInput.focus();
+      } catch(err){
+        alert(err.message);
+      }
     }
 
     addInfoBtn.addEventListener('click', addInfo);
@@ -191,7 +193,9 @@
       location.href = '/admin';
     });
 
-    renderItems();
+    renderItems().catch((err) => {
+      infoList.textContent = err.message;
+    });
   </script>
 </body>
 </html>
