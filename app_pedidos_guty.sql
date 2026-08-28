@@ -82,18 +82,6 @@ LOCK TABLES `proveedores` WRITE;
 UNLOCK TABLES;
 
 --
--- Table structure for table `info_empresa`
---
-
-DROP TABLE IF EXISTS `info_empresa`;
-CREATE TABLE `info_empresa` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `informacion` varchar(255) NOT NULL,
-  `fecha_registro` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
---
 -- Table structure for table `precios`
 --
 
@@ -149,10 +137,6 @@ CREATE TABLE `pedidos` (
   `metodo_pago` varchar(30) NOT NULL,
   `comentarios` text,
   `presupuesto_total` decimal(10,2) NOT NULL,
-  `precio_churro` decimal(10,2) DEFAULT NULL,
-  `precio_chocolate` decimal(10,2) DEFAULT NULL,
-  `precio_envio` decimal(10,2) DEFAULT NULL,
-  `descuento` decimal(10,2) NOT NULL DEFAULT '0.00',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `estado` enum('Pendiente','Realizado','Cobrado','Cancelado') NOT NULL DEFAULT 'Pendiente',
   PRIMARY KEY (`id`),
