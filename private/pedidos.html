@@ -696,7 +696,14 @@
 
     async function buildFacturaItems(pedido){
       const items = [];
-      const precios = await getPrecios();
+      // La factura usa el precio congelado en el pedido (fijado al crearlo/editarlo), nunca el precio vigente:
+      // así una factura ya emitida no cambia si luego se actualizan los precios globales.
+      // Ojo: Number(null) es 0 (no NaN), por eso se comprueba null/undefined explícitamente antes de convertir.
+      const tieneValor = (v) => v !== null && typeof v !== 'undefined' && Number.isFinite(Number(v));
+      const tieneSnapshot = tieneValor(pedido?.precio_churro) && tieneValor(pedido?.precio_chocolate) && tieneValor(pedido?.precio_envio);
+      const precios = tieneSnapshot
+        ? { churro: Number(pedido.precio_churro), chocolate: Number(pedido.precio_chocolate), envio: Number(pedido.precio_envio) }
+        : await getPrecios(); // Solo para pedidos antiguos creados antes de guardar el snapshot.
       const personas = Number(pedido?.personas || 0);
       const churrosPorPersona = Number(pedido?.churros_por_persona || 0);
       const chocolates = Number(pedido?.chocolates || 0);
@@ -783,14 +790,12 @@
       const ivaEnvio = roundMoney(envioItem ? envioItem.ivaImporte : 0);
       const totalProductosConIvaBase = roundMoney(baseProductosSinIva + ivaProductosBase);
       const totalEnvasesConIva = roundMoney(baseEnvioSinIva + ivaEnvio);
-      const totalRealPedidoRaw = String(pedido?.presupuesto_total ?? '').trim();
-      const totalRealPedido = Number(totalRealPedidoRaw.replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.')) || 0;
-      let descuentoImporte = 0;
+      // El descuento se lee directamente del pedido (no se reconstruye por diferencia de redondeo).
+      const descuentoImporte = roundMoney(Math.max(0, Number(pedido?.descuento) || 0));
       let baseProductosSinIvaConDescuento = baseProductosSinIva;
       let ivaProductos = ivaProductosBase;
-      if(Number.isFinite(totalRealPedido) && totalRealPedido > 0){
-        const totalProductosConIvaConDescuento = roundMoney(Math.max(0, totalRealPedido - totalEnvasesConIva));
-        descuentoImporte = roundMoney(Math.max(0, totalProductosConIvaBase - totalProductosConIvaConDescuento));
+      if(descuentoImporte > 0){
+        const totalProductosConIvaConDescuento = roundMoney(Math.max(0, totalProductosConIvaBase - descuentoImporte));
         const baseProductosSinIvaTrasDescuento = totalProductosConIvaConDescuento / (1 + FACTURA_IVA_RATE_PRODUCTOS);
         baseProductosSinIvaConDescuento = roundMoney(Math.max(0, baseProductosSinIvaTrasDescuento));
         // Ajusta el IVA como complemento del total con IVA para evitar desfases de 0,01 por redondeo.

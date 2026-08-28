@@ -183,6 +183,67 @@ app.get('/admin/informacion-empresa', ensureAdmin, (_req, res) => {
   });
 });
 
+app.get('/admin/api/info-empresa', ensureAdmin, async (_req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT id, informacion, fecha_registro FROM info_empresa ORDER BY id ASC'
+    );
+    return res.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error('Error listando informacion de empresa:', err);
+    return res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.post('/admin/api/info-empresa', ensureAdmin, async (req, res) => {
+  try {
+    const informacion = String(req.body?.informacion || '').trim();
+    if (!informacion) {
+      return res.status(400).json({ ok: false, error: 'La información no puede estar vacía.' });
+    }
+    if (informacion.length > 255) {
+      return res.status(400).json({ ok: false, error: 'La información no puede superar 255 caracteres.' });
+    }
+
+    const [result] = await pool.execute(
+      'INSERT INTO info_empresa (informacion) VALUES (?)',
+      [informacion]
+    );
+    const [rows] = await pool.execute(
+      'SELECT id, informacion, fecha_registro FROM info_empresa WHERE id = ? LIMIT 1',
+      [result.insertId]
+    );
+    return res.status(201).json({ ok: true, data: rows[0] || null });
+  } catch (err) {
+    console.error('Error creando informacion de empresa:', err);
+    return res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.delete('/admin/api/info-empresa/:id', ensureAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ ok: false, error: 'ID invalido' });
+    }
+    const [result] = await pool.execute('DELETE FROM info_empresa WHERE id = ?', [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ ok: false, error: 'Información no encontrada' });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('Error eliminando informacion de empresa:', err);
+    return res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+// Página de cambio de precios
+app.get('/admin/precios', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'precios.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 // Precios vigentes (público: necesario para calcular el presupuesto en los formularios).
 app.get('/api/precios', async (_req, res) => {
   try {
@@ -246,8 +307,7 @@ app.post('/api/pedidos', async (req, res) => {
       direccion_entrega,
       metodo_pago,
       comentarios,
-      presupuesto_total_manual,
-      presupuesto_total
+      descuento
     } = req.body || {};
 
     const telefonoNormalizado = normalizeSpanishPhone(telefono);
@@ -278,17 +338,22 @@ app.post('/api/pedidos', async (req, res) => {
     const priceChurros = churrosOk ? personasNum * churrosPorNum * precios.churro : 0;
     const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * precios.chocolate : 0;
     const priceEnvio = envioBool ? precios.envio : 0;
-    const presupuestoAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
-    const manualEnabled = isAdminCreate && !!presupuesto_total_manual;
-    let presupuestoFinal = presupuestoAuto;
+    const subtotal = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
 
-    if (manualEnabled) {
-      const manualNum = Number(String(presupuesto_total ?? '').replace(',', '.'));
-      if (!Number.isFinite(manualNum) || manualNum < 0) {
-        return res.status(400).json({ ok: false, error: 'Total manual inválido.' });
+    // El descuento solo puede aplicarlo un admin al crear el pedido manualmente.
+    let descuentoNum = 0;
+    if (isAdminCreate && typeof descuento !== 'undefined' && descuento !== null && String(descuento).trim() !== '') {
+      descuentoNum = Number(String(descuento).replace(',', '.'));
+      if (!Number.isFinite(descuentoNum) || descuentoNum < 0) {
+        return res.status(400).json({ ok: false, error: 'El descuento debe ser un número válido mayor o igual a 0.' });
       }
-      presupuestoFinal = Number(manualNum.toFixed(2));
-    } else if (!isAdminCreate && presupuestoAuto < 100) {
+      if (descuentoNum > subtotal) {
+        return res.status(400).json({ ok: false, error: 'El descuento no puede ser mayor que el total del presupuesto.' });
+      }
+    }
+    const presupuestoFinal = Number((subtotal - descuentoNum).toFixed(2));
+
+    if (!isAdminCreate && presupuestoFinal < 100) {
       return res.status(400).json({ ok: false, error: 'El presupuesto mínimo es 100 €.' });
     }
 
@@ -312,8 +377,9 @@ app.post('/api/pedidos', async (req, res) => {
       INSERT INTO pedidos (
         nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura,
         personas, churros_por_persona, chocolates, fecha, hora,
-        requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total
-      ) VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)
+        requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total,
+        precio_churro, precio_chocolate, precio_envio, descuento
+      ) VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?,?)
     `;
 
     const params = [
@@ -322,7 +388,8 @@ app.post('/api/pedidos', async (req, res) => {
       Number.isFinite(churrosPorNum) ? churrosPorNum : null,
       Number.isFinite(chocolatesNum) ? chocolatesNum : null,
       fecha, hora,
-      envioBool, direccion_entrega || null, metodo_pago, comentarios || null, presupuestoFinal
+      envioBool, direccion_entrega || null, metodo_pago, comentarios || null, presupuestoFinal,
+      precios.churro, precios.chocolate, precios.envio, descuentoNum
     ];
 
     const nullIfEmpty = (v) => {
@@ -410,7 +477,7 @@ app.get('/admin/api/pedidos', ensureAdmin, async (req, res) => {
     const safePageSize = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 500);
     const safePage = Math.max(parseInt(page, 10) || 1, 1);
     const offset = (safePage - 1) * safePageSize;
-    const sql = `SELECT id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, estado, created_at
+    const sql = `SELECT id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, descuento, estado, created_at
            FROM pedidos
            ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
            ORDER BY ${sortCol} ${sortDir}, id DESC
@@ -899,7 +966,7 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
       'nombre','telefono','email','cp','direccion','ciudad','provincia','nif','solicita_factura',
       'personas','churros_por_persona','chocolates','fecha','hora',
       'requiere_envio','direccion_entrega','metodo_pago','comentarios',
-      'estado'
+      'estado','descuento'
     ];
 
     // Mezclar: valores actuales + cambios del body
@@ -921,6 +988,10 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     merged.personas = numOrNull(merged.personas);
     merged.churros_por_persona = numOrNull(merged.churros_por_persona);
     merged.chocolates = numOrNull(merged.chocolates);
+    merged.descuento = numOrNull(merged.descuento) || 0;
+    if (merged.descuento < 0) {
+      return res.status(400).json({ ok: false, error: 'El descuento debe ser un número válido mayor o igual a 0.' });
+    }
     // Fecha YYYY-MM-DD
     if (typeof merged.fecha === 'string') {
       const s = merged.fecha.includes('T') ? merged.fecha.slice(0,10) : merged.fecha;
@@ -969,26 +1040,26 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     const priceChurros = churrosOk ? personasNum * churrosPorNum * precios.churro : 0;
     const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * precios.chocolate : 0;
     const priceEnvio = envioBool ? precios.envio : 0;
-    const presupuestoAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
-    const manualEnabled = !!body.presupuesto_total_manual;
+    const subtotalAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
+    if (merged.descuento > subtotalAuto) {
+      return res.status(400).json({ ok: false, error: 'El descuento no puede ser mayor que el total del presupuesto.' });
+    }
+    const presupuestoAuto = Number((subtotalAuto - merged.descuento).toFixed(2));
     const overwriteCliente = !!body.overwrite_cliente;
     const telefonoAnterior = normalizeSpanishPhone(current.telefono || '');
     const telefonoNuevo = String(merged.telefono || '').trim();
 
-    if (manualEnabled) {
-      const manualRaw = body.presupuesto_total;
-      const manualNum = Number(String(manualRaw ?? '').replace(',', '.'));
-      if (!Number.isFinite(manualNum) || manualNum < 0) {
-        return res.status(400).json({ ok: false, error: 'Total manual inválido.' });
-      }
-      merged.presupuesto_total = Number(manualNum.toFixed(2));
-    } else {
-      merged.presupuesto_total = presupuestoAuto;
-    }
+    merged.presupuesto_total = presupuestoAuto;
+
+    // Snapshot del precio vigente: la factura de este pedido queda fija con estos valores
+    // hasta la próxima edición, sin verse afectada por cambios futuros en `precios`.
+    merged.precio_churro = precios.churro;
+    merged.precio_chocolate = precios.chocolate;
+    merged.precio_envio = precios.envio;
 
     // Construir UPDATE con todos los campos permitidos
-    const set = allowed.concat('presupuesto_total').map(k => `${k} = ?`).join(', ');
-    const params = allowed.concat('presupuesto_total').map(k => merged[k]);
+    const set = allowed.concat(['presupuesto_total', 'precio_churro', 'precio_chocolate', 'precio_envio']).map(k => `${k} = ?`).join(', ');
+    const params = allowed.concat(['presupuesto_total', 'precio_churro', 'precio_chocolate', 'precio_envio']).map(k => merged[k]);
     params.push(id);
     const sql = `UPDATE pedidos SET ${set} WHERE id = ?`;
 
@@ -1184,6 +1255,10 @@ async function ensureSchema() {
       metodo_pago VARCHAR(30) NOT NULL,
       comentarios TEXT,
       presupuesto_total DECIMAL(10,2) NOT NULL,
+      precio_churro DECIMAL(10,2) DEFAULT NULL,
+      precio_chocolate DECIMAL(10,2) DEFAULT NULL,
+      precio_envio DECIMAL(10,2) DEFAULT NULL,
+      descuento DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       estado ENUM('Pendiente','Realizado','Cobrado','Cancelado') NOT NULL DEFAULT 'Pendiente',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -1227,11 +1302,37 @@ async function ensureSchema() {
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `;
+  const ddlInfoEmpresa = `
+    CREATE TABLE IF NOT EXISTS info_empresa (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      informacion VARCHAR(255) NOT NULL,
+      fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `;
   try {
     await pool.execute(ddlPedidos);
     await pool.execute(ddlClientes);
     await pool.execute(ddlProveedores);
     await pool.execute(ddlPrecios);
+    await pool.execute(ddlInfoEmpresa);
+    // Compatibilidad: BBDD creadas antes de añadir el snapshot de precio por pedido (factura inmutable).
+    // No se usa "ADD COLUMN IF NOT EXISTS" porque requiere MySQL 8.0.29+; se comprueba a mano.
+    async function ensureColumn(nombre, definicion) {
+      const [rows] = await pool.execute(
+        `SELECT COLUMN_NAME
+         FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pedidos' AND COLUMN_NAME = ?
+         LIMIT 1`,
+        [nombre]
+      );
+      if (!Array.isArray(rows) || rows.length === 0) {
+        await pool.execute(`ALTER TABLE pedidos ADD COLUMN ${nombre} ${definicion}`);
+      }
+    }
+    await ensureColumn('precio_churro', 'DECIMAL(10,2) DEFAULT NULL');
+    await ensureColumn('precio_chocolate', 'DECIMAL(10,2) DEFAULT NULL');
+    await ensureColumn('precio_envio', 'DECIMAL(10,2) DEFAULT NULL');
+    await ensureColumn('descuento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
     // Fila única de precios vigentes; se siembra solo si la tabla está vacía.
     await pool.execute(
       'INSERT INTO precios (id, precio_churro, precio_chocolate, precio_envio) SELECT 1, 0.25, 1.50, 25.00 WHERE NOT EXISTS (SELECT 1 FROM precios WHERE id = 1)'
