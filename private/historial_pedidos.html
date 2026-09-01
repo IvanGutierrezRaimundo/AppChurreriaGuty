@@ -40,6 +40,20 @@
       border-color: #D1D5DB;
       color: #374151;
     }
+    .load-more-btn{
+      display: block;
+      margin: 14px auto 0;
+      min-width: 160px;
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: 1px solid var(--color-border);
+      background: var(--color-primary);
+      color: var(--color-brown);
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .load-more-btn:hover{ border-color: var(--color-brown); }
+    .load-more-btn:disabled{ opacity: 0.6; cursor: default; }
     .cards-grid{
       display: none;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -206,7 +220,7 @@
       <label for="pageSize">Resultados</label>
       <select id="pageSize">
         <option>20</option>
-        <option>50</option>
+        <option selected>50</option>
         <option>100</option>
         <option value="all">Todos</option>
       </select>
@@ -242,6 +256,7 @@
   <div id="cardsGrid" class="cards-grid"></div>
   <div id="calendarView" class="calendar-view"></div>
   <div id="calendarEmpty" class="calendar-empty"></div>
+  <button type="button" id="loadMoreBtn" class="load-more-btn" style="display:none;">Cargar más</button>
   <p id="infiniteStatus" class="infinite-status" aria-live="polite"></p>
   </div>
   </div>
@@ -305,6 +320,7 @@
     const actionConfirmCancel = document.getElementById('actionConfirmCancel');
     const actionConfirmAccept = document.getElementById('actionConfirmAccept');
     const infiniteStatus = document.getElementById('infiniteStatus');
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
     let editingEstadoId = null;
     let actionConfirmResolver = null;
     let actionConfirmMode = 'confirm';
@@ -316,6 +332,8 @@
     let infiniteHasMore = true;
     let infiniteLoading = false;
     const INFINITE_BATCH_SIZE = 100;
+    let historialNextPage = 1;
+    let historialHasMore = true;
     function formatDate(value){
       if(!value) return '';
       try{
@@ -507,6 +525,12 @@
       calendarView.classList.toggle('is-visible', showCalendario);
       if(showCalendario) renderCalendar(currentRows);
       updateViewButtons();
+      updateLoadMoreButton();
+    }
+
+    function updateLoadMoreButton(){
+      if(!loadMoreBtn) return;
+      loadMoreBtn.style.display = (!infiniteMode && historialHasMore && currentView !== 'calendario') ? '' : 'none';
     }
     function renderCard(r){
       return `
@@ -825,11 +849,13 @@
     async function load() {
       if (pageSizeSel.value === 'all') {
         await startHistorialInfiniteLoad();
+        updateLoadMoreButton();
         return;
       }
       infiniteMode = false;
       setInfiniteStatus('', false);
       const pageSize = Number(pageSizeSel.value);
+      historialNextPage = 1;
       const params = getHistorialBaseParams(pageSize);
       params.set('page', '1');
       const res = await fetch(`/admin/api/pedidos?${params.toString()}`);
@@ -840,9 +866,40 @@
       }
       // Client-side fallback sort to ensure visible reordering
       const rows = Array.isArray(data.data) ? data.data.slice() : [];
+      historialHasMore = rows.length === pageSize;
+      historialNextPage = 2;
       sortHistorialRows(rows);
       currentRows = rows;
       renderHistorialRows(currentRows);
+      updateLoadMoreButton();
+    }
+
+    async function loadMoreHistorial(){
+      if (loadMoreBtn.disabled || !historialHasMore) return;
+      const pageSize = Number(pageSizeSel.value) || 50;
+      loadMoreBtn.disabled = true;
+      loadMoreBtn.textContent = 'Cargando...';
+      try {
+        const params = getHistorialBaseParams(pageSize);
+        params.set('page', String(historialNextPage));
+        const res = await fetch(`/admin/api/pedidos?${params.toString()}`);
+        const data = await res.json();
+        if (!data.ok) {
+          await showActionAlert({ title: 'Error', message: data.error || 'Error' });
+          historialHasMore = false;
+          return;
+        }
+        const chunk = Array.isArray(data.data) ? data.data : [];
+        currentRows = currentRows.concat(chunk);
+        historialHasMore = chunk.length === pageSize;
+        historialNextPage += 1;
+        sortHistorialRows(currentRows);
+        renderHistorialRows(currentRows);
+      } finally {
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.textContent = 'Cargar más';
+        updateLoadMoreButton();
+      }
     }
     // Interacciones de ordenación en cabecera (delegadas)
     const thead = document.querySelector('table thead');
@@ -933,6 +990,7 @@
 
     document.getElementById('searchBtn').addEventListener('click', load);
     pageSizeSel.addEventListener('change', load);
+    loadMoreBtn.addEventListener('click', loadMoreHistorial);
     window.addEventListener('scroll', () => {
       if (!infiniteMode) return;
       if ((window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 300)) {

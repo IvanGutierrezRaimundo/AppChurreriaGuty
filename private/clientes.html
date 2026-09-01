@@ -37,6 +37,20 @@
       border-color: #D1D5DB;
       color: #374151;
     }
+    .load-more-btn{
+      display: block;
+      margin: 14px auto 0;
+      min-width: 160px;
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: 1px solid var(--color-border);
+      background: var(--color-primary);
+      color: var(--color-brown);
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .load-more-btn:hover{ border-color: var(--color-brown); }
+    .load-more-btn:disabled{ opacity: 0.6; cursor: default; }
     .cards-grid{
       display: none;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -134,6 +148,10 @@
     @media (max-width: 560px){
       .cards-grid{ grid-template-columns: 1fr; }
     }
+    @media (max-width: 680px){
+      .view-switch{ display: none; }
+      #clientesTable{ display: none !important; }
+    }
     .infinite-status{
       max-width: 1200px;
       margin: 10px auto 0;
@@ -166,7 +184,7 @@
         <label for="pageSize">Resultados</label>
         <select id="pageSize">
           <option>20</option>
-          <option>50</option>
+          <option selected>50</option>
           <option>100</option>
           <option value="all">Todos</option>
         </select>
@@ -198,6 +216,7 @@
         <tbody id="tbody"></tbody>
       </table>
       <div id="cardsGrid" class="cards-grid"></div>
+      <button type="button" id="loadMoreBtn" class="load-more-btn" style="display:none;">Cargar más</button>
       <p id="infiniteStatus" class="infinite-status" aria-live="polite"></p>
     </div>
   </div>
@@ -287,19 +306,23 @@
     const actionConfirmCancel = document.getElementById('actionConfirmCancel');
     const actionConfirmAccept = document.getElementById('actionConfirmAccept');
     const infiniteStatus = document.getElementById('infiniteStatus');
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
     let actionConfirmResolver = null;
     let actionConfirmMode = 'confirm';
     let currentRows = [];
     let activeDetailClientId = null;
     let editMode = 'edit';
-    let currentView = 'tabla';
-    let currentSort = 'fecha_registro';
-    let currentDir = 'desc';
+    const isMobileView = () => window.matchMedia('(max-width: 680px)').matches;
+    let currentView = isMobileView() ? 'fichas' : 'tabla';
+    let currentSort = 'nombre';
+    let currentDir = 'asc';
     let infiniteMode = false;
     let infinitePage = 1;
     let infiniteHasMore = true;
     let infiniteLoading = false;
     const INFINITE_BATCH_SIZE = 100;
+    let clientesNextPage = 1;
+    let clientesHasMore = true;
 
     function escapeHtml(value){
       return String(value ?? '')
@@ -329,11 +352,18 @@
     }
 
     function applyCurrentView(){
+      if(isMobileView() && currentView === 'tabla') currentView = 'fichas';
       const showTabla = currentView === 'tabla';
       const showFichas = currentView === 'fichas';
       clientesTable.style.display = showTabla ? 'table' : 'none';
       cardsGrid.classList.toggle('is-visible', showFichas);
       updateViewButtons();
+      updateLoadMoreButton();
+    }
+
+    function updateLoadMoreButton(){
+      if(!loadMoreBtn) return;
+      loadMoreBtn.style.display = (!infiniteMode && clientesHasMore) ? '' : 'none';
     }
 
     function setInfiniteStatus(text, visible){
@@ -770,12 +800,14 @@
         if(currentRows.length === 0 && !infiniteHasMore){
           setInfiniteStatus('No hay resultados', true);
         }
+        updateLoadMoreButton();
         return;
       }
 
       infiniteMode = false;
       setInfiniteStatus('', false);
       const pageSize = Number(pageSizeValue);
+      clientesNextPage = 1;
       const params = new URLSearchParams({ page: '1', pageSize: String(pageSize), sort: currentSort, dir: currentDir });
       if (q) params.set('q', q);
 
@@ -790,6 +822,8 @@
       cardsGrid.innerHTML = '';
       const rows = Array.isArray(data.data) ? data.data : [];
       currentRows = rows;
+      clientesHasMore = rows.length === pageSize;
+      clientesNextPage = 2;
       for (const r of rows){
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -814,6 +848,58 @@
       bindActions();
       updateSortIndicators();
       applyCurrentView();
+    }
+
+    async function loadMoreClientes(){
+      if (loadMoreBtn.disabled || !clientesHasMore) return;
+      const pageSize = Number(pageSizeSel.value) || 50;
+      loadMoreBtn.disabled = true;
+      loadMoreBtn.textContent = 'Cargando...';
+      try {
+        const q = document.getElementById('q').value.trim();
+        const params = new URLSearchParams({ page: String(clientesNextPage), pageSize: String(pageSize), sort: currentSort, dir: currentDir });
+        if (q) params.set('q', q);
+
+        const res = await fetch('/admin/api/clientes?' + params.toString());
+        const data = await res.json();
+        if (!data.ok) {
+          await showActionAlert({ title: 'Error', message: data.error || 'Error cargando clientes.' });
+          clientesHasMore = false;
+          return;
+        }
+
+        const chunk = Array.isArray(data.data) ? data.data : [];
+        currentRows = currentRows.concat(chunk);
+        clientesHasMore = chunk.length === pageSize;
+        clientesNextPage += 1;
+        for (const r of chunk){
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${escapeHtml(r.id)}</td>
+            <td>${escapeHtml(r.nif)}</td>
+            <td>${escapeHtml(r.nombre)}</td>
+            <td>${escapeHtml(r.telefono)}</td>
+            <td>${escapeHtml(r.email)}</td>
+            <td>${escapeHtml(r.direccion)}</td>
+            <td>${escapeHtml(r.ciudad)}</td>
+            <td>
+              <span class="btn-row">
+                <button data-id="${escapeHtml(r.id)}" class="open">Abrir</button>
+                <button data-id="${escapeHtml(r.id)}" class="del">Eliminar</button>
+              </span>
+            </td>
+          `;
+          tbody.appendChild(tr);
+          cardsGrid.insertAdjacentHTML('beforeend', renderCard(r));
+        }
+        bindActions();
+        updateSortIndicators();
+        applyCurrentView();
+      } finally {
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.textContent = 'Cargar más';
+        updateLoadMoreButton();
+      }
     }
 
     async function loadClientesInfiniteNext(){
@@ -893,6 +979,7 @@
 
     document.getElementById('searchBtn').addEventListener('click', load);
     pageSizeSel.addEventListener('change', load);
+    loadMoreBtn.addEventListener('click', loadMoreClientes);
     window.addEventListener('scroll', () => {
       if (!infiniteMode) return;
       if ((window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 300)) {
@@ -915,11 +1002,15 @@
     });
 
     viewTablaBtn.addEventListener('click', () => {
+      if(isMobileView()) return;
       currentView = 'tabla';
       applyCurrentView();
     });
     viewFichasBtn.addEventListener('click', () => {
       currentView = 'fichas';
+      applyCurrentView();
+    });
+    window.addEventListener('resize', () => {
       applyCurrentView();
     });
 
