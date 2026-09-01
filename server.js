@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
+let pool = global.pool || null;
 
 // Middleware para loggear todas las peticiones
 app.use((req, res, next) => {
@@ -389,7 +390,7 @@ app.post('/api/pedidos', async (req, res) => {
       Number.isFinite(chocolatesNum) ? chocolatesNum : null,
       fecha, hora,
       envioBool, direccion_entrega || null, metodo_pago, comentarios || null, presupuestoFinal,
-      precios.churro, precios.chocolate, precios.envio, descuentoNum
+      precios.churro, precios.chocolate, envioBool ? precios.envio : null, descuentoNum
     ];
 
     const nullIfEmpty = (v) => {
@@ -1208,17 +1209,22 @@ app.get('/admin/pedido', ensureAdmin, (req, res) => {
 
 async function start() {
   try {
-    pool = await mysql.createPool({
-      host: process.env.DB_HOST || 'localhost',
-      port: Number(process.env.DB_PORT || 3306),
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASS || '',
-      database: process.env.DB_NAME || 'app_pedidos_guty',
-      dateStrings: true,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0
-    });
+    if (!pool && global.pool) {
+      pool = global.pool;
+    }
+    if (!pool) {
+      pool = await mysql.createPool({
+        host: process.env.DB_HOST || 'localhost',
+        port: Number(process.env.DB_PORT || 3306),
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASS || '',
+        database: process.env.DB_NAME || 'app_pedidos_guty',
+        dateStrings: true,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0
+      });
+    }
     // Asegura el esquema necesario
     await ensureSchema();
     app.listen(PORT, () => {
@@ -1230,7 +1236,11 @@ async function start() {
   }
 }
 
-start();
+if (require.main === module) {
+  start();
+}
+
+module.exports = { app, pool, start };
 
 async function ensureSchema() {
   const ddlPedidos = `
