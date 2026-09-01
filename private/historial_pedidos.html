@@ -9,6 +9,32 @@
   <style>
     /* Ajustes mínimos específicos del panel admin para usar el tema corporativo */
     .admin-bar{ max-width: 1200px; margin: 0 auto var(--space-lg); display:flex; align-items:center; justify-content: space-between; }
+    .menu-toggle-btn{
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      border: 1px solid var(--color-border);
+      background: var(--color-primary);
+      color: var(--color-brown);
+      font-size: 1.3rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    @media (max-width: 680px){
+      .admin-bar{ flex-wrap: wrap; position: relative; }
+      .menu-toggle-btn{ display: inline-flex; }
+      .admin-bar .actions{
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+        margin-top: 10px;
+      }
+      .admin-bar .actions.is-open{ display: flex; }
+    }
     .admin-grid{ display:grid; grid-template-columns: 2.5fr 1fr 1fr 1fr auto; gap: 12px; align-items:end; }
     .admin-table-wrap{ max-width: 1200px; margin: 0 auto; }
     .admin-doc{ max-width: 1200px; margin: 0 auto; }
@@ -154,6 +180,10 @@
     @media (max-width: 560px){
       .cards-grid{ grid-template-columns: 1fr; }
     }
+    @media (max-width: 680px){
+      #viewTablaBtn{ display: none; }
+      #pedidosTable{ display: none !important; }
+    }
     .estado-cell{ cursor: pointer; }
     .estado-cell .pedido-estado-badge{ pointer-events: none; }
     .estado-modal-backdrop{
@@ -193,7 +223,8 @@
 <body>
   <div class="admin-bar">
     <h1>Historial de Pedidos</h1>
-    <div class="actions">
+    <button type="button" id="menuToggleBtn" class="menu-toggle-btn" aria-label="Abrir menú" aria-expanded="false" aria-controls="actionsMenu">☰</button>
+    <div class="actions" id="actionsMenu">
       <button type="button" id="menuAdminBtn" title="Menú">Menú</button>
       <button type="button" id="pedidosBtn" title="Pedidos">Pedidos</button>
       <button type="button" id="createPedidoBtn" title="Crear Pedido">Crear Pedido</button>
@@ -324,7 +355,8 @@
     let editingEstadoId = null;
     let actionConfirmResolver = null;
     let actionConfirmMode = 'confirm';
-    let currentView = 'tabla';
+    const isMobileView = () => window.matchMedia('(max-width: 680px)').matches;
+    let currentView = isMobileView() ? 'fichas' : 'tabla';
     let calendar = null;
     let currentRows = [];
     let infiniteMode = false;
@@ -517,6 +549,7 @@
       calendar.updateSize();
     }
     function applyCurrentView(){
+      if(isMobileView() && currentView === 'tabla') currentView = 'fichas';
       const showTabla = currentView === 'tabla';
       const showFichas = currentView === 'fichas';
       const showCalendario = currentView === 'calendario';
@@ -951,9 +984,33 @@
     }
 
     viewTablaBtn.addEventListener('click', () => {
+      if(isMobileView()) return;
       currentView = 'tabla';
       applyCurrentView();
     });
+    window.addEventListener('resize', () => {
+      applyCurrentView();
+    });
+    const menuToggleBtn = document.getElementById('menuToggleBtn');
+    const actionsMenu = document.getElementById('actionsMenu');
+    if (menuToggleBtn && actionsMenu) {
+      menuToggleBtn.addEventListener('click', () => {
+        const isOpen = actionsMenu.classList.toggle('is-open');
+        menuToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+      actionsMenu.addEventListener('click', (ev) => {
+        if (ev.target.closest('button')) {
+          actionsMenu.classList.remove('is-open');
+          menuToggleBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+      window.addEventListener('resize', () => {
+        if (!isMobileView()) {
+          actionsMenu.classList.remove('is-open');
+          menuToggleBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
     viewFichasBtn.addEventListener('click', () => {
       currentView = 'fichas';
       applyCurrentView();
