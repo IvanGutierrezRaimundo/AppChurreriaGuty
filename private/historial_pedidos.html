@@ -36,6 +36,59 @@
       .admin-bar .actions.is-open{ display: flex; }
     }
     .admin-grid{ display:grid; grid-template-columns: 2.5fr 1fr 1fr 1fr auto; gap: 12px; align-items:end; }
+    #filtrosToggleBtn{ display: none; }
+    .filtros-panel-head{ display: none; }
+    .filtros-close-btn{ display: none; }
+    @media (max-width: 680px){
+      #filtrosToggleBtn{ display: inline-flex; }
+      .filtros-backdrop{
+        position: fixed;
+        inset: 0;
+        background: rgba(43, 30, 24, 0.42);
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 16px;
+        overflow-y: auto;
+        z-index: 1000;
+      }
+      .filtros-backdrop.is-open{ display: flex; }
+      .filtros-panel{
+        background: #FFF;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-md);
+        padding: 20px;
+        width: 100%;
+        max-width: 420px;
+      }
+      .filtros-panel-head{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .filtros-panel-head h2{ margin: 0; color: var(--color-brown); font-size: 1.15rem; }
+      .filtros-close-btn{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 1px solid var(--color-border);
+        background: #FFF;
+        color: var(--color-brown);
+        font-size: 1.2rem;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .filtros-backdrop .admin-grid{
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+    }
     .admin-table-wrap{ max-width: 1200px; margin: 0 auto; }
     .admin-doc{ max-width: 1200px; margin: 0 auto; }
     th.sortable{ cursor: pointer; user-select: none; }
@@ -234,38 +287,47 @@
   </div>
 
   <div class="doc admin-doc">
-  <section class="admin-grid">
-    <div class="field">
-      <label for="q">Buscar</label>
-      <input id="q" placeholder="nombre, email, teléfono, ciudad, provincia" />
+  <div id="filtrosBackdrop" class="filtros-backdrop">
+    <div class="filtros-panel">
+      <div class="filtros-panel-head">
+        <h2>Filtros</h2>
+        <button type="button" id="filtrosCloseBtn" class="filtros-close-btn" aria-label="Cerrar">&times;</button>
+      </div>
+      <section class="admin-grid">
+        <div class="field">
+          <label for="q">Buscar</label>
+          <input id="q" placeholder="nombre, email, teléfono, ciudad, provincia" />
+        </div>
+        <div class="field">
+          <label for="desde">Desde</label>
+          <input id="desde" type="date" />
+        </div>
+        <div class="field">
+          <label for="hasta">Hasta</label>
+          <input id="hasta" type="date" />
+        </div>
+        <div class="field">
+          <label for="pageSize">Resultados</label>
+          <select id="pageSize">
+            <option>20</option>
+            <option selected>50</option>
+            <option>100</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button id="searchBtn">Buscar</button>
+        </div>
+      </section>
     </div>
-    <div class="field">
-      <label for="desde">Desde</label>
-      <input id="desde" type="date" />
-    </div>
-    <div class="field">
-      <label for="hasta">Hasta</label>
-      <input id="hasta" type="date" />
-    </div>
-    <div class="field">
-      <label for="pageSize">Resultados</label>
-      <select id="pageSize">
-        <option>20</option>
-        <option selected>50</option>
-        <option>100</option>
-        <option value="all">Todos</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>&nbsp;</label>
-      <button id="searchBtn">Buscar</button>
-    </div>
-  </section>
+  </div>
   <div class="admin-table-wrap">
   <div class="view-switch" aria-label="Cambiar vista de pedidos">
     <button type="button" id="viewTablaBtn" class="view-toggle is-active" aria-current="page">Tabla</button>
     <button type="button" id="viewFichasBtn" class="view-toggle">Fichas</button>
     <button type="button" id="viewCalendarioBtn" class="view-toggle">Calendario</button>
+    <button type="button" id="filtrosToggleBtn" class="view-toggle">Filtros</button>
   </div>
   <table id="pedidosTable">
     <thead>
@@ -1011,6 +1073,23 @@
         }
       });
     }
+    const filtrosToggleBtn = document.getElementById('filtrosToggleBtn');
+    const filtrosBackdrop = document.getElementById('filtrosBackdrop');
+    const filtrosCloseBtn = document.getElementById('filtrosCloseBtn');
+    if (filtrosToggleBtn && filtrosBackdrop) {
+      const closeFiltros = () => filtrosBackdrop.classList.remove('is-open');
+      filtrosToggleBtn.addEventListener('click', () => {
+        filtrosBackdrop.classList.add('is-open');
+      });
+      if (filtrosCloseBtn) filtrosCloseBtn.addEventListener('click', closeFiltros);
+      filtrosBackdrop.addEventListener('click', (ev) => {
+        if (ev.target === filtrosBackdrop) closeFiltros();
+      });
+      document.getElementById('searchBtn').addEventListener('click', closeFiltros);
+      window.addEventListener('resize', () => {
+        if (!isMobileView()) closeFiltros();
+      });
+    }
     viewFichasBtn.addEventListener('click', () => {
       currentView = 'fichas';
       applyCurrentView();
@@ -1042,6 +1121,10 @@
       }
       if(estadoModalBackdrop.classList.contains('is-open')){
         closeEstadoModal();
+        return;
+      }
+      if(filtrosBackdrop && filtrosBackdrop.classList.contains('is-open')){
+        filtrosBackdrop.classList.remove('is-open');
       }
     });
 
