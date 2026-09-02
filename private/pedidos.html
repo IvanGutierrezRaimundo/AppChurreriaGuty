@@ -236,6 +236,18 @@
     @media (max-width: 680px){
       #viewTablaBtn{ display: none; }
       #pedidosTable{ display: none !important; }
+      .fc .fc-toolbar{
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+      .fc .fc-toolbar-chunk{
+        display: flex;
+        justify-content: center;
+      }
+      .fc .fc-toolbar-chunk:nth-child(2){
+        order: -1;
+      }
     }
     .estado-cell{ cursor: pointer; }
     .estado-cell .pedido-estado-badge{ pointer-events: none; }

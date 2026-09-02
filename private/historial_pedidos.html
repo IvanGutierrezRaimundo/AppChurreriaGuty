@@ -182,6 +182,20 @@
       overflow-y: auto;
       padding-right: 2px;
     }
+    @media (max-width: 680px){
+      .fc .fc-toolbar{
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+      .fc .fc-toolbar-chunk{
+        display: flex;
+        justify-content: center;
+      }
+      .fc .fc-toolbar-chunk:nth-child(2){
+        order: -1;
+      }
+    }
     .cal-event-main{
       display: flex;
       justify-content: space-between;
