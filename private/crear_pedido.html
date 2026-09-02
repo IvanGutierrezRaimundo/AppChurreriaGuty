@@ -944,12 +944,14 @@
       const ciudadEl = document.getElementById('ciudad');
       const provinciaEl2 = document.getElementById('provincia');
       const nifEl2 = document.getElementById('nif');
+      const facturaFields = document.querySelectorAll('.factura-field');
       function updateFacturaRequirement(){
         // Nombre y teléfono siempre obligatorios
         if(nombreEl) nombreEl.required = true;
         if(telefonoEl) telefonoEl.required = true;
         const on = facturaChk?.checked || false;
         [emailEl, cpEl, direccionEl, ciudadEl, provinciaEl2, nifEl2].forEach(el => { if(el) el.required = on; });
+        facturaFields.forEach(field => field.classList.toggle('hidden', !on));
         // Limpiar mensajes personalizados al cambiar estado
         [nombreEl, telefonoEl, emailEl, cpEl, direccionEl, ciudadEl, provinciaEl2, nifEl2].forEach(el => el?.setCustomValidity(''));
         // Nota: el mensaje de e-mail se actualiza en sus propios listeners
@@ -1178,29 +1180,29 @@
           <label for="telefono">Teléfono *</label>
           <input id="telefono" name="telefono" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Ej: 600 123 456" required>
         </div>
-        <div class="field">
+        <div class="field factura-field hidden">
           <label for="nif">N.I.F.</label>
           <input id="nif" name="nif" autocomplete="off" placeholder="DNI/NIE/CIF" inputmode="text">
           <div id="nif-error" class="error hidden" aria-live="polite"></div>
         </div>
-        <div class="field">
+        <div class="field factura-field hidden">
           <label for="email">E-mail</label>
           <input id="email" name="email" type="email" autocomplete="email" placeholder="tu@correo.com">
           <div id="email-error" class="error hidden" aria-live="polite"></div>
         </div>
-        <div class="field">
+        <div class="field factura-field hidden">
           <label for="cp">Código postal</label>
           <input id="cp" name="cp" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{4,6}" maxlength="6" placeholder="Ej: 33001">
         </div>
-        <div class="field">
+        <div class="field factura-field hidden">
           <label for="direccion">Dirección</label>
           <input id="direccion" name="direccion" autocomplete="address-line1" maxlength="100" placeholder="Calle, número, piso">
         </div>
-        <div class="field">
+        <div class="field factura-field hidden">
           <label for="ciudad">Ciudad</label>
           <input id="ciudad" name="ciudad" autocomplete="address-level2" placeholder="Ej: Oviedo">
         </div>
-        <div class="field">
+        <div class="field factura-field hidden">
           <label for="provincia">Provincia</label>
           <input id="provincia" name="provincia" autocomplete="address-level1" placeholder="Ej: Asturias">
         </div>
