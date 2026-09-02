@@ -4,11 +4,29 @@ const dotenv = require('dotenv');
 const mysql = require('mysql2/promise');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 let pool = global.pool || null;
+
+// Necesario en Render/Heroku/etc: confía en el proxy para que `secure` en cookies funcione con HTTPS.
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
+// CSP desactivada: las páginas usan <script>/<style> inline extensivamente y romperían con el CSP por defecto.
+app.use(helmet({ contentSecurityPolicy: false }));
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'Demasiados intentos, inténtalo de nuevo más tarde.' }
+});
 
 // Middleware para loggear todas las peticiones
 app.use((req, res, next) => {
@@ -105,7 +123,7 @@ function isValidEmail(value) {
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Login y logout de administrador
-app.post('/admin/login', async (req, res) => {
+app.post('/admin/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
   const adminUser = process.env.ADMIN_USER || 'admin';
   const adminHash = process.env.ADMIN_PASS_HASH || '';
@@ -1222,7 +1240,9 @@ async function start() {
         dateStrings: true,
         waitForConnections: true,
         connectionLimit: 10,
-        queueLimit: 0
+        queueLimit: 0,
+        // TiDB Cloud (y otros proveedores en la nube) exigen conexión TLS.
+        ssl: process.env.DB_SSL === 'true' ? { minVersion: 'TLSv1.2' } : undefined
       });
     }
     // Asegura el esquema necesario

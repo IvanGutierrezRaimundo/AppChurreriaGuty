@@ -20,6 +20,7 @@ Gestión de pedidos de una churrería: formulario público de reserva/presupuest
    | `DB_USER` | Usuario de MySQL | `root` |
    | `DB_PASS` | Contraseña de MySQL | (vacío) |
    | `DB_NAME` | Base de datos | `app_pedidos_guty` |
+   | `DB_SSL` | `true` activa TLS en la conexión MySQL (necesario para TiDB Cloud u otros proveedores en la nube) | (vacío = sin TLS, para MySQL local) |
    | `SESSION_SECRET` | Secreto para firmar la cookie de sesión de admin | `change-me` |
    | `ADMIN_USER` | Usuario del panel de administración | `admin` |
    | `ADMIN_PASS_HASH` | Hash bcrypt de la contraseña de admin | (si vacío, la contraseña es `admin123`) |
@@ -36,6 +37,13 @@ npm start
 Para desarrollo con recarga automática: `npm run dev` (nodemon).
 
 El servidor corre en `http://localhost:3000`.
+
+## Entornos (local vs. producción con TiDB Cloud)
+
+El servidor siempre lee la conexión de `process.env.DB_*`, nunca hay datos de base de datos hardcodeados. Para usar MySQL local en desarrollo y TiDB Cloud en producción no hace falta tocar código, solo configurar variables de entorno distintas en cada sitio:
+
+- **Local**: tu `.env` (ignorado por git) con `DB_HOST=localhost` y el resto de credenciales de tu MySQL local, sin `DB_SSL`.
+- **Producción**: en el panel de la plataforma de despliegue (Render, Railway, Fly.io, VPS, etc.) configura `DB_HOST`, `DB_USER`, `DB_PASS`, `DB_NAME` con los datos de tu cluster de TiDB Cloud y añade `DB_SSL=true` (TiDB Cloud exige TLS).
 
 ## Tests
 
