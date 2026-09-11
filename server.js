@@ -63,6 +63,12 @@ function ensureAdmin(req, res, next) {
   return res.status(401).json({ ok: false, error: 'No autorizado' });
 }
 
+app.get('/admin/assets/calculador-pedidos-logic.js', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'utils', 'calculadorPedidosLogic.js'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 function isValidSpanishNif(value) {
   if (!value) return false;
   const v = String(value).trim().toUpperCase();

@@ -327,6 +327,7 @@
     </div>
   </div>
 
+  <script src="/admin/assets/calculador-pedidos-logic.js"></script>
   <script>
     // Solo permite enteros sin decimales (bloquea '.', ',', 'e', '-', '+')
     document.querySelectorAll('#numChurros, #numChocolates').forEach((input) => {
@@ -355,26 +356,15 @@
     }
 
     const EQUIV_STORAGE_KEY = 'calc_pedidos_equivalencias';
-    const EQUIV_DEFAULTS = {
-      churrosPorBolsa: 24,
-      bolsasPorCaja: 12,
-      chocolatesPorBidon: 50,
-      vasosPorJarra: 14,
-      horasPor1000Churros: 2,
-      minutosPorCazo: 40
-    };
+    const { DEFAULT_EQUIV_CONFIG, normalizeEquivConfig, calculatePedidoResultados } = window.CalculadorPedidosLogic;
+    const EQUIV_DEFAULTS = { ...DEFAULT_EQUIV_CONFIG };
 
     function cargarConfigEquivalencias(){
       try {
         const raw = localStorage.getItem(EQUIV_STORAGE_KEY);
         if(!raw) return { ...EQUIV_DEFAULTS };
         const parsed = JSON.parse(raw);
-        const config = { ...EQUIV_DEFAULTS };
-        Object.keys(EQUIV_DEFAULTS).forEach((key) => {
-          const value = Number(parsed?.[key]);
-          if(Number.isFinite(value) && value > 0) config[key] = value;
-        });
-        return config;
+        return normalizeEquivConfig(parsed);
       } catch (err) {
         return { ...EQUIV_DEFAULTS };
       }
@@ -406,52 +396,25 @@
     document.getElementById('calcularBtn').addEventListener('click', () => {
       const churros = parseInt(document.getElementById('numChurros').value, 10) || 0;
       const chocolates = parseInt(document.getElementById('numChocolates').value, 10) || 0;
-
-      const bolsas = churros / CONFIG.churrosPorBolsa;
-      const cajas = bolsas / CONFIG.bolsasPorCaja;
-      const bidonesDecimal = chocolates / CONFIG.chocolatesPorBidon;
-      const bidones = Math.floor(bidonesDecimal);
-      const restoBidones = chocolates % CONFIG.chocolatesPorBidon;
-      const jarras = restoBidones / CONFIG.vasosPorJarra;
-      const litrosChocolate = chocolates / 7;
-      const tuppersChocolatePuro = chocolates / 56;
-      const cazosNormales = chocolates / 100;
-      const cazosPuros = chocolates / 168;
-      const litrosLeche = chocolates * 0.036;
-      const gramosMezclaCacaoCazoPuro = (chocolates / 168) * 5000;
-      const gramosMezclaCacaoCazoNormal = cazosNormales * 2500;
-      const masas = churros / 1728;
-      const masasEnteras = Math.floor(masas);
-      const masasDecimalPct = (masas - masasEnteras) * 100;
-      const tuppersMasa = churros / 432;
-      const tubos = churros / 72;
-      const horasDecimalChurros = (churros * CONFIG.horasPor1000Churros) / 1000;
-      const horasDecimalChocolate = (cazosNormales * CONFIG.minutosPorCazo) / 60;
-      const horasDecimal = Math.max(horasDecimalChurros, horasDecimalChocolate);
-      let horas = Math.floor(horasDecimal);
-      let minutos = Math.round((horasDecimal - horas) * 60);
-      if(minutos === 60){
-        minutos = 0;
-        horas += 1;
-      }
+      const resultados = calculatePedidoResultados(churros, chocolates, CONFIG);
 
       const resultadosList = document.getElementById('resultadosList');
       resultadosList.innerHTML = '';
-      agregarResultado(resultadosList, 'Bolsas', fmt(bolsas, 2));
-      agregarResultado(resultadosList, 'Cajas aprox.', fmt(cajas, 2));
-      agregarResultado(resultadosList, 'Bidones', fmt(bidonesDecimal, 2) + ' o ' + fmt(bidones, 0) + ' + jarras');
-      agregarResultado(resultadosList, 'Jarras', fmt(jarras, 2));
-      agregarResultado(resultadosList, 'Litros de chocolate', fmt(litrosChocolate, 2));
-      agregarResultado(resultadosList, 'Tuppers de chocolate puro', fmt(tuppersChocolatePuro, 2));
-      agregarResultado(resultadosList, 'Cazos normales', fmt(cazosNormales, 2));
-      agregarResultado(resultadosList, 'Cazos puros', fmt(cazosPuros, 2));
-      agregarResultado(resultadosList, 'Litros de leche', fmt(litrosLeche, 3));
-      agregarResultado(resultadosList, 'Gr mezlca de cacao cazo puro', fmt(gramosMezclaCacaoCazoPuro, 2));
-      agregarResultado(resultadosList, 'Gr mezcla de cacao cazo normal', fmt(gramosMezclaCacaoCazoNormal, 2));
-      agregarResultado(resultadosList, 'Masas', fmt(masas, 2) + ' (' + fmt(masasDecimalPct, 0) + '%)');
-      agregarResultado(resultadosList, 'Tuppers de masa', fmt(tuppersMasa, 2));
-      agregarResultado(resultadosList, 'Tubos', fmt(tubos, 2));
-      agregarResultado(resultadosList, 'Tiempo', horas + ' h ' + minutos + ' min');
+      agregarResultado(resultadosList, 'Bolsas', fmt(resultados.bolsas, 2));
+      agregarResultado(resultadosList, 'Cajas aprox.', fmt(resultados.cajas, 2));
+      agregarResultado(resultadosList, 'Bidones', fmt(resultados.bidonesDecimal, 2) + ' o ' + fmt(resultados.bidones, 0) + ' + jarras');
+      agregarResultado(resultadosList, 'Jarras', fmt(resultados.jarras, 2));
+      agregarResultado(resultadosList, 'Litros de chocolate', fmt(resultados.litrosChocolate, 2));
+      agregarResultado(resultadosList, 'Tuppers de chocolate puro', fmt(resultados.tuppersChocolatePuro, 2));
+      agregarResultado(resultadosList, 'Cazos normales', fmt(resultados.cazosNormales, 2));
+      agregarResultado(resultadosList, 'Cazos puros', fmt(resultados.cazosPuros, 2));
+      agregarResultado(resultadosList, 'Litros de leche', fmt(resultados.litrosLeche, 3));
+      agregarResultado(resultadosList, 'Gr mezlca de cacao cazo puro', fmt(resultados.gramosMezclaCacaoCazoPuro, 2));
+      agregarResultado(resultadosList, 'Gr mezcla de cacao cazo normal', fmt(resultados.gramosMezclaCacaoCazoNormal, 2));
+      agregarResultado(resultadosList, 'Masas', fmt(resultados.masas, 2) + ' (' + fmt(resultados.masasDecimalPct, 0) + '%)');
+      agregarResultado(resultadosList, 'Tuppers de masa', fmt(resultados.tuppersMasa, 2));
+      agregarResultado(resultadosList, 'Tubos', fmt(resultados.tubos, 2));
+      agregarResultado(resultadosList, 'Tiempo', resultados.horas + ' h ' + resultados.minutos + ' min');
 
       actualizarPedidoInfo();
       document.getElementById('resultadosWrap').classList.remove('hidden');
