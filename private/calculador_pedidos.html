@@ -68,8 +68,20 @@
       color: var(--color-brown);
       font-weight: 600;
     }
+    .calc-print-actions{
+      margin-top: var(--space-lg);
+      text-align: right;
+    }
     @media (max-width: 560px){
       .calc-grid{ grid-template-columns: 1fr; }
+    }
+    @media print{
+      .calc-head, .calc-grid, .calc-actions{
+        display: none !important;
+      }
+      .calc-print-actions{
+        display: none !important;
+      }
     }
   </style>
 </head>
@@ -99,6 +111,9 @@
       <div class="calc-resultados hidden" id="resultadosWrap">
         <h2>Resultados</h2>
         <ul id="resultadosList"></ul>
+        <div class="calc-print-actions">
+          <button type="button" id="imprimirBtn">Imprimir PDF</button>
+        </div>
       </div>
     </section>
   </div>
@@ -138,7 +153,8 @@
 
       const bolsas = churros / 24;
       const cajas = bolsas / 12;
-      const bidones = Math.floor(chocolates / 50);
+      const bidonesDecimal = chocolates / 50;
+      const bidones = Math.floor(bidonesDecimal);
       const restoBidones = chocolates % 50;
       const jarras = restoBidones / 14;
       const litrosChocolate = chocolates / 7;
@@ -152,7 +168,9 @@
       const masasDecimalPct = (masas - masasEnteras) * 100;
       const tuppersMasa = churros / 432;
       const tubos = churros / 72;
-      const horasDecimal = (churros * 2) / 1000;
+      const horasDecimalChurros = (churros * 2) / 1000;
+      const horasDecimalChocolate = (cazosNormales * 40) / 60;
+      const horasDecimal = Math.max(horasDecimalChurros, horasDecimalChocolate);
       let horas = Math.floor(horasDecimal);
       let minutos = Math.round((horasDecimal - horas) * 60);
       if(minutos === 60){
@@ -164,7 +182,7 @@
       resultadosList.innerHTML = '';
       agregarResultado(resultadosList, 'Bolsas', fmt(bolsas, 2));
       agregarResultado(resultadosList, 'Cajas aprox.', fmt(cajas, 2));
-      agregarResultado(resultadosList, 'Bidones', fmt(bidones, 0));
+      agregarResultado(resultadosList, 'Bidones', fmt(bidonesDecimal, 2) + ' o ' + fmt(bidones, 0) + ' + jarras');
       agregarResultado(resultadosList, 'Jarras', fmt(jarras, 2));
       agregarResultado(resultadosList, 'Litros de chocolate', fmt(litrosChocolate, 2));
       agregarResultado(resultadosList, 'Tuppers de chocolate puro', fmt(tuppersChocolatePuro, 2));
@@ -178,6 +196,10 @@
       agregarResultado(resultadosList, 'Tiempo', horas + ' h ' + minutos + ' min');
 
       document.getElementById('resultadosWrap').classList.remove('hidden');
+    });
+
+    document.getElementById('imprimirBtn').addEventListener('click', () => {
+      window.print();
     });
   </script>
 </body>
