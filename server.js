@@ -223,6 +223,13 @@ app.get('/admin/herramientas/iva', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de escandallo (ficha del menú herramientas)
+app.get('/admin/herramientas/escandallo', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'escandallo.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 app.get('/admin/api/info-empresa', ensureAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.execute(

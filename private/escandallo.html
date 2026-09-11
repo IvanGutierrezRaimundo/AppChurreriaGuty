@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Escandallo</title>
+  <link rel="icon" type="image/jpeg" href="/img/logo_nuevo_churre.jpeg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .esc-wrap{
+      max-width: 980px;
+      margin: 0 auto;
+    }
+    .esc-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: var(--space-lg);
+    }
+    .esc-head h1{
+      margin: 0;
+      color: var(--color-brown);
+    }
+    .esc-layout{
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      gap: 18px;
+    }
+    .esc-card{
+      border: 1px solid var(--color-border);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+      padding: 16px;
+    }
+    .esc-card legend{
+      color: var(--color-brown);
+      font-weight: 800;
+      padding: 0 6px;
+    }
+    .esc-grid{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .esc-grid .field.full{
+      grid-column: 1 / -1;
+    }
+    .esc-note{
+      margin: 0 0 var(--space-lg);
+      padding: 12px 14px;
+      border: 1px solid rgba(196, 126, 35, 0.28);
+      border-radius: 12px;
+      background: #fff7e8;
+      color: var(--color-brown);
+    }
+    .esc-actions{
+      margin-top: var(--space-lg);
+      display: flex;
+      justify-content: flex-end;
+    }
+    .esc-actions button{
+      min-width: 180px;
+    }
+    .esc-resultados h2,
+    .esc-formulas h2{
+      margin: 0 0 10px;
+      color: var(--color-brown);
+      font-size: 1rem;
+    }
+    .esc-resultados ul,
+    .esc-formulas ul{
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 8px;
+    }
+    .esc-resultados li,
+    .esc-formulas li{
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      border-bottom: 1px dashed var(--color-border);
+      padding-bottom: 6px;
+    }
+    .esc-resultados li:last-child,
+    .esc-formulas li:last-child{
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .esc-resultados li span:first-child,
+    .esc-formulas li span:first-child{
+      color: var(--color-brown);
+      font-weight: 600;
+    }
+    @media (max-width: 680px){
+      .esc-wrap{
+        padding: 0 8px;
+      }
+      .esc-head{
+        flex-wrap: wrap;
+      }
+      .esc-layout,
+      .esc-grid{
+        grid-template-columns: 1fr;
+      }
+      .esc-actions button{
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="esc-wrap">
+    <section class="doc">
+      <div class="esc-head">
+        <h1>Escandallo</h1>
+        <button type="button" id="backBtn" title="Volver">Volver</button>
+      </div>
+
+      <p class="esc-note">Los precios mostrados no incluyen los gastos fijos ni otros gastos variables, solo las materias primas.</p>
+
+      <div class="esc-layout">
+        <fieldset class="esc-card">
+          <legend>Materias primas</legend>
+          <div class="esc-grid">
+            <div class="field">
+              <label for="precioHarina">1 kg de harina</label>
+              <input id="precioHarina" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="precioAceite">1 litro de aceite</label>
+              <input id="precioAceite" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="precioCacao">750 g de cacao</label>
+              <input id="precioCacao" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="precioAzucar">1 kg de azúcar</label>
+              <input id="precioAzucar" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="precioLeche">1 litro de leche</label>
+              <input id="precioLeche" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" />
+            </div>
+            <div class="field full">
+              <label for="precioPatatas">1 bolsa grande de patatas</label>
+              <input id="precioPatatas" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" />
+            </div>
+          </div>
+          <div class="esc-actions">
+            <button type="button" id="calcularBtn">Calcular</button>
+          </div>
+        </fieldset>
+
+        <div class="esc-side">
+          <section class="esc-card esc-resultados">
+            <h2>Resultados</h2>
+            <ul id="resultadosList"></ul>
+          </section>
+          <section class="esc-card esc-formulas" style="margin-top: 18px;">
+            <h2>Equivalencias usadas</h2>
+            <ul>
+              <li><span>12 churros</span><span>20 kg harina / 1728 churros + 60 ml aceite</span></li>
+              <li><span>1 porra</span><span>3 kg harina / 40 porras + 15 ml aceite</span></li>
+              <li><span>1 vaso de chocolate</span><span>80 g cacao / 14 vasos + 17,15 g azúcar + 25 ml leche</span></li>
+              <li><span>1 bolsa pequeña de patatas</span><span>1 bolsa grande / 4</span></li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'escandallo_precios';
+    const DEFAULTS = {
+      precioHarina: 0.90,
+      precioAceite: 4.50,
+      precioCacao: 13.00,
+      precioAzucar: 1.00,
+      precioLeche: 1.00,
+      precioPatatas: 3.75
+    };
+
+    function parseDecimal(value){
+      const normalized = String(value || '').replace(',', '.').trim();
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function formatMoney(value){
+      return value.toLocaleString('es-ES', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }) + ' €';
+    }
+
+    function loadPrecios(){
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return { ...DEFAULTS };
+        const parsed = JSON.parse(raw);
+        return {
+          precioHarina: Number.isFinite(Number(parsed?.precioHarina)) ? Number(parsed.precioHarina) : DEFAULTS.precioHarina,
+          precioAceite: Number.isFinite(Number(parsed?.precioAceite)) ? Number(parsed.precioAceite) : DEFAULTS.precioAceite,
+          precioCacao: Number.isFinite(Number(parsed?.precioCacao)) ? Number(parsed.precioCacao) : DEFAULTS.precioCacao,
+          precioAzucar: Number.isFinite(Number(parsed?.precioAzucar)) ? Number(parsed.precioAzucar) : DEFAULTS.precioAzucar,
+          precioLeche: Number.isFinite(Number(parsed?.precioLeche)) ? Number(parsed.precioLeche) : DEFAULTS.precioLeche,
+          precioPatatas: Number.isFinite(Number(parsed?.precioPatatas)) ? Number(parsed.precioPatatas) : DEFAULTS.precioPatatas
+        };
+      } catch (err) {
+        return { ...DEFAULTS };
+      }
+    }
+
+    function fillInputs(precios){
+      document.getElementById('precioHarina').value = precios.precioHarina.toFixed(2);
+      document.getElementById('precioAceite').value = precios.precioAceite.toFixed(2);
+      document.getElementById('precioCacao').value = precios.precioCacao.toFixed(2);
+      document.getElementById('precioAzucar').value = precios.precioAzucar.toFixed(2);
+      document.getElementById('precioLeche').value = precios.precioLeche.toFixed(2);
+      document.getElementById('precioPatatas').value = precios.precioPatatas.toFixed(2);
+    }
+
+    function readPrecios(){
+      return {
+        precioHarina: parseDecimal(document.getElementById('precioHarina').value),
+        precioAceite: parseDecimal(document.getElementById('precioAceite').value),
+        precioCacao: parseDecimal(document.getElementById('precioCacao').value),
+        precioAzucar: parseDecimal(document.getElementById('precioAzucar').value),
+        precioLeche: parseDecimal(document.getElementById('precioLeche').value),
+        precioPatatas: parseDecimal(document.getElementById('precioPatatas').value)
+      };
+    }
+
+    function addResultado(lista, etiqueta, valor){
+      const li = document.createElement('li');
+      li.innerHTML = '<span>' + etiqueta + '</span><span>' + valor + '</span>';
+      lista.appendChild(li);
+    }
+
+    function calcularEscandallo(){
+      const precios = readPrecios();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(precios));
+
+      const harina12ChurrosKg = (20 / 1728) * 12;
+      const aceite12ChurrosLitros = 60 / 1000;
+      const precio12Churros = (harina12ChurrosKg * precios.precioHarina) + (aceite12ChurrosLitros * precios.precioAceite);
+
+      const harinaPorPorraKg = 3 / 40;
+      const aceitePorPorraLitros = 15 / 1000;
+      const precioPorra = (harinaPorPorraKg * precios.precioHarina) + (aceitePorPorraLitros * precios.precioAceite);
+
+      const cacaoPorVasoKg = (80 / 14) / 1000;
+      const azucarPorVasoKg = 17.15 / 1000;
+      const lechePorVasoLitros = 25 / 1000;
+      const precioCacaoPorKg = precios.precioCacao / 0.75;
+      const precioVasoChocolate = (cacaoPorVasoKg * precioCacaoPorKg) + (azucarPorVasoKg * precios.precioAzucar) + (lechePorVasoLitros * precios.precioLeche);
+
+      const precioBolsaPatatasPequena = precios.precioPatatas / 4;
+
+      const resultadosList = document.getElementById('resultadosList');
+      resultadosList.innerHTML = '';
+      addResultado(resultadosList, 'Precio de 12 churros', formatMoney(precio12Churros));
+      addResultado(resultadosList, 'Precio de una porra', formatMoney(precioPorra));
+      addResultado(resultadosList, 'Precio del vaso de chocolate', formatMoney(precioVasoChocolate));
+      addResultado(resultadosList, 'Precio bolsa patatas pequeña', formatMoney(precioBolsaPatatasPequena));
+    }
+
+    fillInputs(loadPrecios());
+    calcularEscandallo();
+
+    document.getElementById('calcularBtn').addEventListener('click', calcularEscandallo);
+    document.getElementById('backBtn').addEventListener('click', () => {
+      location.href = '/admin/herramientas';
+    });
+  </script>
+</body>
+</html>
