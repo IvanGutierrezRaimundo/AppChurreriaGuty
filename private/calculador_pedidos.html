@@ -29,6 +29,13 @@
     }
     .calc-actions{
       margin-top: var(--space-lg);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .calc-actions button{
+      flex: 1 1 auto;
+      white-space: nowrap;
     }
     .calc-resultados{
       margin-top: var(--space-lg);
@@ -46,6 +53,16 @@
       color: var(--color-brown);
       font-size: 1.05rem;
     }
+    .calc-pedido-info{
+      margin: 0 0 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px dashed var(--color-border);
+      color: var(--color-brown);
+      font-size: 0.95rem;
+    }
+    .calc-pedido-info.hidden{
+      display: none;
+    }
     .calc-resultados ul{
       margin: 0;
       padding-left: 0;
@@ -56,7 +73,8 @@
     .calc-resultados li{
       display: flex;
       justify-content: space-between;
-      gap: 10px;
+      flex-wrap: wrap;
+      gap: 4px 10px;
       border-bottom: 1px dashed var(--color-border);
       padding-bottom: 6px;
     }
@@ -72,8 +90,157 @@
       margin-top: var(--space-lg);
       text-align: right;
     }
-    @media (max-width: 560px){
+    .pedido-picker-modal{
+      width: min(640px, 96vw);
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .pedido-picker-table-wrap{
+      border: 1px solid #d8dfec;
+      border-radius: 10px;
+      overflow: auto;
+      max-height: min(56vh, 420px);
+      background: #fff;
+    }
+    .pedido-picker-table{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    .pedido-picker-table th,
+    .pedido-picker-table td{
+      padding: 9px 11px;
+      border-bottom: 1px solid #edf1f7;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .pedido-picker-table th{
+      position: sticky;
+      top: 0;
+      background: #f4f7fd;
+      z-index: 1;
+    }
+    .pedido-picker-row{
+      cursor: pointer;
+    }
+    .pedido-picker-row:hover{
+      background: #f8fbff;
+    }
+    .pedido-picker-row.is-selected{
+      background: #e6f0ff;
+    }
+    .pedido-picker-status{
+      margin: 0;
+      font-size: 0.92rem;
+      color: #2f3e54;
+    }
+    .pedido-picker-status.error{
+      color: #b42318;
+    }
+    .pedido-picker-search{
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #c8d3e2;
+      border-radius: 9px;
+      padding: 9px 10px;
+      font: inherit;
+      background: #fff;
+    }
+    .pedido-picker-search:focus{
+      outline: 2px solid #9bc0ff;
+      outline-offset: 1px;
+      border-color: #89b1f7;
+    }
+    .pedido-picker-empty{
+      margin: 0;
+      padding: 14px;
+      color: #5f6f87;
+    }
+    .equiv-modal{
+      width: min(620px, 96vw);
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .equiv-list{
+      overflow: auto;
+      max-height: min(60vh, 460px);
+      border: 1px solid #d8dfec;
+      border-radius: 10px;
+      background: #fff;
+      padding: 4px 0;
+    }
+    .equiv-item{
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      padding: 9px 14px;
+      border-bottom: 1px solid #edf1f7;
+      font-size: 0.92rem;
+      flex-wrap: wrap;
+    }
+    .equiv-item:last-child{
+      border-bottom: none;
+    }
+    .equiv-item .equiv-text{
+      color: #2f3e54;
+    }
+    .equiv-item input[type="number"]{
+      width: 64px;
+      box-sizing: border-box;
+      border: 1px solid #c8d3e2;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font: inherit;
+      text-align: center;
+    }
+    .equiv-item.is-editable{
+      background: #f8fbff;
+    }
+    @media (max-width: 680px){
+      .calc-wrap{
+        padding: 0 8px;
+      }
       .calc-grid{ grid-template-columns: 1fr; }
+      .calc-actions button{
+        flex: 1 1 100%;
+      }
+      .calc-resultados{
+        padding: 14px;
+      }
+      .calc-print-actions{
+        text-align: stretch;
+      }
+      .calc-print-actions button{
+        width: 100%;
+      }
+      .pedido-picker-modal{
+        width: 96vw;
+        padding: 14px;
+      }
+      .pedido-picker-table th,
+      .pedido-picker-table td{
+        padding: 7px 8px;
+        font-size: 0.88rem;
+      }
+      .confirm-actions{
+        flex-wrap: wrap;
+      }
+      .confirm-actions button{
+        flex: 1 1 100%;
+      }
+      .equiv-modal{
+        width: 96vw;
+        padding: 14px;
+      }
+      .equiv-item{
+        flex-wrap: wrap;
+        padding: 8px 10px;
+      }
     }
     @media print{
       .calc-head, .calc-grid, .calc-actions{
@@ -106,16 +273,58 @@
 
       <div class="calc-actions">
         <button type="button" id="calcularBtn">Calcular</button>
+        <button type="button" id="selectPedidoBtn">Seleccione pedido</button>
+        <button type="button" id="equivalenciasBtn">Tabla de equivalencias</button>
       </div>
 
       <div class="calc-resultados hidden" id="resultadosWrap">
         <h2>Resultados</h2>
+        <p class="calc-pedido-info hidden" id="pedidoInfo"></p>
         <ul id="resultadosList"></ul>
         <div class="calc-print-actions">
           <button type="button" id="imprimirBtn">Imprimir PDF</button>
         </div>
       </div>
     </section>
+  </div>
+
+  <div id="pedido-picker-modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal pedido-picker-modal" role="dialog" aria-modal="true" aria-labelledby="pedido-picker-title">
+      <button type="button" id="pedido-picker-close" class="confirm-close" aria-label="Cerrar">×</button>
+      <h2 id="pedido-picker-title">Seleccionar pedido</h2>
+      <p class="confirm-intro">Elige un pedido pendiente para rellenar el número de churros y chocolates.</p>
+      <input type="search" id="pedido-picker-search" class="pedido-picker-search" placeholder="Buscar por nombre o ID" autocomplete="off" aria-label="Buscar pedido">
+      <p id="pedido-picker-status" class="pedido-picker-status" aria-live="polite">Cargando pedidos...</p>
+      <div class="pedido-picker-table-wrap">
+        <table class="pedido-picker-table" aria-label="Pedidos pendientes">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody id="pedido-picker-body"></tbody>
+        </table>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" id="pedido-picker-cancel" class="ghost">Cancelar</button>
+        <button type="button" id="pedido-picker-accept" disabled>Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="equiv-modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal equiv-modal" role="dialog" aria-modal="true" aria-labelledby="equiv-title">
+      <button type="button" id="equiv-close" class="confirm-close" aria-label="Cerrar">×</button>
+      <h2 id="equiv-title">Tabla de equivalencias</h2>
+      <p class="confirm-intro">Los valores resaltados son editables y afectan a los cálculos.</p>
+      <div class="equiv-list" id="equiv-list"></div>
+      <div class="confirm-actions">
+        <button type="button" id="equiv-cancel" class="ghost">Cancelar</button>
+        <button type="button" id="equiv-save">Guardar</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -138,8 +347,40 @@
     });
 
     function fmt(n, decimals){
+      const rounded = Number(n.toFixed(decimals));
+      if(rounded === Math.trunc(rounded)){
+        return rounded.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      }
       return n.toLocaleString('es-ES', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
     }
+
+    const EQUIV_STORAGE_KEY = 'calc_pedidos_equivalencias';
+    const EQUIV_DEFAULTS = {
+      churrosPorBolsa: 24,
+      bolsasPorCaja: 12,
+      chocolatesPorBidon: 50,
+      vasosPorJarra: 14,
+      horasPor1000Churros: 2,
+      minutosPorCazo: 40
+    };
+
+    function cargarConfigEquivalencias(){
+      try {
+        const raw = localStorage.getItem(EQUIV_STORAGE_KEY);
+        if(!raw) return { ...EQUIV_DEFAULTS };
+        const parsed = JSON.parse(raw);
+        const config = { ...EQUIV_DEFAULTS };
+        Object.keys(EQUIV_DEFAULTS).forEach((key) => {
+          const value = Number(parsed?.[key]);
+          if(Number.isFinite(value) && value > 0) config[key] = value;
+        });
+        return config;
+      } catch (err) {
+        return { ...EQUIV_DEFAULTS };
+      }
+    }
+
+    let CONFIG = cargarConfigEquivalencias();
 
     function agregarResultado(lista, etiqueta, valor){
       const li = document.createElement('li');
@@ -147,29 +388,45 @@
       lista.appendChild(li);
     }
 
+    let pedidoInfoSeleccionado = null;
+
+    function actualizarPedidoInfo(){
+      const pedidoInfoEl = document.getElementById('pedidoInfo');
+      if(!pedidoInfoEl) return;
+      if(!pedidoInfoSeleccionado){
+        pedidoInfoEl.classList.add('hidden');
+        pedidoInfoEl.textContent = '';
+        return;
+      }
+      const { id, nombre, fecha } = pedidoInfoSeleccionado;
+      pedidoInfoEl.textContent = `Pedido #${id} — ${nombre || '—'} — ${fecha || '—'}`;
+      pedidoInfoEl.classList.remove('hidden');
+    }
+
     document.getElementById('calcularBtn').addEventListener('click', () => {
       const churros = parseInt(document.getElementById('numChurros').value, 10) || 0;
       const chocolates = parseInt(document.getElementById('numChocolates').value, 10) || 0;
 
-      const bolsas = churros / 24;
-      const cajas = bolsas / 12;
-      const bidonesDecimal = chocolates / 50;
+      const bolsas = churros / CONFIG.churrosPorBolsa;
+      const cajas = bolsas / CONFIG.bolsasPorCaja;
+      const bidonesDecimal = chocolates / CONFIG.chocolatesPorBidon;
       const bidones = Math.floor(bidonesDecimal);
-      const restoBidones = chocolates % 50;
-      const jarras = restoBidones / 14;
+      const restoBidones = chocolates % CONFIG.chocolatesPorBidon;
+      const jarras = restoBidones / CONFIG.vasosPorJarra;
       const litrosChocolate = chocolates / 7;
       const tuppersChocolatePuro = chocolates / 56;
       const cazosNormales = chocolates / 100;
       const cazosPuros = chocolates / 168;
       const litrosLeche = chocolates * 0.036;
-      const gramosMezclaCacao = (chocolates / 168) * 5000;
+      const gramosMezclaCacaoCazoPuro = (chocolates / 168) * 5000;
+      const gramosMezclaCacaoCazoNormal = cazosNormales * 2500;
       const masas = churros / 1728;
       const masasEnteras = Math.floor(masas);
       const masasDecimalPct = (masas - masasEnteras) * 100;
       const tuppersMasa = churros / 432;
       const tubos = churros / 72;
-      const horasDecimalChurros = (churros * 2) / 1000;
-      const horasDecimalChocolate = (cazosNormales * 40) / 60;
+      const horasDecimalChurros = (churros * CONFIG.horasPor1000Churros) / 1000;
+      const horasDecimalChocolate = (cazosNormales * CONFIG.minutosPorCazo) / 60;
       const horasDecimal = Math.max(horasDecimalChurros, horasDecimalChocolate);
       let horas = Math.floor(horasDecimal);
       let minutos = Math.round((horasDecimal - horas) * 60);
@@ -189,17 +446,280 @@
       agregarResultado(resultadosList, 'Cazos normales', fmt(cazosNormales, 2));
       agregarResultado(resultadosList, 'Cazos puros', fmt(cazosPuros, 2));
       agregarResultado(resultadosList, 'Litros de leche', fmt(litrosLeche, 3));
-      agregarResultado(resultadosList, 'Gramos de mezcla de cacao', fmt(gramosMezclaCacao, 2));
+      agregarResultado(resultadosList, 'Gr mezlca de cacao cazo puro', fmt(gramosMezclaCacaoCazoPuro, 2));
+      agregarResultado(resultadosList, 'Gr mezcla de cacao cazo normal', fmt(gramosMezclaCacaoCazoNormal, 2));
       agregarResultado(resultadosList, 'Masas', fmt(masas, 2) + ' (' + fmt(masasDecimalPct, 0) + '%)');
       agregarResultado(resultadosList, 'Tuppers de masa', fmt(tuppersMasa, 2));
       agregarResultado(resultadosList, 'Tubos', fmt(tubos, 2));
       agregarResultado(resultadosList, 'Tiempo', horas + ' h ' + minutos + ' min');
 
+      actualizarPedidoInfo();
       document.getElementById('resultadosWrap').classList.remove('hidden');
     });
 
     document.getElementById('imprimirBtn').addEventListener('click', () => {
       window.print();
+    });
+
+    const pedidoPickerModal = document.getElementById('pedido-picker-modal');
+    const pedidoPickerBody = document.getElementById('pedido-picker-body');
+    const pedidoPickerSearch = document.getElementById('pedido-picker-search');
+    const pedidoPickerStatus = document.getElementById('pedido-picker-status');
+    const pedidoPickerAccept = document.getElementById('pedido-picker-accept');
+    const pedidoPickerCancel = document.getElementById('pedido-picker-cancel');
+    const pedidoPickerClose = document.getElementById('pedido-picker-close');
+    let pedidosPendientes = [];
+    let pedidoSeleccionado = null;
+
+    function normalizeSearchText(value){
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+    }
+
+    function getFilteredPedidosPendientes(){
+      const term = normalizeSearchText(pedidoPickerSearch?.value || '');
+      if(!term) return [...pedidosPendientes];
+      return pedidosPendientes.filter((pedido) => {
+        const nombre = normalizeSearchText(pedido?.nombre || '');
+        const id = String(pedido?.id ?? '');
+        return nombre.includes(term) || id.includes(term);
+      });
+    }
+
+    function updatePedidoPickerStatus(filteredCount){
+      if(!pedidoPickerStatus) return;
+      if(filteredCount === 0){
+        pedidoPickerStatus.textContent = 'No hay coincidencias para la búsqueda actual.';
+        return;
+      }
+      const total = pedidosPendientes.length;
+      if(filteredCount === total){
+        pedidoPickerStatus.textContent = `${total} pedido(s) pendiente(s). Selecciona uno y pulsa Aceptar.`;
+        return;
+      }
+      pedidoPickerStatus.textContent = `${filteredCount} resultado(s) de ${total} pedido(s).`;
+    }
+
+    function renderPedidoPickerRows(rows){
+      if(!pedidoPickerBody) return;
+      pedidoPickerBody.innerHTML = '';
+      pedidoSeleccionado = null;
+      if(pedidoPickerAccept) pedidoPickerAccept.disabled = true;
+
+      if(!rows.length){
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 3;
+        td.className = 'pedido-picker-empty';
+        td.textContent = 'No hay pedidos pendientes disponibles.';
+        tr.appendChild(td);
+        pedidoPickerBody.appendChild(tr);
+        return;
+      }
+
+      rows.forEach((pedido) => {
+        const tr = document.createElement('tr');
+        tr.className = 'pedido-picker-row';
+
+        const tdId = document.createElement('td');
+        tdId.textContent = String(pedido.id ?? '—');
+        const tdNombre = document.createElement('td');
+        tdNombre.textContent = String(pedido.nombre || '').trim() || '—';
+        const tdFecha = document.createElement('td');
+        tdFecha.textContent = pedido.fecha ? String(pedido.fecha).slice(0, 10) : '—';
+
+        tr.appendChild(tdId);
+        tr.appendChild(tdNombre);
+        tr.appendChild(tdFecha);
+
+        tr.addEventListener('click', () => {
+          pedidoPickerBody.querySelectorAll('.pedido-picker-row').forEach((row) => {
+            row.classList.remove('is-selected');
+          });
+          tr.classList.add('is-selected');
+          pedidoSeleccionado = pedido;
+          if(pedidoPickerAccept) pedidoPickerAccept.disabled = false;
+        });
+
+        pedidoPickerBody.appendChild(tr);
+      });
+    }
+
+    function renderPedidoPickerFiltered(){
+      const filtered = getFilteredPedidosPendientes();
+      renderPedidoPickerRows(filtered);
+      updatePedidoPickerStatus(filtered.length);
+    }
+
+    function closePedidoPickerModal(){
+      if(pedidoPickerModal?.contains(document.activeElement)){
+        document.getElementById('selectPedidoBtn')?.focus();
+      }
+      pedidoPickerModal?.classList.add('hidden');
+      pedidoPickerModal?.setAttribute('aria-hidden', 'true');
+    }
+
+    async function openPedidoPickerModal(){
+      if(!pedidoPickerModal || !pedidoPickerStatus) return;
+      pedidoPickerModal.classList.remove('hidden');
+      pedidoPickerModal.setAttribute('aria-hidden', 'false');
+      pedidoPickerStatus.classList.remove('error');
+      if(pedidoPickerSearch) pedidoPickerSearch.value = '';
+      pedidoPickerStatus.textContent = 'Cargando pedidos...';
+      renderPedidoPickerRows([]);
+
+      try {
+        const resp = await fetch('/admin/api/pedidos?estado=Pendiente&page=1&pageSize=500&sort=fecha&dir=desc', {
+          credentials: 'same-origin'
+        });
+        const data = await resp.json().catch(() => ({}));
+        if(!resp.ok || data.ok === false){
+          throw new Error(data.error || 'No se pudieron cargar los pedidos.');
+        }
+        pedidosPendientes = Array.isArray(data.data) ? data.data : [];
+        renderPedidoPickerFiltered();
+        pedidoPickerSearch?.focus();
+      } catch (err) {
+        console.error('Error cargando pedidos pendientes:', err);
+        pedidosPendientes = [];
+        renderPedidoPickerRows([]);
+        pedidoPickerStatus.textContent = `Error al cargar pedidos: ${err?.message || 'desconocido'}`;
+        pedidoPickerStatus.classList.add('error');
+      }
+    }
+
+    document.getElementById('selectPedidoBtn').addEventListener('click', openPedidoPickerModal);
+    pedidoPickerCancel?.addEventListener('click', closePedidoPickerModal);
+    pedidoPickerClose?.addEventListener('click', closePedidoPickerModal);
+    pedidoPickerModal?.addEventListener('click', (e) => {
+      if(e.target === pedidoPickerModal) closePedidoPickerModal();
+    });
+    pedidoPickerSearch?.addEventListener('input', renderPedidoPickerFiltered);
+    pedidoPickerAccept?.addEventListener('click', () => {
+      if(!pedidoSeleccionado) return;
+      const personas = Number(pedidoSeleccionado.personas) || 0;
+      const churrosPorPersona = Number(pedidoSeleccionado.churros_por_persona) || 0;
+      const chocolates = Number(pedidoSeleccionado.chocolates) || 0;
+      document.getElementById('numChurros').value = personas * churrosPorPersona;
+      document.getElementById('numChocolates').value = chocolates;
+      pedidoInfoSeleccionado = {
+        id: pedidoSeleccionado.id,
+        nombre: pedidoSeleccionado.nombre,
+        fecha: pedidoSeleccionado.fecha ? String(pedidoSeleccionado.fecha).slice(0, 10) : ''
+      };
+      closePedidoPickerModal();
+    });
+
+    const equivModal = document.getElementById('equiv-modal');
+    const equivList = document.getElementById('equiv-list');
+    const equivBtn = document.getElementById('equivalenciasBtn');
+    const equivClose = document.getElementById('equiv-close');
+    const equivCancel = document.getElementById('equiv-cancel');
+    const equivSave = document.getElementById('equiv-save');
+
+    const EQUIV_ITEMS = [
+      { text: '1 Bolsa =', suffix: 'churros', key: 'churrosPorBolsa' },
+      { text: '1 Caja aprox. =', suffix: 'bolsas', key: 'bolsasPorCaja' },
+      { text: '1 Bidón =', suffix: 'chocolates', key: 'chocolatesPorBidon' },
+      { text: '1 Bidón = 7 litros' },
+      { text: '1 Jarra =', suffix: 'vasos', key: 'vasosPorJarra' },
+      { text: '1 Jarra = 2 litros' },
+      { text: '1 Litro = 7 chocolates' },
+      { text: '1 Tuppers de chocolate puro = 56 chocolates' },
+      { text: '1 Cazo normal = 10 litros de agua + 4 de leche + 2500 gr mezcla de cacao' },
+      { text: '1 Cazo normal = 100 chocolates' },
+      { text: '1 Cazo puro = 14 litros de agua + 5000 gr mezcla de cacao' },
+      { text: '1 Cazo puro = 168 chocolates' },
+      { text: '1 Tupper chocolate puro = 2 litros de leche + 1 de agua' },
+      { text: '1 Tupper chocolate puro = 7/8 litros chocolate' },
+      { text: '1 Masa = 1728 churros (144 docenas o 4 tuppers)' },
+      { text: '1 Tuppers de masa = 432 churros (36 docenas o 6 tubos)' },
+      { text: '1 Tubo = 72 churros (6 docenas)' },
+      { text: '1000 Churros =', suffix: 'horas', key: 'horasPor1000Churros' },
+      { text: '1 Cazo =', suffix: 'minutos', key: 'minutosPorCazo' }
+    ];
+
+    function renderEquivList(){
+      if(!equivList) return;
+      equivList.innerHTML = '';
+      EQUIV_ITEMS.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'equiv-item' + (item.key ? ' is-editable' : '');
+
+        const span = document.createElement('span');
+        span.className = 'equiv-text';
+        span.textContent = item.text;
+        row.appendChild(span);
+
+        if(item.key){
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.min = '0.01';
+          input.step = 'any';
+          input.dataset.key = item.key;
+          input.value = CONFIG[item.key];
+          row.appendChild(input);
+
+          const suffix = document.createElement('span');
+          suffix.className = 'equiv-text';
+          suffix.textContent = item.suffix;
+          row.appendChild(suffix);
+        } else if(item.suffix){
+          const span2 = document.createElement('span');
+          span2.className = 'equiv-text';
+          span2.textContent = item.suffix;
+          row.appendChild(span2);
+        }
+
+        equivList.appendChild(row);
+      });
+    }
+
+    function closeEquivModal(){
+      if(equivModal?.contains(document.activeElement)){
+        equivBtn?.focus();
+      }
+      equivModal?.classList.add('hidden');
+      equivModal?.setAttribute('aria-hidden', 'true');
+    }
+
+    function openEquivModal(){
+      if(!equivModal) return;
+      renderEquivList();
+      equivModal.classList.remove('hidden');
+      equivModal.setAttribute('aria-hidden', 'false');
+    }
+
+    equivBtn?.addEventListener('click', openEquivModal);
+    equivClose?.addEventListener('click', closeEquivModal);
+    equivCancel?.addEventListener('click', closeEquivModal);
+    equivModal?.addEventListener('click', (e) => {
+      if(e.target === equivModal) closeEquivModal();
+    });
+    equivSave?.addEventListener('click', () => {
+      const nuevaConfig = { ...CONFIG };
+      let valido = true;
+      equivList?.querySelectorAll('input[data-key]').forEach((input) => {
+        const value = Number(input.value);
+        if(!Number.isFinite(value) || value <= 0){
+          valido = false;
+          return;
+        }
+        nuevaConfig[input.dataset.key] = value;
+      });
+      if(!valido){
+        alert('Todos los valores editables deben ser números mayores que 0.');
+        return;
+      }
+        if(!window.confirm('¿Guardar esta tabla de equivalencias? Estos cambios afectarán a los cálculos del calculador de pedidos.')){
+          return;
+        }
+      CONFIG = nuevaConfig;
+      localStorage.setItem(EQUIV_STORAGE_KEY, JSON.stringify(CONFIG));
+      closeEquivModal();
     });
   </script>
 </body>
