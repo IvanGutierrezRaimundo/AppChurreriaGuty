@@ -216,6 +216,13 @@ app.get('/admin/herramientas/calculador-pedidos', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de calculadora de IVA (ficha del menú herramientas)
+app.get('/admin/herramientas/iva', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'iva.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 app.get('/admin/api/info-empresa', ensureAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.execute(

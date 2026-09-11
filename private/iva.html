@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calculadora IVA</title>
+  <link rel="icon" type="image/jpeg" href="/img/logo_nuevo_churre.jpeg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .iva-wrap{
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .iva-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: var(--space-lg);
+    }
+    .iva-head h1{
+      margin: 0;
+      color: var(--color-brown);
+    }
+    .iva-sections{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .iva-card{
+      border: 1px solid var(--color-border);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+      padding: 16px;
+    }
+    .iva-card legend{
+      color: var(--color-brown);
+      font-weight: 800;
+      padding: 0 6px;
+    }
+    .iva-grid{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .iva-actions{
+      margin-top: var(--space-lg);
+      display: flex;
+      justify-content: flex-end;
+    }
+    .iva-resultados{
+      margin-top: var(--space-lg);
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      background: #fffaf4;
+      padding: 14px;
+    }
+    .iva-resultados.hidden{
+      display: none;
+    }
+    .iva-resultados h2{
+      margin: 0 0 10px;
+      font-size: 1rem;
+      color: var(--color-brown);
+    }
+    .iva-resultados ul{
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 8px;
+    }
+    .iva-resultados li{
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      border-bottom: 1px dashed var(--color-border);
+      padding-bottom: 6px;
+    }
+    .iva-resultados li:last-child{
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .iva-resultados li span:first-child{
+      color: var(--color-brown);
+      font-weight: 600;
+    }
+    @media (max-width: 680px){
+      .iva-wrap{
+        padding: 0 8px;
+      }
+      .iva-head{
+        flex-wrap: wrap;
+      }
+      .iva-sections,
+      .iva-grid{
+        grid-template-columns: 1fr;
+      }
+      .iva-actions button{
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="iva-wrap">
+    <section class="doc">
+      <div class="iva-head">
+        <h1>IVA</h1>
+        <button type="button" id="backBtn" title="Volver">Volver</button>
+      </div>
+
+      <div class="iva-sections">
+        <fieldset class="iva-card">
+          <legend>Añade el IVA</legend>
+          <div class="iva-grid">
+            <div class="field">
+              <label for="addBase">Cantidad en bruto</label>
+              <input id="addBase" name="addBase" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Cantidad en bruto" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="addRate">% IVA</label>
+              <input id="addRate" name="addRate" type="number" min="0" step="0.01" inputmode="decimal" placeholder="% IVA" autocomplete="off" />
+            </div>
+          </div>
+          <div class="iva-actions">
+            <button type="button" id="addBtn">Calcular</button>
+          </div>
+          <div class="iva-resultados hidden" id="addResultados">
+            <h2>Resultados</h2>
+            <ul id="addResultadosList"></ul>
+          </div>
+        </fieldset>
+
+        <fieldset class="iva-card">
+          <legend>Quita el IVA</legend>
+          <div class="iva-grid">
+            <div class="field">
+              <label for="removeTotal">Total con IVA</label>
+              <input id="removeTotal" name="removeTotal" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Cantidad con IVA" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="removeRate">% IVA</label>
+              <input id="removeRate" name="removeRate" type="number" min="0" step="0.01" inputmode="decimal" placeholder="% IVA" autocomplete="off" />
+            </div>
+          </div>
+          <div class="iva-actions">
+            <button type="button" id="removeBtn">Calcular</button>
+          </div>
+          <div class="iva-resultados hidden" id="removeResultados">
+            <h2>Resultados</h2>
+            <ul id="removeResultadosList"></ul>
+          </div>
+        </fieldset>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    function parseDecimal(value){
+      const normalized = String(value || '').replace(',', '.').trim();
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function formatMoney(value){
+      return value.toLocaleString('es-ES', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }) + ' €';
+    }
+
+    function agregarResultado(lista, etiqueta, valor){
+      const li = document.createElement('li');
+      li.innerHTML = '<span>' + etiqueta + '</span><span>' + valor + '</span>';
+      lista.appendChild(li);
+    }
+
+    function renderResultados(wrapperId, listId, bruto, iva, total){
+      const wrapper = document.getElementById(wrapperId);
+      const list = document.getElementById(listId);
+      if(!wrapper || !list) return;
+      list.innerHTML = '';
+      agregarResultado(list, 'IVA en euros', formatMoney(iva));
+      agregarResultado(list, 'Bruto en euros', formatMoney(bruto));
+      agregarResultado(list, 'Total con IVA en euros', formatMoney(total));
+      wrapper.classList.remove('hidden');
+    }
+
+    document.getElementById('addBtn').addEventListener('click', () => {
+      const bruto = parseDecimal(document.getElementById('addBase').value);
+      const rate = parseDecimal(document.getElementById('addRate').value);
+      const iva = bruto * (rate / 100);
+      const total = bruto + iva;
+      renderResultados('addResultados', 'addResultadosList', bruto, iva, total);
+    });
+
+    document.getElementById('removeBtn').addEventListener('click', () => {
+      const total = parseDecimal(document.getElementById('removeTotal').value);
+      const rate = parseDecimal(document.getElementById('removeRate').value);
+      const bruto = total / (1 + (rate / 100));
+      const iva = total - bruto;
+      renderResultados('removeResultados', 'removeResultadosList', bruto, iva, total);
+    });
+
+    document.getElementById('backBtn').addEventListener('click', () => {
+      location.href = '/admin/herramientas';
+    });
+  </script>
+</body>
+</html>
