@@ -202,6 +202,20 @@ app.get('/admin/informacion-empresa', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de herramientas (ficha del menú admin)
+app.get('/admin/herramientas', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'herramientas.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
+// Página de calculador de pedidos (ficha del menú herramientas)
+app.get('/admin/herramientas/calculador-pedidos', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'calculador_pedidos.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 app.get('/admin/api/info-empresa', ensureAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.execute(

@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Calculador de pedidos</title>
+  <link rel="icon" type="image/jpeg" href="/img/logo_nuevo_churre.jpeg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .calc-wrap{
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .calc-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: var(--space-lg);
+    }
+    .calc-head h1{
+      margin: 0;
+      color: var(--color-brown);
+    }
+    .calc-grid{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .calc-actions{
+      margin-top: var(--space-lg);
+    }
+    .calc-resultados{
+      margin-top: var(--space-lg);
+      border: 1px solid var(--color-border);
+      border-radius: 14px;
+      background: #fff;
+      padding: 16px 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .calc-resultados.hidden{
+      display: none;
+    }
+    .calc-resultados h2{
+      margin: 0 0 10px;
+      color: var(--color-brown);
+      font-size: 1.05rem;
+    }
+    .calc-resultados ul{
+      margin: 0;
+      padding-left: 0;
+      list-style: none;
+      display: grid;
+      gap: 8px;
+    }
+    .calc-resultados li{
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px dashed var(--color-border);
+      padding-bottom: 6px;
+    }
+    .calc-resultados li:last-child{
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .calc-resultados li span:first-child{
+      color: var(--color-brown);
+      font-weight: 600;
+    }
+    @media (max-width: 560px){
+      .calc-grid{ grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="calc-wrap">
+    <section class="doc">
+      <div class="calc-head">
+        <h1>Calculador de pedidos</h1>
+        <button type="button" id="backBtn" title="Volver">Volver</button>
+      </div>
+
+      <div class="calc-grid">
+        <div class="field">
+          <label for="numChurros">Número de churros</label>
+          <input id="numChurros" name="numChurros" type="number" min="0" step="1" inputmode="numeric" placeholder="0" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="numChocolates">Número de chocolates</label>
+          <input id="numChocolates" name="numChocolates" type="number" min="0" step="1" inputmode="numeric" placeholder="0" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="calc-actions">
+        <button type="button" id="calcularBtn">Calcular</button>
+      </div>
+
+      <div class="calc-resultados hidden" id="resultadosWrap">
+        <h2>Resultados</h2>
+        <ul id="resultadosList"></ul>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Solo permite enteros sin decimales (bloquea '.', ',', 'e', '-', '+')
+    document.querySelectorAll('#numChurros, #numChocolates').forEach((input) => {
+      input.addEventListener('keydown', (ev) => {
+        if(['.', ',', 'e', 'E', '-', '+'].includes(ev.key)){
+          ev.preventDefault();
+        }
+      });
+      input.addEventListener('input', () => {
+        if(input.value){
+          input.value = input.value.replace(/[^\d]/g, '');
+        }
+      });
+    });
+
+    document.getElementById('backBtn').addEventListener('click', () => {
+      location.href = '/admin/herramientas';
+    });
+
+    function fmt(n, decimals){
+      return n.toLocaleString('es-ES', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
+    function agregarResultado(lista, etiqueta, valor){
+      const li = document.createElement('li');
+      li.innerHTML = '<span>' + etiqueta + '</span><span>' + valor + '</span>';
+      lista.appendChild(li);
+    }
+
+    document.getElementById('calcularBtn').addEventListener('click', () => {
+      const churros = parseInt(document.getElementById('numChurros').value, 10) || 0;
+      const chocolates = parseInt(document.getElementById('numChocolates').value, 10) || 0;
+
+      const bolsas = churros / 24;
+      const cajas = bolsas / 12;
+      const bidones = Math.floor(chocolates / 50);
+      const restoBidones = chocolates % 50;
+      const jarras = restoBidones / 14;
+      const litrosChocolate = chocolates / 7;
+      const tuppersChocolatePuro = chocolates / 56;
+      const cazosNormales = chocolates / 100;
+      const cazosPuros = chocolates / 168;
+      const litrosLeche = chocolates * 0.036;
+      const gramosMezclaCacao = (chocolates / 168) * 5000;
+      const masas = churros / 1728;
+      const masasEnteras = Math.floor(masas);
+      const masasDecimalPct = (masas - masasEnteras) * 100;
+      const tuppersMasa = churros / 432;
+      const tubos = churros / 72;
+      const horasDecimal = (churros * 2) / 1000;
+      let horas = Math.floor(horasDecimal);
+      let minutos = Math.round((horasDecimal - horas) * 60);
+      if(minutos === 60){
+        minutos = 0;
+        horas += 1;
+      }
+
+      const resultadosList = document.getElementById('resultadosList');
+      resultadosList.innerHTML = '';
+      agregarResultado(resultadosList, 'Bolsas', fmt(bolsas, 2));
+      agregarResultado(resultadosList, 'Cajas aprox.', fmt(cajas, 2));
+      agregarResultado(resultadosList, 'Bidones', fmt(bidones, 0));
+      agregarResultado(resultadosList, 'Jarras', fmt(jarras, 2));
+      agregarResultado(resultadosList, 'Litros de chocolate', fmt(litrosChocolate, 2));
+      agregarResultado(resultadosList, 'Tuppers de chocolate puro', fmt(tuppersChocolatePuro, 2));
+      agregarResultado(resultadosList, 'Cazos normales', fmt(cazosNormales, 2));
+      agregarResultado(resultadosList, 'Cazos puros', fmt(cazosPuros, 2));
+      agregarResultado(resultadosList, 'Litros de leche', fmt(litrosLeche, 3));
+      agregarResultado(resultadosList, 'Gramos de mezcla de cacao', fmt(gramosMezclaCacao, 2));
+      agregarResultado(resultadosList, 'Masas', fmt(masas, 2) + ' (' + fmt(masasDecimalPct, 0) + '%)');
+      agregarResultado(resultadosList, 'Tuppers de masa', fmt(tuppersMasa, 2));
+      agregarResultado(resultadosList, 'Tubos', fmt(tubos, 2));
+      agregarResultado(resultadosList, 'Tiempo', horas + ' h ' + minutos + ' min');
+
+      document.getElementById('resultadosWrap').classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>

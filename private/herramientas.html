@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin - Menu</title>
+  <title>Admin - Herramientas</title>
   <link rel="icon" type="image/jpeg" href="/img/logo_nuevo_churre.jpeg" />
   <link rel="stylesheet" href="/styles.css" />
   <style>
@@ -74,34 +74,19 @@
   <div class="admin-menu-wrap">
     <section class="doc">
       <div class="admin-menu-head">
-        <h1>Panel de administracion</h1>
-        <button type="button" id="logoutBtn" title="Salir">Salir</button>
+        <h1>Herramientas</h1>
+        <button type="button" id="logoutBtn" title="Volver">Volver</button>
       </div>
 
-      <div class="admin-menu-grid" aria-label="Menu de administracion">
-        <button class="admin-tile" type="button" data-name="Pedidos" data-target="/admin/pedidos">
-          <p class="admin-tile-title">Pedidos</p>
+      <div class="admin-menu-grid" aria-label="Menu de herramientas">
+        <button class="admin-tile" type="button" data-name="Calculador de pedidos" data-target="/admin/herramientas/calculador-pedidos">
+          <p class="admin-tile-title">Calculador de pedidos</p>
         </button>
-        <button class="admin-tile" type="button" data-name="Cambio de precios" data-target="/admin/precios">
-          <p class="admin-tile-title">Cambio de precios</p>
+        <button class="admin-tile" type="button" data-name="Escandallo">
+          <p class="admin-tile-title">Escandallo</p>
         </button>
-        <button class="admin-tile" type="button" data-name="Clientes" data-target="/admin/clientes">
-          <p class="admin-tile-title">Clientes</p>
-        </button>
-        <button class="admin-tile" type="button" data-name="Proveedores" data-target="/admin/proveedores">
-          <p class="admin-tile-title">Proveedores</p>
-        </button>
-        <button class="admin-tile" type="button" data-name="Herramientas" data-target="/admin/herramientas">
-          <p class="admin-tile-title">Herramientas</p>
-        </button>
-        <button class="admin-tile" type="button" data-name="Ventas">
-          <p class="admin-tile-title">Ventas</p>
-        </button>
-        <button class="admin-tile" type="button" data-name="Libro gastos y compras">
-          <p class="admin-tile-title">Libro gastos y compras</p>
-        </button>
-        <button class="admin-tile" type="button" data-name="Informacion de empresa" data-target="/admin/informacion-empresa">
-          <p class="admin-tile-title">Informacion de empresa</p>
+        <button class="admin-tile" type="button" data-name="IVA">
+          <p class="admin-tile-title">IVA</p>
         </button>
       </div>
     </section>
@@ -175,8 +160,7 @@
       }
     });
 
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await fetch('/admin/logout', { method: 'POST' });
+    document.getElementById('logoutBtn').addEventListener('click', () => {
       location.href = '/admin';
     });
   </script>
