@@ -173,6 +173,20 @@ app.get('/admin/pedidos', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de libro de gastos y compras
+app.get('/admin/libro-gastos-compras', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'libro_gastos_compras.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
+// Página de creación de registros del libro de gastos y compras
+app.get('/admin/crear-registro-libro', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'crear_registro_libro.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 // Página de historial de pedidos cobrados
 app.get('/admin/historial-pedidos', ensureAdmin, (_req, res) => {
   return res.sendFile(path.join(__dirname, 'private', 'historial_pedidos.html'), {

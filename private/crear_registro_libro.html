@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Crear registro</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .crear-page{
+      max-width: 860px;
+      margin: 22px auto;
+      padding: 0 14px;
+    }
+    .crear-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .crear-head h1{
+      margin: 0;
+      color: var(--color-brown);
+    }
+    .crear-head-actions{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .registro-form{
+      margin: 0;
+      padding: 24px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      background: #FFF;
+      box-shadow: var(--shadow-sm);
+    }
+    .registro-form-grid{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .registro-form-grid .field-full{ grid-column: 1 / -1; }
+    .registro-form .field label{
+      display: block;
+      margin-bottom: 6px;
+      color: var(--color-brown);
+      font-weight: 700;
+    }
+    .registro-form input,
+    .registro-form select{
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .registro-form-actions{
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 22px;
+    }
+    .registro-status{
+      min-height: 1.4em;
+      margin: 14px 0 0;
+      color: #8A3D3D;
+      font-weight: 600;
+    }
+    @media (max-width: 680px){
+      .crear-page{
+        margin-top: 14px;
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+      .crear-head{
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .crear-head-actions{ width: 100%; }
+      .crear-head-actions button{ flex: 1 1 auto; }
+      .registro-form{ padding: 18px; }
+      .registro-form-grid{ grid-template-columns: 1fr; gap: 14px; }
+      .registro-form-grid .field-full{ grid-column: auto; }
+      .registro-form-actions{ flex-direction: column-reverse; }
+      .registro-form-actions button{ width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="crear-page">
+    <header class="crear-head">
+      <h1>Crear registro</h1>
+      <div class="crear-head-actions">
+        <button type="button" id="volverBtn">Volver al libro</button>
+      </div>
+    </header>
+
+    <form id="registroForm" class="registro-form" novalidate>
+      <div class="registro-form-grid">
+        <div class="field field-full">
+          <label for="proveedorNombre">Proveedor (nombre)</label>
+          <input id="proveedorNombre" name="proveedor_nombre" type="text" maxlength="150" autocomplete="organization" required />
+        </div>
+
+        <div class="field">
+          <label for="nifCif">N.I.F. / C.I.F.</label>
+          <input id="nifCif" name="nif_cif" type="text" maxlength="20" autocomplete="off" required />
+        </div>
+
+        <div class="field">
+          <label for="numeroFactura">Nº factura</label>
+          <input id="numeroFactura" name="numero_factura" type="text" maxlength="60" required />
+        </div>
+
+        <div class="field field-full">
+          <label for="tipoCompraGasto">Tipo compra/gasto</label>
+          <select id="tipoCompraGasto" name="tipo_compra_gasto" required>
+            <option value="" selected disabled>Selecciona una opción</option>
+            <option value="Compra">Compra</option>
+            <option value="Gasto">Gasto</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="iva4">IVA 4%</label>
+          <input id="iva4" name="iva_4" type="number" min="0" step="0.01" inputmode="decimal" value="0" />
+        </div>
+
+        <div class="field">
+          <label for="iva10">IVA 10%</label>
+          <input id="iva10" name="iva_10" type="number" min="0" step="0.01" inputmode="decimal" value="0" />
+        </div>
+
+        <div class="field">
+          <label for="iva21">IVA 21%</label>
+          <input id="iva21" name="iva_21" type="number" min="0" step="0.01" inputmode="decimal" value="0" />
+        </div>
+
+        <div class="field">
+          <label for="retPercent">RETENCION %</label>
+          <input id="retPercent" name="ret_percent" type="number" min="0" max="100" step="0.01" inputmode="decimal" value="0" />
+        </div>
+      </div>
+
+      <p id="registroStatus" class="registro-status" aria-live="polite"></p>
+      <div class="registro-form-actions">
+        <button type="button" id="cancelarBtn">Cancelar</button>
+        <button type="submit">Guardar registro</button>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    const form = document.getElementById('registroForm');
+    const status = document.getElementById('registroStatus');
+
+    function normalizeNif(value){
+      return String(value || '').trim().toUpperCase();
+    }
+
+    function isValidNif(value){
+      const nif = normalizeNif(value);
+      if(!nif) return false;
+      return /^(?:\d{8}[A-Z]|[XYZ]\d{7}[A-Z]|[ABCDEFGHJNPQRSUVW]\d{7}[A-Z0-9])$/.test(nif);
+    }
+
+    function readNumber(id){
+      const value = Number(document.getElementById(id).value);
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    function setStatus(message){
+      status.textContent = message || '';
+    }
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      setStatus('');
+
+      const nifCif = normalizeNif(document.getElementById('nifCif').value);
+      const retPercent = readNumber('retPercent');
+
+      if(!form.reportValidity()) return;
+      if(!isValidNif(nifCif)){
+        setStatus('Introduce un N.I.F. / C.I.F. válido.');
+        document.getElementById('nifCif').setCustomValidity('N.I.F. / C.I.F. no válido.');
+        document.getElementById('nifCif').reportValidity();
+        document.getElementById('nifCif').setCustomValidity('');
+        return;
+      }
+      if(retPercent < 0 || retPercent > 100){
+        setStatus('La retención debe estar entre 0% y 100%.');
+        return;
+      }
+      setStatus('Formulario validado. El guardado estará disponible cuando se cree la tabla de registros.');
+    });
+
+    document.getElementById('volverBtn').addEventListener('click', () => {
+      location.href = '/admin/libro-gastos-compras';
+    });
+    document.getElementById('cancelarBtn').addEventListener('click', () => {
+      location.href = '/admin/libro-gastos-compras';
+    });
+    document.getElementById('nifCif').addEventListener('input', (event) => {
+      event.target.value = event.target.value.toUpperCase();
+    });
+  </script>
+</body>
+</html>
