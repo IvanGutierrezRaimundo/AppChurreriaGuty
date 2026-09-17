@@ -981,6 +981,111 @@ app.delete('/admin/api/proveedores/:id', ensureAdmin, async (req, res) => {
   }
 });
 
+const TIPOS_COMPRA_GASTO = [
+  'Compras y servicios',
+  'Alquileres',
+  'Reparaciones',
+  'Suministros',
+  'Tributos',
+  'Sueldos/salarios',
+  'S.S/autónomos',
+  'Inversiones',
+  'Otros'
+];
+
+function round2(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+app.get('/admin/api/libro-gastos-compras', ensureAdmin, async (_req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT id, fecha_factura, proveedor AS proveedor_nombre, nif_cif, numero_factura, tipo_compra_gasto,
+              base_4, iva_4, base_10, iva_10, base_21, iva_21, ret_percent, retencion, total_factura, fecha_registro
+       FROM libro_compras_gastos
+       ORDER BY fecha_factura ASC, id ASC`
+    );
+    res.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error('Error listando libro de gastos y compras:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
+app.post('/admin/api/libro-gastos-compras', ensureAdmin, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const fechaFactura = String(body.fecha_factura || '').trim();
+    const proveedorNombre = String(body.proveedor_nombre || '').trim();
+    const nifCif = String(body.nif_cif || '').trim().toUpperCase();
+    const numeroFactura = String(body.numero_factura || '').trim();
+    const tipoCompraGasto = String(body.tipo_compra_gasto || '').trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFactura)) {
+      return res.status(400).json({ ok: false, error: 'La fecha de factura no es válida.' });
+    }
+    if (!proveedorNombre) {
+      return res.status(400).json({ ok: false, error: 'El proveedor es obligatorio.' });
+    }
+    if (!isValidSpanishNif(nifCif)) {
+      return res.status(400).json({ ok: false, error: 'Introduce un N.I.F. / C.I.F. válido.' });
+    }
+    if (!numeroFactura) {
+      return res.status(400).json({ ok: false, error: 'El número de factura es obligatorio.' });
+    }
+    if (!TIPOS_COMPRA_GASTO.includes(tipoCompraGasto)) {
+      return res.status(400).json({ ok: false, error: 'El tipo de compra/gasto no es válido.' });
+    }
+
+    const toBase = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    const base4 = toBase(body.base_4);
+    const base10 = toBase(body.base_10);
+    const base21 = toBase(body.base_21);
+    const base0 = toBase(body.base_0) ?? 0;
+    const retPercent = Number(body.ret_percent);
+
+    if (base4 === null || base10 === null || base21 === null) {
+      return res.status(400).json({ ok: false, error: 'Las bases de IVA deben ser números válidos mayores o iguales a 0.' });
+    }
+    if (!Number.isFinite(retPercent) || retPercent < 0 || retPercent > 100) {
+      return res.status(400).json({ ok: false, error: 'La retención debe estar entre 0% y 100%.' });
+    }
+
+    const iva4 = round2(base4 * 0.04);
+    const iva10 = round2(base10 * 0.10);
+    const iva21 = round2(base21 * 0.21);
+    const sumaBases = base4 + base10 + base21 + base0;
+    const totalIva = iva4 + iva10 + iva21;
+    const retencion = round2(sumaBases * (retPercent / 100));
+    const totalFactura = round2(sumaBases + totalIva - retencion);
+
+    const [result] = await pool.execute(
+      `INSERT INTO libro_compras_gastos
+         (fecha_factura, proveedor, nif_cif, numero_factura, tipo_compra_gasto,
+          base_4, iva_4, base_10, iva_10, base_21, iva_21, ret_percent, retencion, total_factura)
+       VALUES (?,?,?,?,?, ?,?,?,?,?,?,?,?,?)`,
+      [
+        fechaFactura, proveedorNombre, nifCif, numeroFactura, tipoCompraGasto,
+        base4, iva4, base10, iva10, base21, iva21, retPercent, retencion, totalFactura
+      ]
+    );
+
+    const [rows] = await pool.execute(
+      `SELECT id, fecha_factura, proveedor AS proveedor_nombre, nif_cif, numero_factura, tipo_compra_gasto,
+              base_4, iva_4, base_10, iva_10, base_21, iva_21, ret_percent, retencion, total_factura, fecha_registro
+       FROM libro_compras_gastos WHERE id = ? LIMIT 1`,
+      [result.insertId]
+    );
+    res.status(201).json({ ok: true, data: rows[0] || null });
+  } catch (err) {
+    console.error('Error creando registro del libro de gastos y compras:', err);
+    res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
 // Obtener detalle de un pedido
 app.get('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
   try {

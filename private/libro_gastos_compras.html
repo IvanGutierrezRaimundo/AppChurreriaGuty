@@ -87,19 +87,16 @@
         gap: 12px;
       }
     }
-    .admin-table-wrap{ max-width: 1200px; margin: 0 auto; overflow-x: auto; }
+    .admin-table-wrap{ max-width: 100%; margin: 0 auto; overflow-x: auto; }
     .admin-doc{ max-width: 1200px; margin: 0 auto; }
-    #registrosTable{ min-width: max-content; }
+    #registrosTable{ width: 100%; min-width: max-content; table-layout: auto; }
     #registrosTable th{
       font-size: 0.72rem;
       line-height: 1.15;
       padding: 8px 6px;
       white-space: nowrap;
     }
-    th.sortable{ cursor: pointer; user-select: none; white-space: nowrap; }
-    th .sort-icons{ margin-left: 3px; font-size: 0.68rem; color: var(--color-muted); display:inline-flex; gap:1px; }
-    th[data-dir="asc"] .arrow-up{ color: var(--color-brown); }
-    th[data-dir="desc"] .arrow-down{ color: var(--color-brown); }
+    #registrosTable .col-id{ display: none; }
     .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
     .view-switch{ display: flex; justify-content: flex-start; gap: 8px; margin: 0 0 10px; }
     .view-toggle{
@@ -263,19 +260,22 @@
       <table id="registrosTable">
         <thead>
           <tr>
-            <th class="sortable" data-sort="id">Id <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="numero_registro">Nº reg. <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="fecha_factura">Fecha <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="proveedor_nombre">Proveedor <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="nif_cif">N.I.F. / C.I.F. <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="numero_factura">Nº factura <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="tipo_compra_gasto">Tipo C/G<span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="iva_4">IVA 4% <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="iva_10">IVA 10% <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="iva_21">IVA 21% <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="ret_percent">RET % <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="retencion">Retencion <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
-            <th class="sortable" data-sort="total_factura">TOTAL<span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+            <th class="col-id">Id</th>
+            <th>Nº reg.</th>
+            <th>Fecha</th>
+            <th>Proveedor</th>
+            <th>N.I.F. / C.I.F.</th>
+            <th>Nº factura</th>
+            <th>Tipo C/G</th>
+            <th>Base 4%</th>
+            <th>IVA 4%</th>
+            <th>Base 10%</th>
+            <th>IVA 10%</th>
+            <th>Base 21%</th>
+            <th>IVA 21%</th>
+            <th>RET %</th>
+            <th>Retencion</th>
+            <th>TOTAL</th>
             <th>ACCIONES</th>
           </tr>
         </thead>
@@ -302,7 +302,6 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.min.js"></script>
   <script>
-    const STORAGE_KEY = 'libroGastosComprasRecords';
     const tbody = document.getElementById('tbody');
     const pageSizeSel = document.getElementById('pageSize');
     const registrosTable = document.getElementById('registrosTable');
@@ -318,10 +317,9 @@
     let actionAlertResolver = null;
     const isMobileView = () => window.matchMedia('(max-width: 680px)').matches;
     let currentView = isMobileView() ? 'fichas' : 'tabla';
-    let currentSort = 'id';
-    let currentDir = 'asc';
     let currentRows = [];
     let filteredRows = [];
+    let allRows = [];
     let visibleCount = 0;
 
     function closeActionAlertModal(){
@@ -349,11 +347,12 @@
       });
     }
 
-    function loadStoredRows(){
+    async function fetchRows(){
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed : [];
+        const resp = await fetch('/admin/api/libro-gastos-compras', { headers: { 'Accept': 'application/json' } });
+        const data = await resp.json().catch(() => ({}));
+        if(!resp.ok || !data.ok) return [];
+        return Array.isArray(data.data) ? data.data : [];
       } catch(_error){
         return [];
       }
@@ -397,28 +396,7 @@
     }
 
     function sortRows(rows){
-      const factor = currentDir === 'asc' ? 1 : -1;
-      rows.sort((a, b) => {
-        let comparison = 0;
-        switch(currentSort){
-          case 'id':
-          case 'iva_4':
-          case 'iva_10':
-          case 'iva_21':
-          case 'ret_percent':
-          case 'retencion':
-          case 'total_factura':
-            comparison = toNumber(a[currentSort]) - toNumber(b[currentSort]);
-            break;
-          case 'fecha_factura':
-            comparison = toDateValue(a.fecha_factura) - toDateValue(b.fecha_factura);
-            break;
-          default:
-            comparison = normalizeText(a[currentSort]).localeCompare(normalizeText(b[currentSort]), 'es');
-            break;
-        }
-        return comparison * factor;
-      });
+      rows.sort((a, b) => toDateValue(a.fecha_factura) - toDateValue(b.fecha_factura));
     }
 
     function getSearchedRows(){
@@ -428,7 +406,7 @@
       const desdeMs = desde ? toDateValue(desde) : null;
       const hastaMs = hasta ? toDateValue(hasta) : null;
 
-      return loadStoredRows().filter((row) => {
+      return allRows.filter((row) => {
         const searchFields = [
           row.numero_registro,
           row.proveedor_nombre,
@@ -452,13 +430,6 @@
       currentRows = filteredRows.slice(0, visibleCount);
     }
 
-    function updateSortIndicators(){
-      document.querySelectorAll('th.sortable').forEach((th) => {
-        if(th.getAttribute('data-sort') === currentSort) th.setAttribute('data-dir', currentDir);
-        else th.removeAttribute('data-dir');
-      });
-    }
-
     function renderCard(row){
       return `
         <article class="registro-card">
@@ -471,8 +442,11 @@
             <div class="registro-card-row"><span class="registro-card-label">Proveedor</span><span class="registro-card-value">${row.proveedor_nombre || ''}</span></div>
             <div class="registro-card-row"><span class="registro-card-label">N.I.F. / C.I.F.</span><span class="registro-card-value">${row.nif_cif || ''}</span></div>
             <div class="registro-card-row"><span class="registro-card-label">Nº factura</span><span class="registro-card-value">${row.numero_factura || ''}</span></div>
+            <div class="registro-card-row"><span class="registro-card-label">Base 4%</span><span class="registro-card-value">${formatMoney(row.base_4)}</span></div>
             <div class="registro-card-row"><span class="registro-card-label">IVA 4%</span><span class="registro-card-value">${formatMoney(row.iva_4)}</span></div>
+            <div class="registro-card-row"><span class="registro-card-label">Base 10%</span><span class="registro-card-value">${formatMoney(row.base_10)}</span></div>
             <div class="registro-card-row"><span class="registro-card-label">IVA 10%</span><span class="registro-card-value">${formatMoney(row.iva_10)}</span></div>
+            <div class="registro-card-row"><span class="registro-card-label">Base 21%</span><span class="registro-card-value">${formatMoney(row.base_21)}</span></div>
             <div class="registro-card-row"><span class="registro-card-label">IVA 21%</span><span class="registro-card-value">${formatMoney(row.iva_21)}</span></div>
             <div class="registro-card-row"><span class="registro-card-label">RET %</span><span class="registro-card-value">${formatPercent(row.ret_percent)}</span></div>
             <div class="registro-card-row"><span class="registro-card-label">RETENCION</span><span class="registro-card-value">${formatMoney(row.retencion)}</span></div>
@@ -499,15 +473,18 @@
       currentRows.forEach((row) => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${row.id ?? ''}</td>
+          <td class="col-id">${row.id ?? ''}</td>
           <td>${row.numero_registro || ''}</td>
           <td>${formatDate(row.fecha_factura)}</td>
           <td>${row.proveedor_nombre || ''}</td>
           <td>${row.nif_cif || ''}</td>
           <td>${row.numero_factura || ''}</td>
           <td>${row.tipo_compra_gasto || ''}</td>
+          <td>${formatMoney(row.base_4)}</td>
           <td>${formatMoney(row.iva_4)}</td>
+          <td>${formatMoney(row.base_10)}</td>
           <td>${formatMoney(row.iva_10)}</td>
+          <td>${formatMoney(row.base_21)}</td>
           <td>${formatMoney(row.iva_21)}</td>
           <td>${formatPercent(row.ret_percent)}</td>
           <td>${formatMoney(row.retencion)}</td>
@@ -519,7 +496,6 @@
       });
       emptyState.classList.toggle('is-visible', currentRows.length === 0);
       bindActions();
-      updateSortIndicators();
       applyCurrentView();
       updateLoadMoreButton();
     }
@@ -546,9 +522,15 @@
 
     function load(){
       filteredRows = getSearchedRows();
-      sortRows(filteredRows);
       buildVisibleRows();
       renderRows();
+    }
+
+    async function refreshAndLoad(){
+      allRows = await fetchRows();
+      sortRows(allRows);
+      allRows.forEach((row, index) => { row.numero_registro = index + 1; });
+      load();
     }
 
     function loadMore(){
@@ -565,7 +547,7 @@
       }
       const headers = [
         'Id', 'Nº registro', 'Fecha factura', 'Proveedor', 'N.I.F. / C.I.F.', 'Nº factura',
-        'Tipo compra/gasto', 'IVA 4%', 'IVA 10%', 'IVA 21%', 'RET %', 'RETENCION', 'TOTAL FACTURA'
+        'Tipo compra/gasto', 'Base 4%', 'IVA 4%', 'Base 10%', 'IVA 10%', 'Base 21%', 'IVA 21%', 'RET %', 'RETENCION', 'TOTAL FACTURA'
       ];
       const lines = currentRows.map((row) => [
         row.id ?? '',
@@ -575,8 +557,11 @@
         row.nif_cif || '',
         row.numero_factura || '',
         row.tipo_compra_gasto || '',
+        toNumber(row.base_4).toFixed(2),
         toNumber(row.iva_4).toFixed(2),
+        toNumber(row.base_10).toFixed(2),
         toNumber(row.iva_10).toFixed(2),
+        toNumber(row.base_21).toFixed(2),
         toNumber(row.iva_21).toFixed(2),
         toNumber(row.ret_percent).toFixed(2),
         toNumber(row.retencion).toFixed(2),
@@ -614,7 +599,7 @@
         startY: 72,
         head: [[
           'Id', 'Nº registro', 'Fecha factura', 'Proveedor', 'N.I.F. / C.I.F.', 'Nº factura',
-          'Tipo compra/gasto', 'IVA 4%', 'IVA 10%', 'IVA 21%', 'RET %', 'RETENCION', 'TOTAL FACTURA'
+          'Tipo compra/gasto', 'Base 4%', 'IVA 4%', 'Base 10%', 'IVA 10%', 'Base 21%', 'IVA 21%', 'RET %', 'RETENCION', 'TOTAL FACTURA'
         ]],
         body: currentRows.map((row) => [
           row.id ?? '',
@@ -624,8 +609,11 @@
           row.nif_cif || '',
           row.numero_factura || '',
           row.tipo_compra_gasto || '',
+          formatMoney(row.base_4),
           formatMoney(row.iva_4),
+          formatMoney(row.base_10),
           formatMoney(row.iva_10),
+          formatMoney(row.base_21),
           formatMoney(row.iva_21),
           formatPercent(row.ret_percent),
           formatMoney(row.retencion),
@@ -637,21 +625,6 @@
         theme: 'striped'
       });
       doc.save(`libro_gastos_compras_${now.toISOString().slice(0, 10)}.pdf`);
-    }
-
-    const thead = document.querySelector('#registrosTable thead');
-    if(thead){
-      thead.addEventListener('click', (event) => {
-        const th = event.target.closest('th.sortable');
-        if(!th) return;
-        const nextSort = th.getAttribute('data-sort');
-        if(nextSort === currentSort) currentDir = currentDir === 'asc' ? 'desc' : 'asc';
-        else {
-          currentSort = nextSort;
-          currentDir = 'asc';
-        }
-        load();
-      });
     }
 
     viewTablaBtn.addEventListener('click', () => {
@@ -735,7 +708,7 @@
     document.getElementById('exportBtn').addEventListener('click', downloadCsv);
     document.getElementById('printPdfBtn').addEventListener('click', downloadPdf);
 
-    load();
+    refreshAndLoad();
   </script>
 </body>
 </html>
