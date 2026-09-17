@@ -1062,25 +1062,48 @@ app.post('/admin/api/libro-gastos-compras', ensureAdmin, async (req, res) => {
     const retencion = round2(sumaBases * (retPercent / 100));
     const totalFactura = round2(sumaBases + totalIva - retencion);
 
-    const [result] = await pool.execute(
-      `INSERT INTO libro_compras_gastos
-         (fecha_factura, proveedor, nif_cif, numero_factura, tipo_compra_gasto,
-          base_4, iva_4, base_10, iva_10, base_21, iva_21, ret_percent, retencion, total_factura)
-       VALUES (?,?,?,?,?, ?,?,?,?,?,?,?,?,?)`,
-      [
-        fechaFactura, proveedorNombre, nifCif, numeroFactura, tipoCompraGasto,
-        base4, iva4, base10, iva10, base21, iva21, retPercent, retencion, totalFactura
-      ]
-    );
+    const conn = await pool.getConnection();
+    let proveedorExistente = false;
+    try {
+      await conn.beginTransaction();
 
-    const [rows] = await pool.execute(
-      `SELECT id, fecha_factura, proveedor AS proveedor_nombre, nif_cif, numero_factura, tipo_compra_gasto,
-              base_4, iva_4, base_10, iva_10, base_21, iva_21, ret_percent, retencion, total_factura, fecha_registro
-       FROM libro_compras_gastos WHERE id = ? LIMIT 1`,
-      [result.insertId]
-    );
-    res.status(201).json({ ok: true, data: rows[0] || null });
+      const [result] = await conn.execute(
+        `INSERT INTO libro_compras_gastos
+           (fecha_factura, proveedor, nif_cif, numero_factura, tipo_compra_gasto,
+            base_4, iva_4, base_10, iva_10, base_21, iva_21, ret_percent, retencion, total_factura)
+         VALUES (?,?,?,?,?, ?,?,?,?,?,?,?,?,?)`,
+        [
+          fechaFactura, proveedorNombre, nifCif, numeroFactura, tipoCompraGasto,
+          base4, iva4, base10, iva10, base21, iva21, retPercent, retencion, totalFactura
+        ]
+      );
+
+      const [existentes] = await conn.execute('SELECT id FROM proveedores WHERE nif = ? LIMIT 1', [nifCif]);
+      if (existentes.length > 0) {
+        proveedorExistente = true;
+      } else {
+        await conn.execute('INSERT INTO proveedores (nif, nombre) VALUES (?, ?)', [nifCif, proveedorNombre]);
+      }
+
+      const [rows] = await conn.execute(
+        `SELECT id, fecha_factura, proveedor AS proveedor_nombre, nif_cif, numero_factura, tipo_compra_gasto,
+                base_4, iva_4, base_10, iva_10, base_21, iva_21, ret_percent, retencion, total_factura, fecha_registro
+         FROM libro_compras_gastos WHERE id = ? LIMIT 1`,
+        [result.insertId]
+      );
+
+      await conn.commit();
+      res.status(201).json({ ok: true, data: rows[0] || null });
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    } finally {
+      conn.release();
+    }
   } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ ok: false, error: 'Ese proveedor ya existe en la base de datos.' });
+    }
     console.error('Error creando registro del libro de gastos y compras:', err);
     res.status(500).json({ ok: false, error: 'Error interno' });
   }

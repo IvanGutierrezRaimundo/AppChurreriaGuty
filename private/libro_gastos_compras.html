@@ -33,7 +33,7 @@
       }
       .admin-bar .actions.is-open{ display: flex; }
     }
-    .admin-grid{ display:grid; grid-template-columns: 2.1fr 1fr 1fr 1fr auto; gap: 12px; align-items:end; }
+    .admin-grid{ display:grid; grid-template-columns: 2.1fr 1fr 1fr 1fr 1fr 1fr auto; gap: 12px; align-items:end; }
     #filtrosToggleBtn{ display: none; }
     .filtros-panel-head{ display: none; }
     .filtros-close-btn{ display: none; }
@@ -227,6 +227,20 @@
             <input id="q" placeholder="proveedor, NIF/CIF, factura, tipo" />
           </div>
           <div class="field">
+            <label for="anio">Año</label>
+            <select id="anio"></select>
+          </div>
+          <div class="field">
+            <label for="trimestre">Trimestre</label>
+            <select id="trimestre">
+              <option value="todos">Todos</option>
+              <option value="1">1T</option>
+              <option value="2">2T</option>
+              <option value="3">3T</option>
+              <option value="4">4T</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="desde">Desde</label>
             <input id="desde" type="date" />
           </div>
@@ -304,6 +318,8 @@
   <script>
     const tbody = document.getElementById('tbody');
     const pageSizeSel = document.getElementById('pageSize');
+    const anioSel = document.getElementById('anio');
+    const trimestreSel = document.getElementById('trimestre');
     const registrosTable = document.getElementById('registrosTable');
     const cardsGrid = document.getElementById('cardsGrid');
     const emptyState = document.getElementById('emptyState');
@@ -395,12 +411,40 @@
       return Number.isNaN(dt.getTime()) ? 0 : dt.getTime();
     }
 
+    function getYear(value){
+      const text = String(value || '').trim();
+      const m = /^(\d{4})-\d{2}-\d{2}/.exec(text);
+      if(m) return Number(m[1]);
+      const dt = new Date(text);
+      return Number.isNaN(dt.getTime()) ? null : dt.getFullYear();
+    }
+
+    function getQuarter(value){
+      const text = String(value || '').trim();
+      const m = /^\d{4}-(\d{2})-\d{2}/.exec(text);
+      const month = m ? Number(m[1]) : (new Date(text)).getMonth() + 1;
+      if(!Number.isFinite(month) || month < 1 || month > 12) return null;
+      return Math.ceil(month / 3);
+    }
+
+    function populateYearSelect(){
+      const years = Array.from(new Set(allRows.map((row) => getYear(row.fecha_factura)).filter((y) => y !== null)));
+      const currentYear = new Date().getFullYear();
+      if(!years.includes(currentYear)) years.push(currentYear);
+      years.sort((a, b) => b - a);
+      const previousValue = Number(anioSel.value) || currentYear;
+      anioSel.innerHTML = years.map((year) => `<option value="${year}">${year}</option>`).join('');
+      anioSel.value = years.includes(previousValue) ? String(previousValue) : String(years[0]);
+    }
+
     function sortRows(rows){
       rows.sort((a, b) => toDateValue(a.fecha_factura) - toDateValue(b.fecha_factura));
     }
 
     function getSearchedRows(){
       const query = normalizeText(document.getElementById('q').value);
+      const anio = Number(anioSel.value);
+      const trimestre = trimestreSel.value === 'todos' ? null : Number(trimestreSel.value);
       const desde = document.getElementById('desde').value;
       const hasta = document.getElementById('hasta').value;
       const desdeMs = desde ? toDateValue(desde) : null;
@@ -415,10 +459,12 @@
           row.tipo_compra_gasto
         ].map(normalizeText);
         const rowDateMs = toDateValue(row.fecha_factura);
+        const matchesAnio = !anio || getYear(row.fecha_factura) === anio;
+        const matchesTrimestre = !trimestre || getQuarter(row.fecha_factura) === trimestre;
         const matchesQuery = !query || searchFields.some((field) => field.includes(query));
         const matchesDesde = desdeMs === null || rowDateMs >= desdeMs;
         const matchesHasta = hastaMs === null || rowDateMs <= hastaMs;
-        return matchesQuery && matchesDesde && matchesHasta;
+        return matchesAnio && matchesTrimestre && matchesQuery && matchesDesde && matchesHasta;
       });
     }
 
@@ -529,7 +575,14 @@
     async function refreshAndLoad(){
       allRows = await fetchRows();
       sortRows(allRows);
-      allRows.forEach((row, index) => { row.numero_registro = index + 1; });
+      const countPorAnio = new Map();
+      allRows.forEach((row) => {
+        const anio = getYear(row.fecha_factura);
+        const siguiente = (countPorAnio.get(anio) || 0) + 1;
+        countPorAnio.set(anio, siguiente);
+        row.numero_registro = siguiente;
+      });
+      populateYearSelect();
       load();
     }
 
@@ -694,6 +747,14 @@
       load();
     });
     pageSizeSel.addEventListener('change', () => {
+      visibleCount = 0;
+      load();
+    });
+    anioSel.addEventListener('change', () => {
+      visibleCount = 0;
+      load();
+    });
+    trimestreSel.addEventListener('change', () => {
       visibleCount = 0;
       load();
     });
