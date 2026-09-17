@@ -33,7 +33,7 @@
       }
       .admin-bar .actions.is-open{ display: flex; }
     }
-    .admin-grid{ display:grid; grid-template-columns: 2.1fr 1fr 1fr 1fr 1fr 1fr auto; gap: 12px; align-items:end; }
+    .admin-grid{ display:grid; grid-template-columns: 2.1fr 1fr 1fr 1fr 1fr 1fr 1fr auto; gap: 12px; align-items:end; }
     #filtrosToggleBtn{ display: none; }
     .filtros-panel-head{ display: none; }
     .filtros-close-btn{ display: none; }
@@ -241,6 +241,24 @@
             </select>
           </div>
           <div class="field">
+            <label for="mes">Mes</label>
+            <select id="mes">
+              <option value="todos" selected>Todos</option>
+              <option value="1">Enero</option>
+              <option value="2">Febrero</option>
+              <option value="3">Marzo</option>
+              <option value="4">Abril</option>
+              <option value="5">Mayo</option>
+              <option value="6">Junio</option>
+              <option value="7">Julio</option>
+              <option value="8">Agosto</option>
+              <option value="9">Septiembre</option>
+              <option value="10">Octubre</option>
+              <option value="11">Noviembre</option>
+              <option value="12">Diciembre</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="desde">Desde</label>
             <input id="desde" type="date" />
           </div>
@@ -320,6 +338,7 @@
     const pageSizeSel = document.getElementById('pageSize');
     const anioSel = document.getElementById('anio');
     const trimestreSel = document.getElementById('trimestre');
+    const mesSel = document.getElementById('mes');
     const registrosTable = document.getElementById('registrosTable');
     const cardsGrid = document.getElementById('cardsGrid');
     const emptyState = document.getElementById('emptyState');
@@ -427,6 +446,14 @@
       return Math.ceil(month / 3);
     }
 
+    function getMonth(value){
+      const text = String(value || '').trim();
+      const m = /^\d{4}-(\d{2})-\d{2}/.exec(text);
+      if(m) return Number(m[1]);
+      const dt = new Date(text);
+      return Number.isNaN(dt.getTime()) ? null : dt.getMonth() + 1;
+    }
+
     function populateYearSelect(){
       const years = Array.from(new Set(allRows.map((row) => getYear(row.fecha_factura)).filter((y) => y !== null)));
       const currentYear = new Date().getFullYear();
@@ -445,6 +472,7 @@
       const query = normalizeText(document.getElementById('q').value);
       const anio = Number(anioSel.value);
       const trimestre = trimestreSel.value === 'todos' ? null : Number(trimestreSel.value);
+      const mes = mesSel.value === 'todos' ? null : Number(mesSel.value);
       const desde = document.getElementById('desde').value;
       const hasta = document.getElementById('hasta').value;
       const desdeMs = desde ? toDateValue(desde) : null;
@@ -461,10 +489,11 @@
         const rowDateMs = toDateValue(row.fecha_factura);
         const matchesAnio = !anio || getYear(row.fecha_factura) === anio;
         const matchesTrimestre = !trimestre || getQuarter(row.fecha_factura) === trimestre;
+        const matchesMes = !mes || getMonth(row.fecha_factura) === mes;
         const matchesQuery = !query || searchFields.some((field) => field.includes(query));
         const matchesDesde = desdeMs === null || rowDateMs >= desdeMs;
         const matchesHasta = hastaMs === null || rowDateMs <= hastaMs;
-        return matchesAnio && matchesTrimestre && matchesQuery && matchesDesde && matchesHasta;
+        return matchesAnio && matchesTrimestre && matchesMes && matchesQuery && matchesDesde && matchesHasta;
       });
     }
 
@@ -755,6 +784,10 @@
       load();
     });
     trimestreSel.addEventListener('change', () => {
+      visibleCount = 0;
+      load();
+    });
+    mesSel.addEventListener('change', () => {
       visibleCount = 0;
       load();
     });
