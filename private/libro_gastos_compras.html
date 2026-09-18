@@ -98,7 +98,8 @@
     }
     #registrosTable .col-id{ display: none; }
     .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
-    .view-switch{ display: flex; justify-content: flex-start; gap: 8px; margin: 0 0 10px; }
+    .view-switch{ display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+    .view-switch-left, .view-switch-right{ display: flex; flex-wrap: wrap; gap: 8px; }
     .view-toggle{
       display: inline-flex;
       align-items: center;
@@ -193,11 +194,74 @@
       text-align: center;
     }
     .empty-state.is-visible{ display: block; }
+    .resultado-fieldset{
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      margin: 22px 0 0;
+      padding: 14px;
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      background: #FFFDF0;
+    }
+    .resultado-fieldset legend{
+      padding: 0 8px;
+      color: var(--color-brown);
+      font-weight: 800;
+    }
+    .resultado-linea{
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 7px 9px;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: #FFF;
+    }
+    .resultado-linea > span:first-child{
+      color: var(--color-muted);
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .resultado-linea.full{ grid-column: 1 / -1; }
+    .resultado-valor{
+      color: var(--color-brown);
+      font-weight: 800;
+      font-size: 0.95rem;
+      white-space: nowrap;
+    }
+    .resultado-linea[title]{ cursor: help; }
+    .tipos-fieldset{ margin-top: 16px; }
+    .tipos-totales-list{
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .tipo-linea{
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: #FFF;
+    }
+    .tipo-linea-nombre{ font-weight: 700; }
+    .tipo-linea-valores{ color: var(--color-brown); font-weight: 700; white-space: nowrap; }
+    .tipos-empty{ grid-column: 1 / -1; color: var(--color-muted); }
+    @media (max-width: 900px){
+      .resultado-fieldset{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
     @media (max-width: 560px){
       .cards-grid{ grid-template-columns: 1fr; }
+      .resultado-fieldset{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 680px){
-      #viewTablaBtn{ display: none; }
       #registrosTable{ display: none !important; }
     }
   </style>
@@ -285,9 +349,14 @@
 
     <div class="admin-table-wrap">
       <div class="view-switch" aria-label="Cambiar vista del libro de gastos y compras">
-        <button type="button" id="viewTablaBtn" class="view-toggle is-active" aria-current="page">Tabla</button>
-        <button type="button" id="viewFichasBtn" class="view-toggle">Fichas</button>
-        <button type="button" id="filtrosToggleBtn" class="view-toggle">Filtros</button>
+        <div class="view-switch-left">
+          <button type="button" id="filtrosToggleBtn" class="view-toggle">Filtros</button>
+        </div>
+        <div class="view-switch-right">
+          <button type="button" id="scrollTotalesBtn" class="view-toggle">Totales</button>
+          <button type="button" id="mod303Btn" class="view-toggle" title="Suma del iva anual a declarar">Mod 303</button>
+          <button type="button" id="mod347Btn" class="view-toggle" title="Suma de compras por proveedor por año cuyo resultado es mayor a 3000€">Mod 347</button>
+        </div>
       </div>
       <table id="registrosTable">
         <thead>
@@ -317,6 +386,55 @@
       <div id="emptyState" class="empty-state">No hay registros en el libro de gastos y compras.</div>
       <button type="button" id="loadMoreBtn" class="load-more-btn" style="display:none;">Cargar más</button>
     </div>
+
+    <fieldset id="totalesFieldset" class="resultado-fieldset">
+      <legend>Totales / sumas</legend>
+      <div class="resultado-linea" title="A declarar en el mod. 303 anual">
+        <span>Total IVA</span>
+        <output id="totalIva" class="resultado-valor">0,00 €</output>
+      </div>
+      <div class="resultado-linea" title="Neto/base imponible">
+        <span>Total sin IVA</span>
+        <output id="totalSinIva" class="resultado-valor">0,00 €</output>
+      </div>
+      <div class="resultado-linea" title="Bruto">
+        <span>Total con IVA</span>
+        <output id="totalConIva" class="resultado-valor">0,00 €</output>
+      </div>
+      <div class="resultado-linea">
+        <span>Total retención</span>
+        <output id="totalRetencion" class="resultado-valor">0,00 €</output>
+      </div>
+      <div class="resultado-linea">
+        <span>Total base 4% IVA</span>
+        <output id="totalBase4" class="resultado-valor">0,00 €</output>
+      </div>
+      <div class="resultado-linea">
+        <span>IVA 4%</span>
+        <output id="totalIva4" class="resultado-valor">0,00 €</output>
+      </div>
+      <div class="resultado-linea">
+        <span>Total base 10% IVA</span>
+        <output id="totalBase10" class="resultado-valor">0,00 €</output>
+      </div>
+      <div class="resultado-linea">
+        <span>IVA 10%</span>
+        <output id="totalIva10" class="resultado-valor">0,00 €</output>
+      </div>
+      <div class="resultado-linea">
+        <span>Total base 21% IVA</span>
+        <output id="totalBase21" class="resultado-valor">0,00 €</output>
+      </div>
+      <div class="resultado-linea">
+        <span>IVA 21%</span>
+        <output id="totalIva21" class="resultado-valor">0,00 €</output>
+      </div>
+    </fieldset>
+
+    <fieldset class="resultado-fieldset tipos-fieldset">
+      <legend>Totales por tipo de compra/gasto</legend>
+      <div id="tiposTotalesList" class="tipos-totales-list"></div>
+    </fieldset>
   </div>
 
   <div id="actionAlertModal" class="confirm-modal-backdrop hidden" aria-hidden="true">
@@ -327,6 +445,32 @@
       <p id="actionAlertText" class="confirm-status"></p>
       <div class="confirm-actions">
         <button type="button" id="actionAlertAccept">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="mod303Modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="mod303Title">
+      <button type="button" id="mod303CloseBtn" class="confirm-close" aria-label="Cerrar">&times;</button>
+      <div class="confirm-header">
+        <h2 id="mod303Title" class="confirm-title">Modelo 303 - Resumen anual de IVA</h2>
+      </div>
+      <div class="field">
+        <label for="mod303Anio">Año</label>
+        <select id="mod303Anio"></select>
+      </div>
+      <div class="resultado-fieldset" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px;">
+        <div class="resultado-linea">
+          <span>Total IVA gastos corrientes</span>
+          <output id="mod303IvaCorriente" class="resultado-valor">0,00 €</output>
+        </div>
+        <div class="resultado-linea">
+          <span>Total IVA bienes de inversión</span>
+          <output id="mod303IvaInversion" class="resultado-valor">0,00 €</output>
+        </div>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" id="mod303CloseFooterBtn" class="ghost">Cerrar</button>
       </div>
     </div>
   </div>
@@ -343,15 +487,12 @@
     const cardsGrid = document.getElementById('cardsGrid');
     const emptyState = document.getElementById('emptyState');
     const loadMoreBtn = document.getElementById('loadMoreBtn');
-    const viewTablaBtn = document.getElementById('viewTablaBtn');
-    const viewFichasBtn = document.getElementById('viewFichasBtn');
     const actionAlertModal = document.getElementById('actionAlertModal');
     const actionAlertTitle = document.getElementById('actionAlertTitle');
     const actionAlertText = document.getElementById('actionAlertText');
     const actionAlertAccept = document.getElementById('actionAlertAccept');
     let actionAlertResolver = null;
     const isMobileView = () => window.matchMedia('(max-width: 680px)').matches;
-    let currentView = isMobileView() ? 'fichas' : 'tabla';
     let currentRows = [];
     let filteredRows = [];
     let allRows = [];
@@ -505,6 +646,63 @@
       currentRows = filteredRows.slice(0, visibleCount);
     }
 
+    const TIPOS_COMPRA_GASTO = [
+      'Compras y servicios', 'Alquileres', 'Reparaciones', 'Suministros', 'Tributos',
+      'Sueldos/salarios', 'S.S/autónomos', 'Inversiones', 'Otros'
+    ];
+
+    function renderTotales(){
+      const totales = filteredRows.reduce((acc, row) => {
+        acc.base4 += toNumber(row.base_4);
+        acc.base10 += toNumber(row.base_10);
+        acc.base21 += toNumber(row.base_21);
+        acc.iva4 += toNumber(row.iva_4);
+        acc.iva10 += toNumber(row.iva_10);
+        acc.iva21 += toNumber(row.iva_21);
+        acc.retencion += toNumber(row.retencion);
+        return acc;
+      }, { base4: 0, base10: 0, base21: 0, iva4: 0, iva10: 0, iva21: 0, retencion: 0 });
+      const totalSinIva = totales.base4 + totales.base10 + totales.base21;
+      const totalIva = totales.iva4 + totales.iva10 + totales.iva21;
+      const totalConIva = totalSinIva + totalIva;
+
+      document.getElementById('totalIva').textContent = formatMoney(totalIva);
+      document.getElementById('totalSinIva').textContent = formatMoney(totalSinIva);
+      document.getElementById('totalConIva').textContent = formatMoney(totalConIva);
+      document.getElementById('totalRetencion').textContent = formatMoney(totales.retencion);
+      document.getElementById('totalBase4').textContent = formatMoney(totales.base4);
+      document.getElementById('totalBase10').textContent = formatMoney(totales.base10);
+      document.getElementById('totalBase21').textContent = formatMoney(totales.base21);
+      document.getElementById('totalIva4').textContent = formatMoney(totales.iva4);
+      document.getElementById('totalIva10').textContent = formatMoney(totales.iva10);
+      document.getElementById('totalIva21').textContent = formatMoney(totales.iva21);
+
+      const porTipo = new Map();
+      filteredRows.forEach((row) => {
+        const tipo = row.tipo_compra_gasto || 'Otros';
+        const sinIva = toNumber(row.base_4) + toNumber(row.base_10) + toNumber(row.base_21);
+        const conIva = sinIva + toNumber(row.iva_4) + toNumber(row.iva_10) + toNumber(row.iva_21);
+        const acumulado = porTipo.get(tipo) || { sinIva: 0, conIva: 0 };
+        acumulado.sinIva += sinIva;
+        acumulado.conIva += conIva;
+        porTipo.set(tipo, acumulado);
+      });
+      const ordenTipos = Array.from(new Set([...TIPOS_COMPRA_GASTO, ...porTipo.keys()]));
+      const tiposHtml = ordenTipos
+        .filter((tipo) => porTipo.has(tipo) && (porTipo.get(tipo).sinIva !== 0 || porTipo.get(tipo).conIva !== 0))
+        .map((tipo) => {
+          const { sinIva, conIva } = porTipo.get(tipo);
+          return `
+            <div class="tipo-linea">
+              <span class="tipo-linea-nombre">${tipo}</span>
+              <span class="tipo-linea-valores">${formatMoney(sinIva)} (sin IVA) · ${formatMoney(conIva)} (con IVA)</span>
+            </div>
+          `;
+        })
+        .join('');
+      document.getElementById('tiposTotalesList').innerHTML = tiposHtml || '<p class="tipos-empty">No hay registros.</p>';
+    }
+
     function renderCard(row){
       return `
         <article class="registro-card">
@@ -576,17 +774,9 @@
     }
 
     function applyCurrentView(){
-      if(isMobileView() && currentView === 'tabla') currentView = 'fichas';
-      const showTabla = currentView === 'tabla';
-      const showFichas = currentView === 'fichas';
-      registrosTable.style.display = showTabla ? 'table' : 'none';
+      const showFichas = isMobileView();
+      registrosTable.style.display = showFichas ? 'none' : 'table';
       cardsGrid.classList.toggle('is-visible', showFichas);
-      viewTablaBtn.classList.toggle('is-active', showTabla);
-      viewFichasBtn.classList.toggle('is-active', showFichas);
-      if(showTabla) viewTablaBtn.setAttribute('aria-current', 'page');
-      else viewTablaBtn.removeAttribute('aria-current');
-      if(showFichas) viewFichasBtn.setAttribute('aria-current', 'page');
-      else viewFichasBtn.removeAttribute('aria-current');
     }
 
     function updateLoadMoreButton(){
@@ -599,6 +789,7 @@
       filteredRows = getSearchedRows();
       buildVisibleRows();
       renderRows();
+      renderTotales();
     }
 
     async function refreshAndLoad(){
@@ -709,16 +900,59 @@
       doc.save(`libro_gastos_compras_${now.toISOString().slice(0, 10)}.pdf`);
     }
 
-    viewTablaBtn.addEventListener('click', () => {
-      if(isMobileView()) return;
-      currentView = 'tabla';
-      applyCurrentView();
-    });
-    viewFichasBtn.addEventListener('click', () => {
-      currentView = 'fichas';
-      applyCurrentView();
-    });
     window.addEventListener('resize', applyCurrentView);
+
+    document.getElementById('scrollTotalesBtn').addEventListener('click', () => {
+      document.getElementById('totalesFieldset').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    const mod303Modal = document.getElementById('mod303Modal');
+    const mod303Anio = document.getElementById('mod303Anio');
+    const mod303CloseBtn = document.getElementById('mod303CloseBtn');
+    const mod303CloseFooterBtn = document.getElementById('mod303CloseFooterBtn');
+
+    function computeMod303(anio){
+      const rows = allRows.filter((row) => getYear(row.fecha_factura) === anio);
+      return rows.reduce((acc, row) => {
+        const ivaFila = toNumber(row.iva_4) + toNumber(row.iva_10) + toNumber(row.iva_21);
+        if(row.tipo_compra_gasto === 'Inversiones') acc.inversion += ivaFila;
+        else acc.corriente += ivaFila;
+        return acc;
+      }, { corriente: 0, inversion: 0 });
+    }
+
+    function renderMod303(){
+      const anio = Number(mod303Anio.value);
+      const totales = computeMod303(anio);
+      document.getElementById('mod303IvaCorriente').textContent = formatMoney(totales.corriente);
+      document.getElementById('mod303IvaInversion').textContent = formatMoney(totales.inversion);
+    }
+
+    function openMod303Modal(){
+      const years = Array.from(new Set(allRows.map((row) => getYear(row.fecha_factura)).filter((y) => y !== null)));
+      const currentYear = new Date().getFullYear();
+      if(!years.includes(currentYear)) years.push(currentYear);
+      years.sort((a, b) => b - a);
+      const preferido = Number(anioSel.value) || currentYear;
+      mod303Anio.innerHTML = years.map((year) => `<option value="${year}">${year}</option>`).join('');
+      mod303Anio.value = years.includes(preferido) ? String(preferido) : String(years[0]);
+      renderMod303();
+      mod303Modal.classList.remove('hidden');
+      mod303Modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeMod303Modal(){
+      mod303Modal.classList.add('hidden');
+      mod303Modal.setAttribute('aria-hidden', 'true');
+    }
+
+    document.getElementById('mod303Btn').addEventListener('click', openMod303Modal);
+    mod303Anio.addEventListener('change', renderMod303);
+    mod303CloseBtn.addEventListener('click', closeMod303Modal);
+    mod303CloseFooterBtn.addEventListener('click', closeMod303Modal);
+    mod303Modal.addEventListener('click', (event) => {
+      if(event.target === mod303Modal) closeMod303Modal();
+    });
 
     const menuToggleBtn = document.getElementById('menuToggleBtn');
     const actionsMenu = document.getElementById('actionsMenu');
@@ -764,6 +998,10 @@
     document.addEventListener('keydown', (event) => {
       if(event.key === 'Escape' && !actionAlertModal.classList.contains('hidden')){
         closeActionAlertModal();
+        return;
+      }
+      if(event.key === 'Escape' && !mod303Modal.classList.contains('hidden')){
+        closeMod303Modal();
         return;
       }
       if(event.key === 'Escape' && filtrosBackdrop && filtrosBackdrop.classList.contains('is-open')){
