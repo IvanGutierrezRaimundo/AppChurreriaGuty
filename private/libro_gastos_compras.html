@@ -98,6 +98,29 @@
     }
     #registrosTable .col-id{ display: none; }
     .btn-row{ display:inline-flex; align-items:center; gap:8px; white-space: nowrap; }
+    .mod347-modal{ width: min(980px, 94vw); max-height: 90vh; overflow-y: auto; }
+    .mod347-table-wrap{ overflow-x: auto; margin-top: 14px; }
+    .mod347-table{ width: 100%; min-width: 680px; border-collapse: collapse; }
+    .mod347-table th, .mod347-table td{ padding: 9px 10px; border-bottom: 1px solid var(--color-border); text-align: right; white-space: nowrap; }
+    .mod347-table th:first-child, .mod347-table td:first-child,
+    .mod347-table th:nth-child(2), .mod347-table td:nth-child(2){ text-align: left; }
+    .mod347-empty{ margin: 16px 0 0; color: var(--color-muted); }
+    button.proveedor-link{ padding: 0; border: 0; background: transparent; color: var(--color-brown); box-shadow: none; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; transform: none; }
+    button.proveedor-link:hover{ background: transparent; color: var(--color-muted); box-shadow: none; transform: none; }
+    #proveedorDetailModal{ background: rgba(255, 255, 255, 0.72); }
+    .proveedor-detail-modal{ width: min(640px, 94vw); max-height: 90vh; overflow-y: auto; }
+    .proveedor-detail-grid{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
+    .proveedor-detail-item{ border: 1px solid var(--color-border); border-radius: 8px; padding: 8px; }
+    .proveedor-detail-label{ margin: 0 0 3px; color: var(--color-muted); font-size: .78rem; }
+    .proveedor-detail-value{ margin: 0; color: var(--color-brown); font-weight: 700; word-break: break-word; }
+    .proveedor-edit-modal{ width: min(640px, 94vw); max-height: 90vh; overflow-y: auto; }
+    .proveedor-edit-grid{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .proveedor-edit-grid .field-full{ grid-column: 1 / -1; }
+    .proveedor-edit-grid label{ display: block; margin-bottom: 5px; color: var(--color-brown); font-weight: 700; }
+    .proveedor-edit-grid input{ width: 100%; box-sizing: border-box; }
+    .proveedor-edit-status{ min-height: 1.3em; margin: 10px 0 0; color: #8A3D3D; font-weight: 600; }
+    @media (max-width: 560px){ .proveedor-detail-grid{ grid-template-columns: 1fr; } }
+    @media (max-width: 560px){ .proveedor-edit-grid{ grid-template-columns: 1fr; } .proveedor-edit-grid .field-full{ grid-column: auto; } }
     .view-switch{ display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
     .view-switch-left, .view-switch-right{ display: flex; flex-wrap: wrap; gap: 8px; }
     .view-toggle{
@@ -477,6 +500,58 @@
     </div>
   </div>
 
+  <div id="mod347Modal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal mod347-modal" role="dialog" aria-modal="true" aria-labelledby="mod347Title">
+      <button type="button" id="mod347CloseBtn" class="confirm-close" aria-label="Cerrar">&times;</button>
+      <div class="confirm-header"><h2 id="mod347Title" class="confirm-title">Modelo 347 - Proveedores con compras superiores a 3000</h2></div>
+      <div class="field">
+        <label for="mod347Anio">Año</label>
+        <select id="mod347Anio"></select>
+      </div>
+      <div id="mod347Content"></div>
+      <div class="confirm-actions"><button type="button" id="mod347CloseFooterBtn" class="ghost">Cerrar</button></div>
+    </div>
+  </div>
+
+  <div id="proveedorDetailModal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal proveedor-detail-modal" role="dialog" aria-modal="true" aria-labelledby="proveedorDetailTitle">
+      <div class="confirm-header"><h2 id="proveedorDetailTitle" class="confirm-title">Detalle de proveedor</h2></div>
+      <div class="proveedor-detail-grid">
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">ID</p><p id="detailProveedorId" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">NIF</p><p id="detailProveedorNif" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">Nombre</p><p id="detailProveedorNombre" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">Teléfono</p><p id="detailProveedorTelefono" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">Email</p><p id="detailProveedorEmail" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">Dirección</p><p id="detailProveedorDireccion" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">Ciudad</p><p id="detailProveedorCiudad" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">Provincia</p><p id="detailProveedorProvincia" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">Código postal</p><p id="detailProveedorCp" class="proveedor-detail-value"></p></div>
+        <div class="proveedor-detail-item"><p class="proveedor-detail-label">Registro</p><p id="detailProveedorRegistro" class="proveedor-detail-value"></p></div>
+      </div>
+      <div class="confirm-actions"><button type="button" id="proveedorDetailCloseFooterBtn" class="ghost">Cerrar</button><button type="button" id="proveedorDetailEditBtn">Editar</button></div>
+    </div>
+  </div>
+
+  <div id="proveedorEditModal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal proveedor-edit-modal" role="dialog" aria-modal="true" aria-labelledby="proveedorEditTitle">
+      <div class="confirm-header"><h2 id="proveedorEditTitle" class="confirm-title">Editar proveedor</h2></div>
+      <form id="proveedorEditForm" novalidate>
+        <div class="proveedor-edit-grid">
+          <div class="field field-full"><label for="editProveedorNombre">Nombre</label><input id="editProveedorNombre" required></div>
+          <div class="field"><label for="editProveedorNif">NIF</label><input id="editProveedorNif" required></div>
+          <div class="field"><label for="editProveedorTelefono">Teléfono</label><input id="editProveedorTelefono" inputmode="numeric" maxlength="9"></div>
+          <div class="field"><label for="editProveedorEmail">Email</label><input id="editProveedorEmail" type="email"></div>
+          <div class="field"><label for="editProveedorCp">Código postal</label><input id="editProveedorCp"></div>
+          <div class="field field-full"><label for="editProveedorDireccion">Dirección</label><input id="editProveedorDireccion"></div>
+          <div class="field"><label for="editProveedorCiudad">Ciudad</label><input id="editProveedorCiudad"></div>
+          <div class="field"><label for="editProveedorProvincia">Provincia</label><input id="editProveedorProvincia"></div>
+        </div>
+        <p id="proveedorEditStatus" class="proveedor-edit-status" role="status"></p>
+        <div class="confirm-actions"><button type="button" id="proveedorEditCancelBtn" class="ghost">Cancelar</button><button type="submit" id="proveedorEditSaveBtn">Guardar</button></div>
+      </form>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.min.js"></script>
   <script>
@@ -493,6 +568,14 @@
     const actionAlertTitle = document.getElementById('actionAlertTitle');
     const actionAlertText = document.getElementById('actionAlertText');
     const actionAlertAccept = document.getElementById('actionAlertAccept');
+    const proveedorDetailModal = document.getElementById('proveedorDetailModal');
+    const proveedorDetailCloseFooterBtn = document.getElementById('proveedorDetailCloseFooterBtn');
+    const proveedorDetailEditBtn = document.getElementById('proveedorDetailEditBtn');
+    const proveedorEditModal = document.getElementById('proveedorEditModal');
+    const proveedorEditForm = document.getElementById('proveedorEditForm');
+    const proveedorEditStatus = document.getElementById('proveedorEditStatus');
+    const proveedorEditSaveBtn = document.getElementById('proveedorEditSaveBtn');
+    let editingProveedorId = null;
     let actionAlertResolver = null;
     const isMobileView = () => window.matchMedia('(max-width: 680px)').matches;
     let currentRows = [];
@@ -573,6 +656,108 @@
       const dt = new Date(text);
       return Number.isNaN(dt.getTime()) ? 0 : dt.getTime();
     }
+
+    function setProveedorDetail(id, value){
+      document.getElementById(id).textContent = value == null || value === '' ? '-' : String(value);
+    }
+
+    function isValidSpanishNif(value){
+      const nif = String(value || '').trim().toUpperCase();
+      if(/^\d{8}[A-Z]$/.test(nif)) return 'TRWAGMYFPDXBNJZSQVHLCKE'[Number(nif.slice(0, 8)) % 23] === nif[8];
+      if(/^[XYZ]\d{7}[A-Z]$/.test(nif)){
+        const prefix = { X: '0', Y: '1', Z: '2' }[nif[0]];
+        return 'TRWAGMYFPDXBNJZSQVHLCKE'[Number(prefix + nif.slice(1, 8)) % 23] === nif[8];
+      }
+      return /^[ABCDEFGHJNPQRSUVW]\d{7}[A-Z0-9]$/.test(nif);
+    }
+
+    function openProveedorDetail(row){
+      proveedorDetailEditBtn.dataset.id = row.id;
+      setProveedorDetail('detailProveedorId', row.proveedor_id);
+      setProveedorDetail('detailProveedorNif', row.nif_cif);
+      setProveedorDetail('detailProveedorNombre', row.proveedor_nombre);
+      setProveedorDetail('detailProveedorTelefono', row.proveedor_telefono);
+      setProveedorDetail('detailProveedorEmail', row.proveedor_email);
+      setProveedorDetail('detailProveedorDireccion', row.proveedor_direccion);
+      setProveedorDetail('detailProveedorCiudad', row.proveedor_ciudad);
+      setProveedorDetail('detailProveedorProvincia', row.proveedor_provincia);
+      setProveedorDetail('detailProveedorCp', row.codigo_postal);
+      setProveedorDetail('detailProveedorRegistro', formatDate(row.proveedor_fecha_registro));
+      proveedorDetailModal.classList.remove('hidden');
+      proveedorDetailModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeProveedorDetail(){
+      proveedorDetailModal.classList.add('hidden');
+      proveedorDetailModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function editProveedorFromDetail(){
+      const row = allRows.find((item) => String(item.id) === String(proveedorDetailEditBtn.dataset.id));
+      if(!row || !row.proveedor_id){
+        showActionAlert({ title: 'Aviso', message: 'No se encontró el proveedor asociado.' });
+        return;
+      }
+      editingProveedorId = row.proveedor_id;
+      document.getElementById('editProveedorNombre').value = row.proveedor_nombre || '';
+      document.getElementById('editProveedorNif').value = row.nif_cif || '';
+      document.getElementById('editProveedorTelefono').value = row.proveedor_telefono || '';
+      document.getElementById('editProveedorEmail').value = row.proveedor_email || '';
+      document.getElementById('editProveedorCp').value = row.codigo_postal || '';
+      document.getElementById('editProveedorDireccion').value = row.proveedor_direccion || '';
+      document.getElementById('editProveedorCiudad').value = row.proveedor_ciudad || '';
+      document.getElementById('editProveedorProvincia').value = row.proveedor_provincia || '';
+      proveedorEditStatus.textContent = '';
+      closeProveedorDetail();
+      proveedorEditModal.classList.remove('hidden');
+      proveedorEditModal.setAttribute('aria-hidden', 'false');
+      document.getElementById('editProveedorNombre').focus();
+    }
+
+    function closeProveedorEdit(){
+      proveedorEditModal.classList.add('hidden');
+      proveedorEditModal.setAttribute('aria-hidden', 'true');
+      editingProveedorId = null;
+    }
+
+    proveedorEditForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const nombre = document.getElementById('editProveedorNombre').value.trim();
+      const nif = document.getElementById('editProveedorNif').value.trim().toUpperCase();
+      const telefono = document.getElementById('editProveedorTelefono').value.trim();
+      const email = document.getElementById('editProveedorEmail').value.trim();
+      if(!nombre){ proveedorEditStatus.textContent = 'El nombre es obligatorio.'; return; }
+      if(!nif || !isValidSpanishNif(nif)){ proveedorEditStatus.textContent = 'El NIF es obligatorio y debe ser válido.'; return; }
+      if(telefono && !/^\d{9}$/.test(telefono)){ proveedorEditStatus.textContent = 'El teléfono debe tener exactamente 9 dígitos.'; return; }
+      if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ proveedorEditStatus.textContent = 'Introduce un email válido.'; return; }
+
+      proveedorEditSaveBtn.disabled = true;
+      proveedorEditStatus.textContent = '';
+      try {
+        const response = await fetch(`/admin/api/proveedores/${encodeURIComponent(editingProveedorId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            nombre,
+            nif,
+            telefono,
+            email,
+            cp: document.getElementById('editProveedorCp').value.trim(),
+            direccion: document.getElementById('editProveedorDireccion').value.trim(),
+            ciudad: document.getElementById('editProveedorCiudad').value.trim(),
+            provincia: document.getElementById('editProveedorProvincia').value.trim()
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if(!response.ok || !data.ok){ proveedorEditStatus.textContent = data.error || 'No se pudo guardar el proveedor.'; return; }
+        closeProveedorEdit();
+        await refreshAndLoad();
+      } catch(_error){
+        proveedorEditStatus.textContent = 'No se pudo guardar el proveedor.';
+      } finally {
+        proveedorEditSaveBtn.disabled = false;
+      }
+    });
 
     function getYear(value){
       const text = String(value || '').trim();
@@ -742,13 +927,18 @@
           </div>
           <span class="btn-row">
             <button type="button" class="delete" data-id="${row.id}">Eliminar</button>
-            <button type="button" class="open" data-id="${row.id}">Abrir</button>
           </span>
         </article>
       `;
     }
 
     function bindActions(){
+      document.querySelectorAll('button.proveedor-link').forEach((button) => {
+        button.addEventListener('click', () => {
+          const row = allRows.find((item) => String(item.id) === String(button.dataset.id));
+          if(row) openProveedorDetail(row);
+        });
+      });
       document.querySelectorAll('button.delete').forEach((button) => {
         button.addEventListener('click', async () => {
           const id = button.dataset.id;
@@ -773,11 +963,6 @@
           }
         });
       });
-      document.querySelectorAll('button.open').forEach((button) => {
-        button.addEventListener('click', async () => {
-          await showActionAlert({ title: 'Aviso', message: 'La apertura de registros aún no está disponible.' });
-        });
-      });
     }
 
     function renderRows(){
@@ -789,8 +974,8 @@
           <td class="col-id">${row.id ?? ''}</td>
           <td>${row.numero_registro || ''}</td>
           <td>${formatDate(row.fecha_factura)}</td>
-          <td>${row.proveedor_nombre || ''}</td>
-          <td>${row.nif_cif || ''}</td>
+          <td><button type="button" class="proveedor-link" data-id="${row.id}">${row.proveedor_nombre || ''}</button></td>
+          <td><button type="button" class="proveedor-link" data-id="${row.id}">${row.nif_cif || ''}</button></td>
           <td>${row.numero_factura || ''}</td>
           <td>${row.tipo_compra_gasto || ''}</td>
           <td>${formatMoney(row.base_4)}</td>
@@ -802,7 +987,7 @@
           <td>${formatPercent(row.ret_percent)}</td>
           <td>${formatMoney(row.retencion)}</td>
           <td>${formatMoney(row.total_factura)}</td>
-          <td><span class="btn-row"><button type="button" class="delete" data-id="${row.id}">Eliminar</button><button type="button" class="open" data-id="${row.id}">Abrir</button></span></td>
+          <td><span class="btn-row"><button type="button" class="delete" data-id="${row.id}">Eliminar</button></span></td>
         `;
         tbody.appendChild(tr);
         cardsGrid.insertAdjacentHTML('beforeend', renderCard(row));
@@ -943,6 +1128,11 @@
     const mod303Anio = document.getElementById('mod303Anio');
     const mod303CloseBtn = document.getElementById('mod303CloseBtn');
     const mod303CloseFooterBtn = document.getElementById('mod303CloseFooterBtn');
+    const mod347Modal = document.getElementById('mod347Modal');
+    const mod347Anio = document.getElementById('mod347Anio');
+    const mod347Content = document.getElementById('mod347Content');
+    const mod347CloseBtn = document.getElementById('mod347CloseBtn');
+    const mod347CloseFooterBtn = document.getElementById('mod347CloseFooterBtn');
 
     function computeMod303(anio){
       const rows = allRows.filter((row) => getYear(row.fecha_factura) === anio);
@@ -979,12 +1169,83 @@
       mod303Modal.setAttribute('aria-hidden', 'true');
     }
 
+    function getMod347Rows(anio){
+      const proveedores = new Map();
+      allRows
+        .filter((row) => getYear(row.fecha_factura) === anio)
+        .filter((row) => toNumber(row.retencion) === 0 && toNumber(row.ret_percent) === 0)
+        .forEach((row) => {
+          const nif = String(row.nif_cif || '').trim();
+          const key = nif || String(row.proveedor_nombre || '').trim().toLowerCase();
+          if(!key) return;
+          const trimestre = getQuarter(row.fecha_factura);
+          const importe = toNumber(row.total_factura);
+          const actual = proveedores.get(key) || {
+            nombre: row.proveedor_nombre || '',
+            nif,
+            codigoPostal: row.codigo_postal || '',
+            trimestres: [0, 0, 0, 0],
+            anual: 0
+          };
+          if(trimestre >= 1 && trimestre <= 4) actual.trimestres[trimestre - 1] += importe;
+          actual.anual += importe;
+          proveedores.set(key, actual);
+        });
+      return Array.from(proveedores.values())
+        .filter((proveedor) => proveedor.anual > 3000)
+        .sort((a, b) => b.anual - a.anual);
+    }
+
+    function renderMod347(){
+      const rows = getMod347Rows(Number(mod347Anio.value));
+      if(rows.length === 0){
+        mod347Content.innerHTML = '<p class="mod347-empty">No hay proveedores que cumplan los criterios para este año.</p>';
+        return;
+      }
+      mod347Content.innerHTML = `
+        <div class="mod347-table-wrap">
+          <table class="mod347-table">
+            <thead><tr><th>Proveedor</th><th>N.I.F.</th><th>C.P.</th><th>1T</th><th>2T</th><th>3T</th><th>4T</th><th>Anual</th></tr></thead>
+            <tbody>${rows.map((row) => `
+              <tr><td>${row.nombre}</td><td>${row.nif}</td><td>${row.codigoPostal}</td>
+                ${row.trimestres.map((importe) => `<td>${formatMoney(importe)}</td>`).join('')}
+                <td><strong>${formatMoney(row.anual)}</strong></td>
+              </tr>`).join('')}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function openMod347Modal(){
+      const years = Array.from(new Set(allRows.map((row) => getYear(row.fecha_factura)).filter((y) => y !== null)));
+      const currentYear = new Date().getFullYear();
+      if(!years.includes(currentYear)) years.push(currentYear);
+      years.sort((a, b) => b - a);
+      const preferido = Number(anioSel.value) || currentYear;
+      mod347Anio.innerHTML = years.map((year) => `<option value="${year}">${year}</option>`).join('');
+      mod347Anio.value = years.includes(preferido) ? String(preferido) : String(years[0]);
+      renderMod347();
+      mod347Modal.classList.remove('hidden');
+      mod347Modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeMod347Modal(){
+      mod347Modal.classList.add('hidden');
+      mod347Modal.setAttribute('aria-hidden', 'true');
+    }
+
     document.getElementById('mod303Btn').addEventListener('click', openMod303Modal);
     mod303Anio.addEventListener('change', renderMod303);
     mod303CloseBtn.addEventListener('click', closeMod303Modal);
     mod303CloseFooterBtn.addEventListener('click', closeMod303Modal);
     mod303Modal.addEventListener('click', (event) => {
       if(event.target === mod303Modal) closeMod303Modal();
+    });
+    document.getElementById('mod347Btn').addEventListener('click', openMod347Modal);
+    mod347Anio.addEventListener('change', renderMod347);
+    mod347CloseBtn.addEventListener('click', closeMod347Modal);
+    mod347CloseFooterBtn.addEventListener('click', closeMod347Modal);
+    mod347Modal.addEventListener('click', (event) => {
+      if(event.target === mod347Modal) closeMod347Modal();
     });
 
     const menuToggleBtn = document.getElementById('menuToggleBtn');
@@ -1028,6 +1289,15 @@
     actionAlertModal.addEventListener('click', (event) => {
       if(event.target === actionAlertModal) closeActionAlertModal();
     });
+    proveedorDetailCloseFooterBtn.addEventListener('click', closeProveedorDetail);
+    proveedorDetailEditBtn.addEventListener('click', editProveedorFromDetail);
+    proveedorDetailModal.addEventListener('click', (event) => {
+      if(event.target === proveedorDetailModal) closeProveedorDetail();
+    });
+    document.getElementById('proveedorEditCancelBtn').addEventListener('click', closeProveedorEdit);
+    proveedorEditModal.addEventListener('click', (event) => {
+      if(event.target === proveedorEditModal) closeProveedorEdit();
+    });
     document.addEventListener('keydown', (event) => {
       if(event.key === 'Escape' && !actionAlertModal.classList.contains('hidden')){
         closeActionAlertModal();
@@ -1035,6 +1305,18 @@
       }
       if(event.key === 'Escape' && !mod303Modal.classList.contains('hidden')){
         closeMod303Modal();
+        return;
+      }
+      if(event.key === 'Escape' && !mod347Modal.classList.contains('hidden')){
+        closeMod347Modal();
+        return;
+      }
+      if(event.key === 'Escape' && !proveedorDetailModal.classList.contains('hidden')){
+        closeProveedorDetail();
+        return;
+      }
+      if(event.key === 'Escape' && !proveedorEditModal.classList.contains('hidden')){
+        closeProveedorEdit();
         return;
       }
       if(event.key === 'Escape' && filtrosBackdrop && filtrosBackdrop.classList.contains('is-open')){

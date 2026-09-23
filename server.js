@@ -580,9 +580,9 @@ app.get('/admin/api/clientes', ensureAdmin, async (req, res) => {
     const where = [];
     const params = [];
     if (q) {
-      where.push('(nombre LIKE ? OR nif LIKE ? OR telefono LIKE ? OR email LIKE ? OR direccion LIKE ? OR ciudad LIKE ? OR provincia LIKE ? OR cp LIKE ?)');
+      where.push('(CAST(id AS CHAR) LIKE ? OR nombre LIKE ? OR nif LIKE ? OR telefono LIKE ? OR email LIKE ? OR direccion LIKE ? OR ciudad LIKE ? OR provincia LIKE ? OR cp LIKE ?)');
       const like = `%${q}%`;
-      params.push(like, like, like, like, like, like, like, like);
+      params.push(like, like, like, like, like, like, like, like, like);
     }
 
     const safePageSize = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 500);
@@ -836,11 +836,11 @@ app.post('/admin/api/proveedores', ensureAdmin, async (req, res) => {
     if (!nombre) {
       return res.status(400).json({ ok: false, error: 'El nombre es obligatorio.' });
     }
-    if (!telefono || !isValidSpanishPhone(telefono)) {
-      return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
+    if (!nif || !isValidSpanishNif(nif)) {
+      return res.status(400).json({ ok: false, error: 'El NIF es obligatorio y debe ser válido.' });
     }
-    if (nif && !isValidSpanishNif(nif)) {
-      return res.status(400).json({ ok: false, error: 'Introduce un NIF/DNI/NIE/CIF valido.' });
+    if (telefono && !isValidSpanishPhone(telefono)) {
+      return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
     }
     if (email && !isValidEmail(email)) {
       return res.status(400).json({ ok: false, error: 'Introduce un email valido.' });
@@ -852,7 +852,7 @@ app.post('/admin/api/proveedores', ensureAdmin, async (req, res) => {
       [
         nif ? String(nif).toUpperCase() : null,
         nombre,
-        String(telefono).trim(),
+        telefono ? String(telefono).trim() : null,
         email ? String(email).trim() : null,
         direccion,
         ciudad,
@@ -917,10 +917,10 @@ app.put('/admin/api/proveedores/:id', ensureAdmin, async (req, res) => {
     const provinciaFinal = has('provincia') ? payload.provincia : (current.provincia || null);
     const cpFinal = has('cp') ? payload.cp : (current.cp || null);
 
-    if (nifFinal && !isValidSpanishNif(nifFinal)) {
-      return res.status(400).json({ ok: false, error: 'Introduce un NIF/DNI/NIE/CIF valido.' });
+    if (!nifFinal || !isValidSpanishNif(nifFinal)) {
+      return res.status(400).json({ ok: false, error: 'El NIF es obligatorio y debe ser válido.' });
     }
-    if (!telefonoFinal || !isValidSpanishPhone(telefonoFinal)) {
+    if (telefonoFinal && !isValidSpanishPhone(telefonoFinal)) {
       return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
     }
     if (emailFinal && !isValidEmail(emailFinal)) {
@@ -1000,10 +1000,14 @@ function round2(value) {
 app.get('/admin/api/libro-gastos-compras', ensureAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT id, fecha_factura, proveedor AS proveedor_nombre, nif_cif, numero_factura, tipo_compra_gasto,
-              base_4, iva_4, base_10, iva_10, base_21, iva_21, ret_percent, retencion, total_factura, fecha_registro
-       FROM libro_compras_gastos
-       ORDER BY fecha_factura ASC, id ASC`
+                `SELECT l.id, l.fecha_factura, l.proveedor AS proveedor_nombre, l.nif_cif, p.id AS proveedor_id,
+                  p.telefono AS proveedor_telefono, p.email AS proveedor_email, p.direccion AS proveedor_direccion,
+                  p.ciudad AS proveedor_ciudad, p.provincia AS proveedor_provincia, p.cp AS codigo_postal,
+                  p.fecha_registro AS proveedor_fecha_registro, l.numero_factura, l.tipo_compra_gasto,
+              l.base_4, l.iva_4, l.base_10, l.iva_10, l.base_21, l.iva_21, l.ret_percent, l.retencion, l.total_factura, l.fecha_registro
+             FROM libro_compras_gastos l
+             LEFT JOIN proveedores p ON p.nif = l.nif_cif
+             ORDER BY l.fecha_factura ASC, l.id ASC`
     );
     res.json({ ok: true, data: rows });
   } catch (err) {

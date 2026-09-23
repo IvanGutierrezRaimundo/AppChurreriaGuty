@@ -341,7 +341,7 @@
       </div>
       <div class="proveedor-modal-grid">
         <div class="proveedor-detail"><p class="proveedor-detail-label">ID</p><p id="e_id" class="proveedor-detail-value"></p></div>
-        <div class="proveedor-detail"><p class="proveedor-detail-label">NIF</p><input id="e_nif" class="proveedor-edit-input" maxlength="15" /></div>
+        <div class="proveedor-detail"><p class="proveedor-detail-label">NIF</p><input id="e_nif" class="proveedor-edit-input" maxlength="15" required /></div>
         <div class="proveedor-detail"><p class="proveedor-detail-label">Nombre</p><input id="e_nombre" class="proveedor-edit-input" /></div>
         <div class="proveedor-detail"><p class="proveedor-detail-label">Telefono</p><input id="e_telefono" class="proveedor-edit-input" inputmode="numeric" maxlength="9" /></div>
         <div class="proveedor-detail"><p class="proveedor-detail-label">Email</p><input id="e_email" class="proveedor-edit-input" type="email" /></div>
@@ -623,6 +623,7 @@
 
     function openEditModal(proveedor){
       editMode = 'edit';
+      activeDetailClientId = Number(proveedor.id);
       proveedorEditTitle.textContent = 'Editar proveedor';
       setDetail('e_id', proveedor.id);
       setDetail('e_registro', formatDateTime(proveedor.fecha_registro));
@@ -753,13 +754,13 @@
         document.getElementById('e_nombre').focus();
         return;
       }
-      if (nifValue && !isValidNIF(nifValue)) {
-        proveedorEditError.textContent = 'Introduce un NIF/DNI/NIE/CIF valido.';
+      if (!nifValue || !isValidNIF(nifValue)) {
+        proveedorEditError.textContent = 'El NIF es obligatorio y debe ser válido.';
         document.getElementById('e_nif').focus();
         return;
       }
-      if (!isValidPhone(telefonoValue)) {
-        proveedorEditError.textContent = 'El telefono debe tener exactamente 9 digitos.';
+      if (telefonoValue && !isValidPhone(telefonoValue)) {
+        proveedorEditError.textContent = 'El teléfono debe tener exactamente 9 dígitos.';
         document.getElementById('e_telefono').focus();
         return;
       }
@@ -1183,7 +1184,16 @@
       }
     });
 
-    load();
+    async function openRequestedProviderEditor(){
+      const requestedId = new URLSearchParams(location.search).get('editarId');
+      if(!requestedId) return;
+      const response = await fetch(`/admin/api/proveedores?q=${encodeURIComponent(requestedId)}&page=1&pageSize=500`);
+      const data = await response.json().catch(() => ({}));
+      const proveedor = (Array.isArray(data.data) ? data.data : []).find((row) => String(row.id) === String(requestedId));
+      if(proveedor) openEditModal(proveedor);
+    }
+
+    load().then(openRequestedProviderEditor);
   </script>
 </body>
 </html>
