@@ -1012,6 +1012,24 @@ app.get('/admin/api/libro-gastos-compras', ensureAdmin, async (_req, res) => {
   }
 });
 
+app.delete('/admin/api/libro-gastos-compras/:id', ensureAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ ok: false, error: 'ID inválido' });
+    }
+
+    const [result] = await pool.execute('DELETE FROM libro_compras_gastos WHERE id = ?', [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ ok: false, error: 'Registro no encontrado' });
+    }
+    return res.json({ ok: true, affectedRows: result.affectedRows });
+  } catch (err) {
+    console.error('Error eliminando registro del libro de gastos y compras:', err);
+    return res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
 app.post('/admin/api/libro-gastos-compras', ensureAdmin, async (req, res) => {
   try {
     const body = req.body || {};

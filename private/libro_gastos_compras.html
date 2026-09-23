@@ -351,6 +351,8 @@
       <div class="view-switch" aria-label="Cambiar vista del libro de gastos y compras">
         <div class="view-switch-left">
           <button type="button" id="filtrosToggleBtn" class="view-toggle">Filtros</button>
+          <button type="button" id="gastosComunesBtn" class="view-toggle is-active">Gastos comunes</button>
+          <button type="button" id="bienesInversionBtn" class="view-toggle">Bienes de inversión</button>
         </div>
         <div class="view-switch-right">
           <button type="button" id="scrollTotalesBtn" class="view-toggle">Totales</button>
@@ -497,6 +499,7 @@
     let filteredRows = [];
     let allRows = [];
     let visibleCount = 0;
+    let gastoView = 'comunes';
 
     function closeActionAlertModal(){
       actionAlertModal.classList.add('hidden');
@@ -619,7 +622,19 @@
       const desdeMs = desde ? toDateValue(desde) : null;
       const hastaMs = hasta ? toDateValue(hasta) : null;
 
-      return allRows.filter((row) => {
+      const categoryRows = allRows.filter((row) => {
+        const isInvestment = normalizeText(row.tipo_compra_gasto) === 'inversiones';
+        return gastoView === 'inversiones' ? isInvestment : !isInvestment;
+      });
+      const countPorAnio = new Map();
+      categoryRows.forEach((row) => {
+        const anio = getYear(row.fecha_factura);
+        const siguiente = (countPorAnio.get(anio) ?? 0) + 1;
+        countPorAnio.set(anio, siguiente);
+        row.numero_registro = siguiente;
+      });
+
+      return categoryRows.filter((row) => {
         const searchFields = [
           row.numero_registro,
           row.proveedor_nombre,
@@ -726,6 +741,7 @@
             <div class="registro-card-row"><span class="registro-card-label">TOTAL FACTURA</span><span class="registro-card-value">${formatMoney(row.total_factura)}</span></div>
           </div>
           <span class="btn-row">
+            <button type="button" class="delete" data-id="${row.id}">Eliminar</button>
             <button type="button" class="open" data-id="${row.id}">Abrir</button>
           </span>
         </article>
@@ -733,6 +749,30 @@
     }
 
     function bindActions(){
+      document.querySelectorAll('button.delete').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const id = button.dataset.id;
+          if(!window.confirm('¿Seguro que deseas eliminar este registro?')) return;
+
+          button.disabled = true;
+          try {
+            const resp = await fetch(`/admin/api/libro-gastos-compras/${encodeURIComponent(id)}`, {
+              method: 'DELETE',
+              headers: { 'Accept': 'application/json' }
+            });
+            const data = await resp.json().catch(() => ({}));
+            if(!resp.ok || !data.ok){
+              await showActionAlert({ title: 'Error', message: data.error || 'No se pudo eliminar el registro.', type: 'error' });
+              return;
+            }
+            await refreshAndLoad();
+          } catch(_error){
+            await showActionAlert({ title: 'Error', message: 'No se pudo eliminar el registro.', type: 'error' });
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
       document.querySelectorAll('button.open').forEach((button) => {
         button.addEventListener('click', async () => {
           await showActionAlert({ title: 'Aviso', message: 'La apertura de registros aún no está disponible.' });
@@ -762,7 +802,7 @@
           <td>${formatPercent(row.ret_percent)}</td>
           <td>${formatMoney(row.retencion)}</td>
           <td>${formatMoney(row.total_factura)}</td>
-          <td><span class="btn-row"><button type="button" class="open" data-id="${row.id}">Abrir</button></span></td>
+          <td><span class="btn-row"><button type="button" class="delete" data-id="${row.id}">Eliminar</button><button type="button" class="open" data-id="${row.id}">Abrir</button></span></td>
         `;
         tbody.appendChild(tr);
         cardsGrid.insertAdjacentHTML('beforeend', renderCard(row));
@@ -795,13 +835,6 @@
     async function refreshAndLoad(){
       allRows = await fetchRows();
       sortRows(allRows);
-      const countPorAnio = new Map();
-      allRows.forEach((row) => {
-        const anio = getYear(row.fecha_factura);
-        const siguiente = (countPorAnio.get(anio) || 0) + 1;
-        countPorAnio.set(anio, siguiente);
-        row.numero_registro = siguiente;
-      });
       populateYearSelect();
       load();
     }
@@ -1013,6 +1046,17 @@
       visibleCount = 0;
       load();
     });
+    const gastosComunesBtn = document.getElementById('gastosComunesBtn');
+    const bienesInversionBtn = document.getElementById('bienesInversionBtn');
+    function setGastoView(view){
+      gastoView = view;
+      gastosComunesBtn.classList.toggle('is-active', view === 'comunes');
+      bienesInversionBtn.classList.toggle('is-active', view === 'inversiones');
+      visibleCount = 0;
+      load();
+    }
+    gastosComunesBtn.addEventListener('click', () => setGastoView('comunes'));
+    bienesInversionBtn.addEventListener('click', () => setGastoView('inversiones'));
     pageSizeSel.addEventListener('change', () => {
       visibleCount = 0;
       load();
