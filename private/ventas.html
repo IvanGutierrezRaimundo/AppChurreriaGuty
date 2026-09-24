@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Ventas</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .admin-bar{ max-width: 1200px; margin: 0 auto var(--space-lg); display:flex; align-items:center; justify-content: space-between; }
+    .menu-toggle-btn{
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      border: 1px solid var(--color-border);
+      background: var(--color-primary);
+      color: var(--color-brown);
+      font-size: 1.3rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    @media (max-width: 680px){
+      .admin-bar{ flex-wrap: wrap; position: relative; }
+      .menu-toggle-btn{ display: inline-flex; }
+      .admin-bar .actions{ display: none; flex-direction: column; gap: 8px; width: 100%; margin-top: 10px; }
+      .admin-bar .actions.is-open{ display: flex; }
+    }
+    .ventas-selectores{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 560px){
+      .ventas-selectores{ grid-template-columns: 1fr; }
+    }
+    .ventas-resumen{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 12px 14px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: #FFF;
+    }
+    .ventas-resumen strong{ color: var(--color-brown); }
+    .calendario-grid{
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .calendario-dia-nombre{
+      text-align: center;
+      font-weight: 800;
+      color: var(--color-brown);
+      padding: 6px 0;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+    }
+    .calendario-celda{
+      min-height: 74px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: 6px 8px;
+      background: #FFF;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .calendario-celda.vacia{
+      background: transparent;
+      border-color: transparent;
+    }
+    .calendario-celda.sin-dato{ background: #FBFBFB; }
+    .calendario-celda.seleccionada{
+      border-color: var(--color-brown);
+      box-shadow: 0 0 0 2px var(--color-brown) inset;
+    }
+    .calendario-dia-num{ font-weight: 700; color: var(--color-brown); font-size: 0.9rem; }
+    .calendario-dia-caja{ font-weight: 800; color: #1E7A34; font-size: 0.92rem; }
+    .calendario-dia-caja.sin-dato{ color: var(--color-muted); font-weight: 500; font-size: 0.85rem; }
+    @media (max-width: 560px){
+      .calendario-celda{ min-height: 56px; padding: 4px 5px; }
+      .calendario-dia-caja{ font-size: 0.78rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-bar">
+    <h1>Ventas</h1>
+    <button type="button" id="menuToggleBtn" class="menu-toggle-btn" aria-label="Abrir menú" aria-expanded="false" aria-controls="actionsMenu">☰</button>
+    <div class="actions" id="actionsMenu">
+      <button type="button" id="menuBtn" title="Menu">Menu</button>
+    </div>
+  </div>
+
+  <div class="doc admin-doc">
+    <div class="ventas-selectores">
+      <div class="field">
+        <label for="anioSel">Año</label>
+        <select id="anioSel"></select>
+      </div>
+      <div class="field">
+        <label for="mesSel">Mes</label>
+        <select id="mesSel"></select>
+      </div>
+      <div class="field">
+        <label for="diaSel">Día</label>
+        <select id="diaSel"></select>
+      </div>
+    </div>
+
+    <div class="ventas-resumen">
+      <span>Día seleccionado: <strong id="resumenDia">-</strong></span>
+      <span>Total del mes: <strong id="resumenMes">0,00 €</strong></span>
+    </div>
+
+    <div class="calendario-grid" id="calendarioGrid"></div>
+    <p id="calendarioEmpty" class="hint" style="display:none; margin-top: 14px;">No hay datos de ventas cargados todavía.</p>
+  </div>
+
+  <div id="actionAlertModal" class="confirm-modal-backdrop hidden" aria-hidden="true">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="actionAlertTitle">
+      <div class="confirm-head">
+        <h2 id="actionAlertTitle" class="confirm-title">Aviso</h2>
+      </div>
+      <p id="actionAlertText" class="confirm-status"></p>
+      <div class="confirm-actions">
+        <button type="button" id="actionAlertAccept">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const actionAlertModal = document.getElementById('actionAlertModal');
+    const actionAlertTitle = document.getElementById('actionAlertTitle');
+    const actionAlertText = document.getElementById('actionAlertText');
+    const actionAlertAccept = document.getElementById('actionAlertAccept');
+    let actionAlertResolver = null;
+
+    function closeActionAlertModal(){
+      actionAlertModal.classList.add('hidden');
+      actionAlertModal.setAttribute('aria-hidden', 'true');
+      actionAlertText.classList.remove('error');
+      if(actionAlertResolver){
+        const resolve = actionAlertResolver;
+        actionAlertResolver = null;
+        resolve(true);
+      }
+    }
+
+    function showActionAlert({ title, message, acceptText, type }){
+      const resolvedType = type || ((title || '').toLowerCase() === 'error' ? 'error' : 'info');
+      actionAlertTitle.textContent = title || (resolvedType === 'error' ? 'Error' : 'Aviso');
+      actionAlertText.textContent = message || '';
+      actionAlertText.classList.toggle('error', resolvedType === 'error');
+      actionAlertAccept.textContent = acceptText || 'Aceptar';
+      actionAlertModal.classList.remove('hidden');
+      actionAlertModal.setAttribute('aria-hidden', 'false');
+      actionAlertAccept.focus();
+      return new Promise((resolve) => {
+        actionAlertResolver = resolve;
+      });
+    }
+
+    actionAlertAccept.addEventListener('click', closeActionAlertModal);
+    actionAlertModal.addEventListener('click', (ev) => {
+      if(ev.target === actionAlertModal) closeActionAlertModal();
+    });
+    document.addEventListener('keydown', (ev) => {
+      if(ev.key === 'Escape' && !actionAlertModal.classList.contains('hidden')) closeActionAlertModal();
+    });
+
+    const menuToggleBtn = document.getElementById('menuToggleBtn');
+    const actionsMenu = document.getElementById('actionsMenu');
+    if(menuToggleBtn && actionsMenu){
+      menuToggleBtn.addEventListener('click', () => {
+        const isOpen = actionsMenu.classList.toggle('is-open');
+        menuToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+    }
+    document.getElementById('menuBtn').addEventListener('click', () => {
+      location.href = '/admin';
+    });
+
+    const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+    const anioSel = document.getElementById('anioSel');
+    const mesSel = document.getElementById('mesSel');
+    const diaSel = document.getElementById('diaSel');
+    const calendarioGrid = document.getElementById('calendarioGrid');
+    const calendarioEmpty = document.getElementById('calendarioEmpty');
+    const resumenDia = document.getElementById('resumenDia');
+    const resumenMes = document.getElementById('resumenMes');
+
+    let ventasPorFecha = new Map();
+
+    function formatMoney(value){
+      const number = Number(value || 0);
+      return `${number.toFixed(2).replace('.', ',')} €`;
+    }
+
+    function diasEnMes(anio, mes){
+      return new Date(anio, mes, 0).getDate();
+    }
+
+    async function cargarVentas(){
+      try {
+        const resp = await fetch('/admin/api/ventas', { headers: { 'Accept': 'application/json' } });
+        const data = await resp.json().catch(() => ({}));
+        if(!resp.ok || !data.ok) throw new Error(data.error || 'No se pudieron cargar las ventas.');
+        ventasPorFecha = new Map((Array.isArray(data.data) ? data.data : []).map((row) => [String(row.fecha).slice(0, 10), Number(row.caja)]));
+      } catch(err){
+        ventasPorFecha = new Map();
+        showActionAlert({ title: 'Error', message: err.message || 'No se pudieron cargar las ventas.' });
+      }
+    }
+
+    function poblarMeses(){
+      mesSel.innerHTML = MESES.map((nombre, index) => `<option value="${index + 1}">${nombre}</option>`).join('');
+    }
+
+    function poblarAnios(){
+      const anioActual = new Date().getFullYear();
+      const anios = new Set([anioActual]);
+      ventasPorFecha.forEach((_valor, fecha) => anios.add(Number(fecha.slice(0, 4))));
+      const listaAnios = Array.from(anios).sort((a, b) => b - a);
+      anioSel.innerHTML = listaAnios.map((anio) => `<option value="${anio}">${anio}</option>`).join('');
+      anioSel.value = String(anioActual);
+    }
+
+    function poblarDias(){
+      const anio = Number(anioSel.value);
+      const mes = Number(mesSel.value);
+      const total = diasEnMes(anio, mes);
+      const diaPrevio = Number(diaSel.value) || 1;
+      diaSel.innerHTML = Array.from({ length: total }, (_valor, index) => index + 1)
+        .map((dia) => `<option value="${dia}">${dia}</option>`)
+        .join('');
+      diaSel.value = String(Math.min(diaPrevio, total));
+    }
+
+    function renderCalendario(){
+      const anio = Number(anioSel.value);
+      const mes = Number(mesSel.value);
+      const diaSeleccionado = Number(diaSel.value);
+      const totalDias = diasEnMes(anio, mes);
+      const primerDiaSemana = (new Date(anio, mes - 1, 1).getDay() + 6) % 7; // 0 = lunes
+
+      const celdas = [];
+      for(let i = 0; i < primerDiaSemana; i++){
+        celdas.push('<div class="calendario-celda vacia"></div>');
+      }
+
+      let totalMes = 0;
+      let hayDatos = false;
+      for(let dia = 1; dia <= totalDias; dia++){
+        const fechaISO = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+        const caja = ventasPorFecha.get(fechaISO);
+        const tieneDato = caja !== undefined;
+        if(tieneDato){ totalMes += caja; hayDatos = true; }
+        const esSeleccionada = dia === diaSeleccionado;
+        celdas.push(`
+          <div class="calendario-celda${tieneDato ? '' : ' sin-dato'}${esSeleccionada ? ' seleccionada' : ''}">
+            <span class="calendario-dia-num">${dia}</span>
+            <span class="calendario-dia-caja${tieneDato ? '' : ' sin-dato'}">${tieneDato ? formatMoney(caja) : 'Sin datos'}</span>
+          </div>
+        `);
+      }
+
+      calendarioGrid.innerHTML = DIAS_SEMANA.map((nombre) => `<div class="calendario-dia-nombre">${nombre}</div>`).join('') + celdas.join('');
+      calendarioEmpty.style.display = ventasPorFecha.size === 0 ? '' : 'none';
+
+      const fechaSeleccionadaISO = `${anio}-${String(mes).padStart(2, '0')}-${String(diaSeleccionado).padStart(2, '0')}`;
+      const cajaSeleccionada = ventasPorFecha.get(fechaSeleccionadaISO);
+      const fechaTexto = `${String(diaSeleccionado).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${anio}`;
+      resumenDia.textContent = cajaSeleccionada !== undefined ? `${fechaTexto} = ${formatMoney(cajaSeleccionada)}` : `${fechaTexto} (sin datos)`;
+      resumenMes.textContent = hayDatos ? formatMoney(totalMes) : 'Sin datos';
+    }
+
+    anioSel.addEventListener('change', () => { poblarDias(); renderCalendario(); });
+    mesSel.addEventListener('change', () => { poblarDias(); renderCalendario(); });
+    diaSel.addEventListener('change', renderCalendario);
+
+    (async function init(){
+      await cargarVentas();
+      poblarMeses();
+      poblarAnios();
+      mesSel.value = String(new Date().getMonth() + 1);
+      poblarDias();
+      diaSel.value = String(new Date().getDate());
+      renderCalendario();
+    })();
+  </script>
+</body>
+</html>

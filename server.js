@@ -180,6 +180,13 @@ app.get('/admin/libro-gastos-compras', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de ventas (calendario de caja diaria)
+app.get('/admin/ventas', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'ventas.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 // Página de creación de registros del libro de gastos y compras
 app.get('/admin/crear-registro-libro', ensureAdmin, (_req, res) => {
   return res.sendFile(path.join(__dirname, 'private', 'crear_registro_libro.html'), {
@@ -1034,6 +1041,16 @@ app.delete('/admin/api/libro-gastos-compras/:id', ensureAdmin, async (req, res) 
   }
 });
 
+app.get('/admin/api/ventas', ensureAdmin, async (_req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT fecha, caja FROM ventas ORDER BY fecha ASC');
+    return res.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error('Error listando ventas:', err);
+    return res.status(500).json({ ok: false, error: 'Error interno' });
+  }
+});
+
 app.post('/admin/api/libro-gastos-compras', ensureAdmin, async (req, res) => {
   try {
     const body = req.body || {};
@@ -1537,12 +1554,20 @@ async function ensureSchema() {
       fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `;
+  const ddlVentas = `
+    CREATE TABLE IF NOT EXISTS ventas (
+      fecha DATE NOT NULL,
+      caja DECIMAL(10,2) NOT NULL,
+      PRIMARY KEY (fecha)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `;
   try {
     await pool.execute(ddlPedidos);
     await pool.execute(ddlClientes);
     await pool.execute(ddlProveedores);
     await pool.execute(ddlPrecios);
     await pool.execute(ddlInfoEmpresa);
+    await pool.execute(ddlVentas);
     // Compatibilidad: BBDD creadas antes de añadir el snapshot de precio por pedido (factura inmutable).
     // No se usa "ADD COLUMN IF NOT EXISTS" porque requiere MySQL 8.0.29+; se comprueba a mano.
     async function ensureColumn(nombre, definicion) {
