@@ -144,6 +144,16 @@
       border-color: #D1D5DB;
       color: #374151;
     }
+    #gastosComunesBtn, #bienesInversionBtn{
+      background: #E5E7EB;
+      border-color: #D1D5DB;
+      color: #374151;
+    }
+    #gastosComunesBtn.is-active, #bienesInversionBtn.is-active{
+      background: var(--color-brown);
+      border-color: var(--color-brown);
+      color: #fff;
+    }
     .load-more-btn{
       display: block;
       margin: 14px auto 0;
@@ -509,7 +519,10 @@
         <select id="mod347Anio"></select>
       </div>
       <div id="mod347Content"></div>
-      <div class="confirm-actions"><button type="button" id="mod347CloseFooterBtn" class="ghost">Cerrar</button></div>
+      <div class="confirm-actions">
+        <button type="button" id="mod347PrintBtn" class="ghost">Imprimir PDF</button>
+        <button type="button" id="mod347CloseFooterBtn" class="ghost">Cerrar</button>
+      </div>
     </div>
   </div>
 
@@ -634,6 +647,11 @@
     function formatMoney(value){
       const number = Number(value || 0);
       return `${number.toFixed(2).replace('.', ',')} €`;
+    }
+
+    function formatMoneyPlain(value){
+      const number = Number(value || 0);
+      return number.toFixed(2).replace('.', ',');
     }
 
     function formatPercent(value){
@@ -1075,47 +1093,173 @@
         showActionAlert({ title: 'Error', message: 'No se pudo cargar la librería PDF. Inténtalo de nuevo.' });
         return;
       }
-      if(!Array.isArray(currentRows) || currentRows.length === 0){
+      if(!Array.isArray(filteredRows) || filteredRows.length === 0){
         showActionAlert({ title: 'Aviso', message: 'No hay registros para imprimir en PDF.' });
         return;
       }
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-      const now = new Date();
+
+      const anio = Number(anioSel.value) || new Date().getFullYear();
+      const trimestre = trimestreSel.value === 'todos' ? null : Number(trimestreSel.value);
+      const mes = mesSel.value === 'todos' ? null : Number(mesSel.value);
+      const desdeInput = document.getElementById('desde').value;
+      const hastaInput = document.getElementById('hasta').value;
+
+      let desdeMs = null;
+      let hastaMs = null;
+      if(desdeInput || hastaInput){
+        desdeMs = desdeInput ? toDateValue(desdeInput) : null;
+        hastaMs = hastaInput ? toDateValue(hastaInput) : null;
+      } else if(trimestre){
+        const mesInicio = (trimestre - 1) * 3;
+        desdeMs = new Date(anio, mesInicio, 1).getTime();
+        hastaMs = new Date(anio, mesInicio + 3, 0).getTime();
+      } else if(mes){
+        desdeMs = new Date(anio, mes - 1, 1).getTime();
+        hastaMs = new Date(anio, mes, 0).getTime();
+      } else {
+        desdeMs = new Date(anio, 0, 1).getTime();
+        hastaMs = new Date(anio, 11, 31).getTime();
+      }
+      const rangoTexto = desdeMs !== null && hastaMs !== null
+        ? `Desde el ${new Date(desdeMs).toLocaleDateString('es-ES')} al ${new Date(hastaMs).toLocaleDateString('es-ES')}`
+        : desdeMs !== null
+          ? `Desde el ${new Date(desdeMs).toLocaleDateString('es-ES')}`
+          : hastaMs !== null
+            ? `Hasta el ${new Date(hastaMs).toLocaleDateString('es-ES')}`
+            : '';
+
+      const esInversiones = gastoView === 'inversiones';
       doc.setFontSize(16);
-      doc.text('Libro de gastos y compras', 40, 40);
+      doc.text(esInversiones ? 'Libro de bienes de inversión' : 'Libro de gastos y compras', 40, 40);
       doc.setFontSize(10);
-      doc.text(`Generado: ${now.toLocaleString('es-ES')}`, 40, 58);
+      doc.text('Roizmundo C.B. · N.I.F. E44632735 · 33002 Oviedo', 40, 58);
+      if(rangoTexto) doc.text(rangoTexto, 40, 72);
+
+      const totales = filteredRows.reduce((acc, row) => {
+        acc.base4 += toNumber(row.base_4);
+        acc.base10 += toNumber(row.base_10);
+        acc.base21 += toNumber(row.base_21);
+        acc.iva4 += toNumber(row.iva_4);
+        acc.iva10 += toNumber(row.iva_10);
+        acc.iva21 += toNumber(row.iva_21);
+        acc.retencion += toNumber(row.retencion);
+        acc.total += toNumber(row.total_factura);
+        return acc;
+      }, { base4: 0, base10: 0, base21: 0, iva4: 0, iva10: 0, iva21: 0, retencion: 0, total: 0 });
+
       doc.autoTable({
-        startY: 72,
+        startY: 86,
         head: [[
-          'Id', 'Nº registro', 'Fecha factura', 'Proveedor', 'N.I.F. / C.I.F.', 'Nº factura',
+          'Nº', 'Fecha factura', 'Proveedor', 'N.I.F. / C.I.F.', 'Nº factura',
           'Tipo compra/gasto', 'Base 4%', 'IVA 4%', 'Base 10%', 'IVA 10%', 'Base 21%', 'IVA 21%', 'RET %', 'RETENCION', 'TOTAL FACTURA'
         ]],
-        body: currentRows.map((row) => [
-          row.id ?? '',
+        body: filteredRows.map((row) => [
           row.numero_registro || '',
           formatDate(row.fecha_factura),
           row.proveedor_nombre || '',
           row.nif_cif || '',
           row.numero_factura || '',
           row.tipo_compra_gasto || '',
-          formatMoney(row.base_4),
-          formatMoney(row.iva_4),
-          formatMoney(row.base_10),
-          formatMoney(row.iva_10),
-          formatMoney(row.base_21),
-          formatMoney(row.iva_21),
+          formatMoneyPlain(row.base_4),
+          formatMoneyPlain(row.iva_4),
+          formatMoneyPlain(row.base_10),
+          formatMoneyPlain(row.iva_10),
+          formatMoneyPlain(row.base_21),
+          formatMoneyPlain(row.iva_21),
           formatPercent(row.ret_percent),
-          formatMoney(row.retencion),
-          formatMoney(row.total_factura)
+          formatMoneyPlain(row.retencion),
+          formatMoneyPlain(row.total_factura)
         ]),
+        foot: [[
+          { content: 'TOTALES', colSpan: 6, styles: { halign: 'center', fontStyle: 'bold' } },
+          formatMoneyPlain(totales.base4),
+          formatMoneyPlain(totales.iva4),
+          formatMoneyPlain(totales.base10),
+          formatMoneyPlain(totales.iva10),
+          formatMoneyPlain(totales.base21),
+          formatMoneyPlain(totales.iva21),
+          '',
+          formatMoneyPlain(totales.retencion),
+          formatMoneyPlain(totales.total)
+        ]],
+        columnStyles: {
+          0: { cellWidth: 24, halign: 'center' },
+          6: { halign: 'right' },
+          7: { halign: 'right' },
+          8: { halign: 'right' },
+          9: { halign: 'right' },
+          10: { halign: 'right' },
+          11: { halign: 'right' },
+          12: { halign: 'right' },
+          13: { halign: 'right' },
+          14: { halign: 'right' }
+        },
         styles: { fontSize: 8, cellPadding: 4 },
-        headStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46] },
+        headStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46], halign: 'center' },
+        footStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46], fontStyle: 'bold', halign: 'center' },
         alternateRowStyles: { fillColor: [248, 248, 248] },
         theme: 'striped'
       });
-      doc.save(`libro_gastos_compras_${now.toISOString().slice(0, 10)}.pdf`);
+
+      const porTipo = new Map();
+      filteredRows.forEach((row) => {
+        const tipo = row.tipo_compra_gasto || 'Otros';
+        const sinIva = toNumber(row.base_4) + toNumber(row.base_10) + toNumber(row.base_21);
+        const conIva = sinIva + toNumber(row.iva_4) + toNumber(row.iva_10) + toNumber(row.iva_21);
+        const acumulado = porTipo.get(tipo) || { sinIva: 0, conIva: 0 };
+        acumulado.sinIva += sinIva;
+        acumulado.conIva += conIva;
+        porTipo.set(tipo, acumulado);
+      });
+      const ordenTipos = Array.from(new Set([...TIPOS_COMPRA_GASTO, ...porTipo.keys()]))
+        .filter((tipo) => porTipo.has(tipo) && (porTipo.get(tipo).sinIva !== 0 || porTipo.get(tipo).conIva !== 0));
+
+      const seccionesY = (doc.lastAutoTable && doc.lastAutoTable.finalY) || 100;
+      doc.setFontSize(11);
+      doc.text('Resumen general', 40, seccionesY + 24);
+      doc.text('Totales por tipo de compra/gasto', 320, seccionesY + 24);
+
+      doc.autoTable({
+        startY: seccionesY + 32,
+        margin: { left: 40 },
+        tableWidth: 250,
+        head: [['Concepto', 'Importe']],
+        body: [
+          ['Total base 4%', formatMoney(totales.base4)],
+          ['Total IVA 4%', formatMoney(totales.iva4)],
+          ['Total base 10%', formatMoney(totales.base10)],
+          ['Total IVA 10%', formatMoney(totales.iva10)],
+          ['Total base 21%', formatMoney(totales.base21)],
+          ['Total IVA 21%', formatMoney(totales.iva21)],
+          ['Total base imponible', formatMoney(totales.base4 + totales.base10 + totales.base21)],
+          ['Total IVA', formatMoney(totales.iva4 + totales.iva10 + totales.iva21)],
+          ['Total retención', formatMoney(totales.retencion)],
+          ['Total factura (con IVA)', formatMoney(totales.total)]
+        ],
+        styles: { fontSize: 8, cellPadding: 4 },
+        headStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46], halign: 'center' },
+        columnStyles: { 1: { halign: 'right' } },
+        theme: 'grid'
+      });
+
+      doc.autoTable({
+        startY: seccionesY + 32,
+        margin: { left: 320 },
+        tableWidth: 320,
+        head: [['Tipo compra/gasto', 'Sin IVA', 'Con IVA']],
+        body: ordenTipos.map((tipo) => {
+          const { sinIva, conIva } = porTipo.get(tipo);
+          return [tipo, formatMoney(sinIva), formatMoney(conIva)];
+        }),
+        styles: { fontSize: 8, cellPadding: 4 },
+        headStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46], halign: 'center' },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
+        theme: 'grid'
+      });
+
+      doc.save(`${esInversiones ? 'libro_bienes_inversion' : 'libro_gastos_compras'}_${anio}.pdf`);
     }
 
     window.addEventListener('resize', applyCurrentView);
@@ -1233,6 +1377,43 @@
       mod347Modal.setAttribute('aria-hidden', 'true');
     }
 
+    function downloadMod347Pdf(){
+      if(!window.jspdf || !window.jspdf.jsPDF || typeof window.jspdf.jsPDF !== 'function'){
+        showActionAlert({ title: 'Error', message: 'No se pudo cargar la librería PDF. Inténtalo de nuevo.' });
+        return;
+      }
+      const anio = Number(mod347Anio.value);
+      const rows = getMod347Rows(anio);
+      if(rows.length === 0){
+        showActionAlert({ title: 'Aviso', message: 'No hay proveedores que cumplan los criterios para este año.' });
+        return;
+      }
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      doc.setFontSize(16);
+      doc.text(`Modelo 347 - Proveedores con compras superiores a 3000 (${anio})`, 40, 40);
+      doc.autoTable({
+        startY: 60,
+        head: [['Proveedor', 'N.I.F.', 'C.P.', '1T', '2T', '3T', '4T', 'Anual']],
+        body: rows.map((row) => [
+          row.nombre,
+          row.nif,
+          row.codigoPostal,
+          formatMoney(row.trimestres[0]),
+          formatMoney(row.trimestres[1]),
+          formatMoney(row.trimestres[2]),
+          formatMoney(row.trimestres[3]),
+          formatMoney(row.anual)
+        ]),
+        columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' } },
+        styles: { fontSize: 9, cellPadding: 4 },
+        headStyles: { fillColor: [255, 210, 0], textColor: [91, 58, 46], halign: 'center' },
+        alternateRowStyles: { fillColor: [248, 248, 248] },
+        theme: 'striped'
+      });
+      doc.save(`modelo_347_${anio}.pdf`);
+    }
+
     document.getElementById('mod303Btn').addEventListener('click', openMod303Modal);
     mod303Anio.addEventListener('change', renderMod303);
     mod303CloseBtn.addEventListener('click', closeMod303Modal);
@@ -1242,6 +1423,7 @@
     });
     document.getElementById('mod347Btn').addEventListener('click', openMod347Modal);
     mod347Anio.addEventListener('change', renderMod347);
+    document.getElementById('mod347PrintBtn').addEventListener('click', downloadMod347Pdf);
     mod347CloseBtn.addEventListener('click', closeMod347Modal);
     mod347CloseFooterBtn.addEventListener('click', closeMod347Modal);
     mod347Modal.addEventListener('click', (event) => {
