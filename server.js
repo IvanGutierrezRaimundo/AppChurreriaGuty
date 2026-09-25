@@ -8,6 +8,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const TEMPERATURAS_MAX = require('./utils/temperaturasAemet');
 const PRECIPITACIONES = require('./utils/precipitacionesAemet');
+const { FESTIVOS, FECHAS_ESPECIALES } = require('./utils/festivosEspana');
 
 dotenv.config();
 const app = express();
@@ -1055,7 +1056,7 @@ app.get('/admin/api/ventas', ensureAdmin, async (_req, res) => {
 
 // Temperaturas máximas diarias (AEMET) embebidas en utils/temperaturasAemet.js, usadas en el calendario de ventas.
 app.get('/admin/api/tiempo', ensureAdmin, (_req, res) => {
-  return res.json({ ok: true, data: TEMPERATURAS_MAX, precipitaciones: PRECIPITACIONES });
+  return res.json({ ok: true, data: TEMPERATURAS_MAX, precipitaciones: PRECIPITACIONES, festivos: FESTIVOS, fechasEspeciales: FECHAS_ESPECIALES });
 });
 
 app.post('/admin/api/libro-gastos-compras', ensureAdmin, async (req, res) => {
