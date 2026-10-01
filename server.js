@@ -252,6 +252,13 @@ app.get('/admin/herramientas', ensureAdmin, (_req, res) => {
   });
 });
 
+// Página de lista de reposición (ficha del menú herramientas)
+app.get('/admin/herramientas/lista-reposicion', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'lista_reposicion.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 // Página de calculador de pedidos (ficha del menú herramientas)
 app.get('/admin/herramientas/calculador-pedidos', ensureAdmin, (_req, res) => {
   return res.sendFile(path.join(__dirname, 'private', 'calculador_pedidos.html'), {

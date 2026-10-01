@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lista de reposición</title>
+  <link rel="icon" type="image/jpeg" href="/img/logo_nuevo_churre.jpeg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .reposicion-wrap{
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+    .reposicion-head{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: var(--space-lg);
+    }
+    .reposicion-head h1{
+      margin: 0;
+      color: var(--color-brown);
+    }
+    .reposicion-head-actions{
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .reposicion-menu-toggle{
+      display: none;
+      width: 44px;
+      height: 44px;
+      padding: 10px;
+      align-items: center;
+      justify-content: center;
+    }
+    .reposicion-menu-lines{
+      display: grid;
+      gap: 4px;
+    }
+    .reposicion-menu-lines span{
+      display: block;
+      width: 20px;
+      height: 2px;
+      border-radius: 1px;
+      background: currentColor;
+    }
+    .reposicion-head-menu{
+      display: flex;
+      gap: 8px;
+    }
+    .reposicion-section + .reposicion-section{
+      margin-top: 28px;
+    }
+    .reposicion-section h2{
+      margin: 0 0 10px;
+      padding-bottom: 7px;
+      border-bottom: 2px solid var(--color-primary);
+      color: var(--color-brown);
+      font-size: 1.1rem;
+    }
+    .reposicion-columns,
+    .reposicion-row{
+      display: grid;
+      grid-template-columns: minmax(180px, 1.6fr) 110px minmax(130px, 1fr);
+      align-items: center;
+      gap: 12px;
+    }
+    .reposicion-columns{
+      padding: 0 12px 7px;
+      color: var(--color-muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .reposicion-row{
+      min-height: 58px;
+      padding: 8px 12px;
+      border-top: 1px solid var(--color-border);
+    }
+    .reposicion-product{
+      font-weight: 650;
+      color: var(--color-text);
+    }
+    .reposicion-unit{
+      color: var(--color-muted);
+    }
+    .reposicion-field{
+      display: grid;
+      gap: 3px;
+    }
+    .reposicion-field label{
+      display: none;
+      margin: 0;
+      font-size: 0.75rem;
+    }
+    .reposicion-field input,
+    .reposicion-final-comments textarea{
+      width: 100%;
+      min-width: 0;
+      min-height: 40px;
+      padding: 8px 10px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      color: var(--color-text);
+      font: inherit;
+    }
+    .reposicion-field input:focus,
+    .reposicion-final-comments textarea:focus{
+      outline: 2px solid var(--color-primary);
+      outline-offset: 1px;
+    }
+    .reposicion-final-comments{
+      min-width: 0;
+    }
+    .reposicion-final-comments textarea{
+      min-height: 110px;
+      resize: vertical;
+    }
+    .reposicion-footer{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 16px;
+      margin-top: 28px;
+    }
+    .reposicion-actions{
+      display: flex;
+      gap: 8px;
+    }
+    .reposicion-dialog{
+      width: min(720px, calc(100vw - 32px));
+      max-height: min(85vh, 800px);
+      overflow: auto;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: 24px;
+      color: var(--color-text);
+      box-shadow: var(--shadow-md);
+    }
+    .reposicion-dialog::backdrop{
+      background: rgba(43, 30, 24, 0.55);
+    }
+    .reposicion-dialog-head{
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .reposicion-dialog-head h2{
+      margin: 0 0 4px;
+      color: var(--color-brown);
+    }
+    .reposicion-dialog-date{
+      margin: 0;
+      color: var(--color-muted);
+    }
+    .reposicion-generated-section + .reposicion-generated-section{
+      margin-top: 18px;
+    }
+    .reposicion-generated-section h3,
+    .reposicion-generated-comments h3{
+      margin: 0 0 6px;
+      color: var(--color-brown);
+      font-size: 1rem;
+    }
+    .reposicion-generated-section ul{
+      margin: 0;
+      padding-left: 22px;
+    }
+    .reposicion-generated-comments{
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px solid var(--color-border);
+    }
+    .reposicion-generated-comments p{
+      margin: 0;
+      white-space: pre-wrap;
+    }
+    .reposicion-generated-actions{
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+    }
+    .reposicion-stock-dialog{
+      width: min(820px, calc(100vw - 32px));
+    }
+    .reposicion-stock-description{
+      margin: -8px 0 18px;
+      color: var(--color-muted);
+    }
+    .reposicion-stock-columns,
+    .reposicion-stock-row{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(110px, 0.65fr) minmax(110px, 0.65fr);
+      align-items: center;
+      gap: 8px;
+    }
+    .reposicion-stock-columns{
+      padding: 0 8px 7px;
+      color: var(--color-muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .reposicion-stock-columns span:not(:first-child),
+    .reposicion-stock-value{
+      text-align: center;
+    }
+    .reposicion-stock-section + .reposicion-stock-section{
+      margin-top: 18px;
+    }
+    .reposicion-stock-section h3{
+      margin: 0 0 6px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--color-border);
+      color: var(--color-brown);
+      font-size: 1rem;
+    }
+    .reposicion-stock-row{
+      min-height: 42px;
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .reposicion-stock-product{
+      min-width: 0;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+    .reposicion-stock-unit{
+      display: block;
+      color: var(--color-muted);
+      font-size: 0.82rem;
+      font-weight: 400;
+    }
+    .reposicion-stock-value{
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 720px){
+      .reposicion-columns,
+      .reposicion-row{
+        grid-template-columns: minmax(0, 1fr) 62px minmax(72px, 0.9fr);
+        gap: 6px;
+      }
+      .reposicion-columns{
+        padding: 0 4px 7px;
+        font-size: 0.68rem;
+      }
+      .reposicion-row{
+        padding: 8px 4px;
+      }
+      .reposicion-product,
+      .reposicion-unit{
+        overflow-wrap: anywhere;
+        font-size: 0.82rem;
+      }
+      .reposicion-field label{ display: none; }
+      .reposicion-field input{ min-height: 40px; padding: 6px 3px; text-align: center; }
+      .reposicion-head{ flex-wrap: wrap; }
+      .reposicion-head-actions{ margin-left: auto; }
+      .reposicion-menu-toggle{ display: inline-flex; }
+      .reposicion-head-menu{
+        display: none;
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        z-index: 10;
+        min-width: 176px;
+        padding: 8px;
+        flex-direction: column;
+        background: #fff;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        box-shadow: var(--shadow-md);
+      }
+      .reposicion-head-menu.is-open{ display: flex; }
+      .reposicion-head-menu button{ width: 100%; text-align: left; }
+      .reposicion-footer{ grid-template-columns: 1fr; }
+      .reposicion-actions button{ flex: 1; }
+      .reposicion-dialog{ padding: 18px; }
+      .reposicion-dialog-head{ flex-wrap: wrap; }
+      .reposicion-generated-actions button{ flex: 1; }
+      .reposicion-stock-columns,
+      .reposicion-stock-row{
+        grid-template-columns: minmax(0, 1fr) 78px 78px;
+        gap: 5px;
+      }
+      .reposicion-stock-columns{
+        padding: 0 4px 6px;
+        font-size: 0.66rem;
+      }
+      .reposicion-stock-row{ padding: 5px 4px; }
+      .reposicion-stock-product{ font-size: 0.82rem; }
+      .reposicion-stock-unit{ font-size: 0.76rem; }
+    }
+    @media print{
+      body{ padding: 0; background: #fff; }
+      body > *:not(#generatedListDialog){ display: none !important; }
+      #generatedListDialog{
+        position: static !important;
+        inset: auto !important;
+        display: block !important;
+        width: 100%;
+        max-width: none;
+        max-height: none;
+        overflow: visible;
+        border: 0;
+        padding: 0;
+        box-shadow: none;
+      }
+      #generatedListDialog::backdrop{ display: none; }
+      .reposicion-dialog-print-hide{ display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="reposicion-wrap">
+    <section class="doc">
+      <div class="reposicion-head">
+        <h1>Lista de reposición</h1>
+        <div class="reposicion-head-actions">
+          <button type="button" id="headerMenuToggle" class="reposicion-menu-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="headerActionsMenu">
+            <span class="reposicion-menu-lines" aria-hidden="true"><span></span><span></span><span></span></span>
+          </button>
+          <div class="reposicion-head-menu" id="headerActionsMenu" aria-label="Acciones de la lista">
+            <button type="button" id="backBtn" title="Volver a herramientas">Volver</button>
+            <button type="button" id="stockMinimumBtn">Stock mínimo</button>
+          </div>
+        </div>
+      </div>
+      <div id="reposicionList" aria-label="Productos para reponer"></div>
+      <div class="reposicion-footer">
+        <div class="reposicion-final-comments">
+          <label for="comentarios-reposicion">Comentarios</label>
+          <textarea id="comentarios-reposicion" aria-label="Comentarios de la lista de reposición"></textarea>
+        </div>
+        <div class="reposicion-actions">
+          <button type="button" id="resetListBtn">Reiniciar</button>
+          <button type="button" id="generateListBtn">Generar lista</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <dialog id="generatedListDialog" class="reposicion-dialog" aria-labelledby="generatedListTitle">
+    <div class="reposicion-dialog-head">
+      <div>
+        <h2 id="generatedListTitle">Lista de reposición</h2>
+        <p id="generatedListDate" class="reposicion-dialog-date"></p>
+      </div>
+      <button type="button" id="closeGeneratedListBtn" class="reposicion-dialog-print-hide">Cerrar</button>
+    </div>
+    <div id="generatedListContent"></div>
+    <div class="reposicion-generated-actions reposicion-dialog-print-hide">
+      <button type="button" id="pdfGeneratedListBtn">PDF</button>
+      <button type="button" id="whatsappGeneratedListBtn">Whatsapp</button>
+    </div>
+  </dialog>
+
+  <dialog id="stockMinimumDialog" class="reposicion-dialog reposicion-stock-dialog" aria-labelledby="stockMinimumTitle">
+    <div class="reposicion-dialog-head">
+      <h2 id="stockMinimumTitle">Stock mínimo para una semana</h2>
+      <button type="button" id="closeStockMinimumBtn">Cerrar</button>
+    </div>
+    <p class="reposicion-stock-description">No cuenta el producto que se está usando en la mayoria de los casos</p>
+    <div id="stockMinimumContent"></div>
+  </dialog>
+
+  <script>
+    const productosPorSeccion = [
+      {
+        nombre: 'Alimentación',
+        productos: [
+          ['Aceite', 'garrafas'],
+          ['Harina', 'sacos'],
+          ['Azúcar', 'kilos'],
+          ['Sal', 'kilos'],
+          ['Leche', 'litros'],
+          ['Patatas fritas', 'cajas'],
+          ['Huevos', 'docenas'],
+          ['Cacao', 'cajas'],
+          ['Levadura', 'botes'],
+          ['Agua', 'botellas'],
+          ['Zumo', 'botellas'],
+          ['Café', 'cajas'],
+          ['Café descafeinado', 'cajas']
+        ]
+      },
+      {
+        nombre: 'Envases y embalajes',
+        productos: [
+          ['Bolsas de plástico', 'bolsa de bolsas'],
+          ['Bolsas de churros pequeña', 'cajas de 1000'],
+          ['Bolsas de churros grande', 'cajas de 1000'],
+          ['Bolsas de churros gigante', 'cajas de 1000'],
+          ['Vasos pequeños', 'tubos'],
+          ['Vasos medianos', 'tubos'],
+          ['Vasos grandes', 'tubos'],
+          ['Tapas', 'tubos']
+        ]
+      },
+      {
+        nombre: 'Otros',
+        productos: [
+          ['Rollo film plástico', 'unidades'],
+          ['Guantes de plástico', 'cajas'],
+          ['Papel albal', 'unidades'],
+          ['Rollo papel limpiar', 'unidades'],
+          ['Rollo papel registradora', 'unidades'],
+          ['Rollo papel datáfono', 'unidades'],
+          ['Servilletas pequeñas', 'packs'],
+          ['Servilletas grandes', 'packs'],
+          ['Cucharas', 'unidades'],
+          ['Bolsas transparentes patatas fritas', 'cajas'],
+          ['Bolsas de basura grandes', 'rollos'],
+          ['Bolsas de basura pequeñas', 'rollos'],
+          ['Celo grande', 'unidades']
+        ]
+      },
+      {
+        nombre: 'Limpieza',
+        productos: [
+          ['Fairy', 'botellas'],
+          ['Amoniaco', 'botellas'],
+          ['Lejía', 'botellas'],
+          ['KH7 desengrasante', 'botellas']
+        ]
+      }
+    ];
+
+    const stockMinimoPorProducto = {
+      'Aceite': ['9', '12'],
+      'Harina': ['7', '10-12'],
+      'Azúcar': ['20', '40'],
+      'Sal': ['8', '15'],
+      'Leche': ['60', '120'],
+      'Patatas fritas': ['3', '6'],
+      'Tapas': ['4', '10'],
+      'Huevos': ['2', '4'],
+      'Cacao': ['2', '6'],
+      'Levadura': ['4', '6'],
+      'Agua': ['10', '20'],
+      'Zumo': ['10', '20'],
+      'Café': ['1', '2'],
+      'Café descafeinado': ['1', '2'],
+      'Bolsas de plástico': ['4', '6'],
+      'Bolsas de churros pequeña': ['1', '2'],
+      'Bolsas de churros grande': ['1', '2'],
+      'Bolsas de churros gigante': ['1', '2'],
+      'Vasos pequeños': ['5', '10'],
+      'Vasos medianos': ['7', '12'],
+      'Vasos grandes': ['18', '30'],
+      'Rollo film plástico': ['1', '2'],
+      'Guantes de plástico': ['5', '10'],
+      'Papel albal': ['1', '2'],
+      'Rollo papel limpiar': ['2', '3'],
+      'Rollo papel registradora': ['10', '12'],
+      'Rollo papel datáfono': ['10', '12'],
+      'Servilletas pequeñas': ['6', '10'],
+      'Servilletas grandes': ['4', '8'],
+      'Cucharas': ['1', '2'],
+      'Bolsas transparentes patatas fritas': ['1', '1'],
+      'Bolsas de basura grandes': ['3', '4'],
+      'Bolsas de basura pequeñas': ['10', '15'],
+      'Celo grande': ['2', '3'],
+      'Fairy': ['1', '1'],
+      'Amoniaco': ['1', '2'],
+      'Lejía': ['1', '2'],
+      'KH7 desengrasante': ['1', '2']
+    };
+
+    const reposicionList = document.getElementById('reposicionList');
+  const productosDeLaLista = [];
+    let productoIndex = 0;
+
+    productosPorSeccion.forEach((seccion) => {
+      const section = document.createElement('section');
+      section.className = 'reposicion-section';
+
+      const heading = document.createElement('h2');
+      heading.textContent = seccion.nombre;
+      section.append(heading);
+
+      const columns = document.createElement('div');
+      columns.className = 'reposicion-columns';
+      ['Producto', 'Cantidad', 'Unidad'].forEach((text) => {
+        const label = document.createElement('span');
+        label.textContent = text;
+        columns.append(label);
+      });
+      section.append(columns);
+
+      seccion.productos.forEach(([nombre, unidad]) => {
+        productoIndex += 1;
+        const row = document.createElement('div');
+        row.className = 'reposicion-row';
+
+        const product = document.createElement('span');
+        product.className = 'reposicion-product';
+        product.textContent = nombre;
+
+        const quantityField = document.createElement('div');
+        quantityField.className = 'reposicion-field reposicion-quantity';
+        const quantityId = 'cantidad-' + productoIndex;
+        const quantityLabel = document.createElement('label');
+        quantityLabel.htmlFor = quantityId;
+        quantityLabel.textContent = 'Cantidad';
+        const quantityInput = document.createElement('input');
+        quantityInput.id = quantityId;
+        quantityInput.type = 'number';
+        quantityInput.min = '0';
+        quantityInput.step = '1';
+        quantityInput.inputMode = 'numeric';
+        quantityInput.setAttribute('aria-label', 'Cantidad de ' + nombre);
+        quantityField.append(quantityLabel, quantityInput);
+        productosDeLaLista.push({ seccion: seccion.nombre, nombre, unidad, quantityInput });
+
+        const unitLabel = document.createElement('span');
+        unitLabel.className = 'reposicion-unit';
+        unitLabel.textContent = unidad;
+
+        row.append(product, quantityField, unitLabel);
+        section.append(row);
+      });
+
+      reposicionList.append(section);
+    });
+
+    const generatedListDialog = document.getElementById('generatedListDialog');
+    const generatedListDate = document.getElementById('generatedListDate');
+    const generatedListContent = document.getElementById('generatedListContent');
+    const commentsInput = document.getElementById('comentarios-reposicion');
+
+    document.getElementById('resetListBtn').addEventListener('click', () => {
+      if(!window.confirm('¿Seguro que quieres reiniciar la lista? Se borrarán todas las cantidades y comentarios.')) return;
+      productosDeLaLista.forEach(({ quantityInput }) => {
+        quantityInput.value = '';
+      });
+      commentsInput.value = '';
+    });
+
+    document.getElementById('generateListBtn').addEventListener('click', () => {
+      const invalidQuantity = productosDeLaLista.find(({ quantityInput }) => quantityInput.value && !quantityInput.validity.valid);
+      if(invalidQuantity){
+        invalidQuantity.quantityInput.reportValidity();
+        return;
+      }
+
+      generatedListContent.replaceChildren();
+      generatedListDate.textContent = new Date().toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+
+      productosPorSeccion.forEach((seccion) => {
+        const productos = productosDeLaLista.filter((producto) => (
+          producto.seccion === seccion.nombre && producto.quantityInput.value !== ''
+        ));
+        if(!productos.length) return;
+
+        const section = document.createElement('section');
+        section.className = 'reposicion-generated-section';
+        const heading = document.createElement('h3');
+        heading.textContent = seccion.nombre;
+        const list = document.createElement('ul');
+        productos.forEach(({ nombre, unidad, quantityInput }) => {
+          const item = document.createElement('li');
+          item.textContent = nombre + ': ' + quantityInput.value + ' ' + unidad;
+          list.append(item);
+        });
+        section.append(heading, list);
+        generatedListContent.append(section);
+      });
+
+      if(!generatedListContent.childElementCount){
+        const emptyMessage = document.createElement('p');
+        emptyMessage.textContent = 'No hay productos con cantidad.';
+        generatedListContent.append(emptyMessage);
+      }
+
+      const comments = commentsInput.value.trim();
+      if(comments){
+        const commentsSection = document.createElement('section');
+        commentsSection.className = 'reposicion-generated-comments';
+        const commentsHeading = document.createElement('h3');
+        commentsHeading.textContent = 'Comentarios';
+        const commentsText = document.createElement('p');
+        commentsText.textContent = comments;
+        commentsSection.append(commentsHeading, commentsText);
+        generatedListContent.append(commentsSection);
+      }
+
+      generatedListDialog.showModal();
+    });
+
+    document.getElementById('closeGeneratedListBtn').addEventListener('click', () => {
+      generatedListDialog.close();
+    });
+
+    generatedListDialog.addEventListener('click', (event) => {
+      if(event.target === generatedListDialog) generatedListDialog.close();
+    });
+
+    document.getElementById('pdfGeneratedListBtn').addEventListener('click', () => {
+      window.print();
+    });
+
+    document.getElementById('whatsappGeneratedListBtn').addEventListener('click', () => {
+      const message = ['Lista de reposición', generatedListDate.textContent, ''].join('\n');
+      const messageLines = [message];
+
+      productosPorSeccion.forEach((seccion) => {
+        const productos = productosDeLaLista.filter((producto) => (
+          producto.seccion === seccion.nombre && producto.quantityInput.value !== ''
+        ));
+        if(!productos.length) return;
+
+        messageLines.push(seccion.nombre);
+        productos.forEach(({ nombre, unidad, quantityInput }) => {
+          messageLines.push('- ' + nombre + ': ' + quantityInput.value + ' ' + unidad);
+        });
+        messageLines.push('');
+      });
+
+      if(!productosDeLaLista.some(({ quantityInput }) => quantityInput.value !== '')){
+        messageLines.push('No hay productos con cantidad.', '');
+      }
+
+      const comments = commentsInput.value.trim();
+      if(comments) messageLines.push('Comentarios:', comments);
+
+      const whatsappUrl = new URL('https://wa.me/');
+      whatsappUrl.searchParams.set('text', messageLines.join('\n').trim());
+      window.open(whatsappUrl.toString(), '_blank', 'noopener,noreferrer');
+    });
+
+    const stockMinimumDialog = document.getElementById('stockMinimumDialog');
+    const stockMinimumContent = document.getElementById('stockMinimumContent');
+
+    productosPorSeccion.forEach((seccion) => {
+      const section = document.createElement('section');
+      section.className = 'reposicion-stock-section';
+      const heading = document.createElement('h3');
+      heading.textContent = seccion.nombre;
+      section.append(heading);
+
+      const columns = document.createElement('div');
+      columns.className = 'reposicion-stock-columns';
+      ['Producto', 'Stock habitual', 'Stock especial'].forEach((text) => {
+        const label = document.createElement('span');
+        label.textContent = text;
+        columns.append(label);
+      });
+      section.append(columns);
+
+      seccion.productos.forEach(([nombre, unidad]) => {
+        const row = document.createElement('div');
+        row.className = 'reposicion-stock-row';
+        const product = document.createElement('span');
+        product.className = 'reposicion-stock-product';
+        product.append(document.createTextNode(nombre));
+        const unit = document.createElement('span');
+        unit.className = 'reposicion-stock-unit';
+        unit.textContent = unidad;
+        product.append(unit);
+
+        const [habitual, especial] = stockMinimoPorProducto[nombre];
+        const habitualValue = document.createElement('span');
+        habitualValue.className = 'reposicion-stock-value';
+        habitualValue.textContent = habitual;
+        const especialValue = document.createElement('span');
+        especialValue.className = 'reposicion-stock-value';
+        especialValue.textContent = especial;
+        row.append(product, habitualValue, especialValue);
+        section.append(row);
+      });
+
+      stockMinimumContent.append(section);
+    });
+
+    document.getElementById('stockMinimumBtn').addEventListener('click', () => {
+      stockMinimumDialog.showModal();
+    });
+
+    document.getElementById('closeStockMinimumBtn').addEventListener('click', () => {
+      stockMinimumDialog.close();
+    });
+
+    stockMinimumDialog.addEventListener('click', (event) => {
+      if(event.target === stockMinimumDialog) stockMinimumDialog.close();
+    });
+
+    const headerMenuToggle = document.getElementById('headerMenuToggle');
+    const headerActionsMenu = document.getElementById('headerActionsMenu');
+
+    function closeHeaderMenu(){
+      headerActionsMenu.classList.remove('is-open');
+      headerMenuToggle.setAttribute('aria-expanded', 'false');
+      headerMenuToggle.setAttribute('aria-label', 'Abrir menú');
+    }
+
+    headerMenuToggle.addEventListener('click', () => {
+      const isOpen = headerActionsMenu.classList.toggle('is-open');
+      headerMenuToggle.setAttribute('aria-expanded', String(isOpen));
+      headerMenuToggle.setAttribute('aria-label', isOpen ? 'Cerrar menú' : 'Abrir menú');
+    });
+
+    headerActionsMenu.addEventListener('click', (event) => {
+      if(event.target.closest('button')) closeHeaderMenu();
+    });
+
+    document.addEventListener('click', (event) => {
+      if(!event.target.closest('.reposicion-head-actions')) closeHeaderMenu();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if(event.key === 'Escape') closeHeaderMenu();
+    });
+
+    document.getElementById('backBtn').addEventListener('click', () => {
+      location.href = '/admin/herramientas';
+    });
+  </script>
+</body>
+</html>
