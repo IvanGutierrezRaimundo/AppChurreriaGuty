@@ -274,6 +274,28 @@ test('GET /health responde OK', async () => {
   assert.equal(res.body.ok, true);
 });
 
+test('GET /admin/ventas/graficos requiere sesión y se abre desde ventas', async () => {
+  const app = loadAppWithDb(makeDbState());
+  const sinSesion = await request(app).get('/admin/ventas/graficos');
+  assert.equal(sinSesion.status, 401);
+
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+
+  const ventas = await agent.get('/admin/ventas');
+  assert.equal(ventas.status, 200);
+  assert.match(ventas.text, /graficosBtn/);
+  assert.match(ventas.text, /\/admin\/ventas\/graficos/);
+
+  const graficos = await agent.get('/admin/ventas/graficos');
+  assert.equal(graficos.status, 200);
+  assert.match(graficos.text, /Caja diaria/);
+
+  const utilidad = await agent.get('/admin/assets/graficos-ventas.js');
+  assert.equal(utilidad.status, 200);
+  assert.match(utilidad.text, /obtenerTotalesMensuales/);
+});
+
 test('POST /admin/login acepta credenciales válidas', async () => {
   const app = loadAppWithDb(makeDbState());
   const res = await request(app)

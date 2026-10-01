@@ -55,10 +55,10 @@ const FESTIVOS = {
 };
 
 // Fechas comerciales/tradicionales (no son festivos laborales), fecha ISO -> nombre.
-// Pendiente de completar: Carnaval de Oviedo (fecha variable, a investigar cada año).
 const FECHAS_ESPECIALES = {
   '2023-01-05': 'Cabalgata de Reyes',
   '2023-02-14': 'San Valentín',
+  '2023-02-25': 'Carnaval',
   '2023-03-08': 'Día de la Mujer',
   '2023-03-19': 'Día del Padre',
   '2023-05-07': 'Día de la Madre',
@@ -69,6 +69,7 @@ const FECHAS_ESPECIALES = {
 
   '2024-01-05': 'Cabalgata de Reyes',
   '2024-02-14': 'San Valentín',
+  '2024-02-17': 'Carnaval',
   '2024-03-08': 'Día de la Mujer',
   '2024-03-19': 'Día del Padre',
   '2024-05-05': 'Día de la Madre',
@@ -79,7 +80,7 @@ const FECHAS_ESPECIALES = {
 
   '2025-01-05': 'Cabalgata de Reyes',
   '2025-02-14': 'San Valentín',
-  '2025-03-08': 'Día de la Mujer',
+  '2025-03-08': 'Carnaval / Día de la Mujer',
   '2025-03-19': 'Día del Padre',
   '2025-05-04': 'Día de la Madre',
   '2025-09-19': 'Día de América en Asturias',
@@ -88,6 +89,7 @@ const FECHAS_ESPECIALES = {
 
   '2026-01-05': 'Cabalgata de Reyes',
   '2026-02-14': 'San Valentín',
+  '2026-02-21': 'Carnaval',
   '2026-03-08': 'Día de la Mujer',
   '2026-03-19': 'Día del Padre',
   '2026-05-03': 'Día de la Madre',

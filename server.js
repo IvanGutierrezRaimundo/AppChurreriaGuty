@@ -72,6 +72,12 @@ app.get('/admin/assets/calculador-pedidos-logic.js', ensureAdmin, (_req, res) =>
   });
 });
 
+app.get('/admin/assets/graficos-ventas.js', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'utils', 'graficosVentas.js'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 function isValidSpanishNif(value) {
   if (!value) return false;
   const v = String(value).trim().toUpperCase();
@@ -186,6 +192,13 @@ app.get('/admin/libro-gastos-compras', ensureAdmin, (_req, res) => {
 // Página de ventas (calendario de caja diaria)
 app.get('/admin/ventas', ensureAdmin, (_req, res) => {
   return res.sendFile(path.join(__dirname, 'private', 'ventas.html'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
+// Página de gráficos de ventas.
+app.get('/admin/ventas/graficos', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'private', 'graficos.html'), {
     headers: { 'Cache-Control': 'no-store' }
   });
 });

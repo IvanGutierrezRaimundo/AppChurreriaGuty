@@ -68,6 +68,7 @@ Usa el runner nativo de Node (`node --test`) sobre los archivos en [test/](test/
   - `crear_pedido.html`: alta de pedidos desde administración.
   - `clientes.html`, `proveedores.html`: gestión de clientes y proveedores (CRUD, export CSV).
   - `precios.html`: edición de los precios vigentes (churro, chocolate, envío).
+  - `graficos.html`: gráfico histórico de caja diaria, agrupando todos los años.
   - `informacion_empresa.html`: notas/información interna de la empresa.
 - `utils/`: lógica compartida y testeable.
   - `validations.js`: validaciones de NIF/NIE/CIF español, teléfono, email, etc.

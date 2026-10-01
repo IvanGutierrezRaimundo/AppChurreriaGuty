@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Gráficos de ventas</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    body{ padding: 10px 20px; }
+    .admin-bar{ max-width: 1400px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .admin-bar h1{ margin: 0; font-size: 1.5rem; padding-bottom: 6px; }
+    .admin-bar h1::after{ height: 4px; width: 84px; }
+    .admin-actions{ display: flex; gap: 8px; }
+    .admin-actions a{ display: inline-flex; align-items: center; min-height: 40px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #FFF; color: var(--color-brown); font-weight: 700; text-decoration: none; }
+    .admin-actions a:hover{ background: var(--color-primary); }
+    .grafico-panel{ max-width: 1400px; margin: 0 auto; padding: 18px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #FFF; box-shadow: var(--shadow-sm); }
+    .grafico-head{ display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+    .grafico-head h2{ margin: 0; color: var(--color-brown); font-size: 1.1rem; }
+    .grafico-controles{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .grafico-controles label{ margin: 0; }
+    .grafico-controles select{ width: auto; min-width: 108px; padding: 7px 10px; }
+    .grafico-resumen{ margin: 0; color: var(--color-muted); font-size: 0.9rem; }
+    .grafico-scroll{ margin-top: 24px; overflow-x: auto; overscroll-behavior-x: contain; }
+    .grafico-svg{ display: block; width: 100%; height: min(54vh, 42vw, 420px); min-width: 0; overflow: visible; }
+    .grafico-svg text{ font-family: inherit; fill: var(--color-muted); font-size: 16px; }
+    .grafico-svg .grid-line{ stroke: #E8E8E5; stroke-width: 1; }
+    .grafico-svg .axis-line{ stroke: #756960; stroke-width: 1.5; }
+    .grafico-svg .series-line{ fill: none; stroke: #21835B; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+    .grafico-svg .series-point{ fill: #FFF; stroke: #21835B; stroke-width: 2; }
+    .grafico-svg .axis-title{ fill: var(--color-brown); font-size: 17px; font-weight: 700; }
+    .grafico-vacio{ padding: 72px 16px; text-align: center; color: var(--color-muted); }
+    .grafico-vacio[hidden], .grafico-svg[hidden]{ display: none; }
+    .grafico-estado{ min-height: 1.4em; margin: 8px 2px 0; color: var(--color-muted); font-size: 0.9rem; }
+    .grafico-estado.error{ color: #B00020; }
+    .grafico-estadisticas{ display: grid; grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.3fr); gap: 18px 28px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--color-border); }
+    .grafico-estadisticas h3{ margin: 0 0 8px; color: var(--color-brown); font-size: 1rem; }
+    .grafico-media-valor{ margin: 0; color: #21835B; font-size: 1.5rem; font-weight: 800; }
+    .grafico-media-detalle{ margin: 4px 0 0; color: var(--color-muted); font-size: 0.86rem; }
+    .top-diez-lista{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 0; padding: 0; list-style: none; counter-reset: top-diez; }
+    .top-diez-lista li{ display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; padding: 5px 0; border-bottom: 1px solid #EEE8E4; counter-increment: top-diez; font-size: 0.9rem; }
+    .top-diez-lista li::before{ content: counter(top-diez); color: var(--color-muted); font-weight: 700; }
+    .top-diez-fecha{ min-width: 0; overflow-wrap: anywhere; }
+    .top-diez-importe{ color: var(--color-brown); white-space: nowrap; }
+    .top-diez-vacio{ margin: 0; color: var(--color-muted); }
+    @media (max-width: 560px){
+      body{ padding: 12px; }
+      .admin-bar{ align-items: flex-start; flex-direction: column; }
+      .admin-actions{ width: 100%; }
+      .admin-actions a{ flex: 1; justify-content: center; }
+      .grafico-panel{ padding: 12px 8px; }
+      .grafico-svg{ height: min(42vw, 40vh, 220px); }
+      .grafico-svg text{ font-size: 38px; }
+      .grafico-svg .axis-title{ font-size: 42px; }
+      .grafico-estadisticas{ grid-template-columns: 1fr; gap: 12px; }
+      .top-diez-lista{ grid-template-columns: 1fr; }
+      .top-diez-lista li{ padding: 3px 0; font-size: 0.82rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="admin-bar">
+    <h1>Gráficos</h1>
+    <nav class="admin-actions" aria-label="Navegación">
+      <a href="/admin/ventas">Ventas</a>
+      <a href="/admin">Menu</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="grafico-panel" aria-labelledby="graficoTitulo">
+      <header class="grafico-head">
+        <h2 id="graficoTitulo">Caja diaria</h2>
+        <div class="grafico-controles">
+          <label for="anioGrafico">Año</label>
+          <select id="anioGrafico" disabled></select>
+          <p class="grafico-resumen" id="graficoResumen" aria-live="polite"></p>
+        </div>
+      </header>
+      <div class="grafico-scroll">
+        <svg id="graficoVentas" class="grafico-svg" viewBox="0 0 1100 570" role="img" aria-labelledby="graficoTitulo graficoDescripcion" hidden>
+          <desc id="graficoDescripcion">Suma de caja por mes del año seleccionado.</desc>
+        </svg>
+      </div>
+      <p id="graficoVacio" class="grafico-vacio" hidden></p>
+      <p id="graficoEstado" class="grafico-estado" role="status" aria-live="polite">Cargando ventas...</p>
+      <section class="grafico-estadisticas" aria-label="Resumen de ventas del año">
+        <div>
+          <h3>Media</h3>
+          <p id="mediaAnual" class="grafico-media-valor">—</p>
+          <p id="mediaDetalle" class="grafico-media-detalle"></p>
+        </div>
+        <div>
+          <h3>Top 10 días con más ventas</h3>
+          <ol id="topDiezDias" class="top-diez-lista"></ol>
+          <p id="topDiezVacio" class="top-diez-vacio" hidden>No hay datos de ventas para este año.</p>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/admin/assets/graficos-ventas.js"></script>
+  <script>
+    const svg = document.getElementById('graficoVentas');
+    const estado = document.getElementById('graficoEstado');
+    const resumen = document.getElementById('graficoResumen');
+    const vacio = document.getElementById('graficoVacio');
+    const anioGrafico = document.getElementById('anioGrafico');
+    const tituloGrafico = document.getElementById('graficoTitulo');
+    const mediaAnual = document.getElementById('mediaAnual');
+    const mediaDetalle = document.getElementById('mediaDetalle');
+    const topDiezDias = document.getElementById('topDiezDias');
+    const topDiezVacio = document.getElementById('topDiezVacio');
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const ANCHO = 1100;
+    const ALTO = 570;
+    const MARGEN = { top: 30, right: 34, bottom: 94, left: 98 };
+    let filasVentas = [];
+    let fiestasPorFecha = {};
+
+    function crearElementoSvg(nombre, atributos = {}){
+      const elemento = document.createElementNS(SVG_NS, nombre);
+      Object.entries(atributos).forEach(([clave, valor]) => elemento.setAttribute(clave, String(valor)));
+      return elemento;
+    }
+
+    function textoSvg(texto, x, y, atributos = {}){
+      const elemento = crearElementoSvg('text', { x, y, ...atributos });
+      elemento.textContent = texto;
+      svg.appendChild(elemento);
+    }
+
+    function formatoDinero(valor, decimales = 0){
+      return new Intl.NumberFormat('es-ES', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: decimales,
+        maximumFractionDigits: decimales
+      }).format(valor);
+    }
+
+    function formatoMes(numeroMes){
+      const fecha = new Date(Date.UTC(2025, numeroMes - 1, 1));
+      return new Intl.DateTimeFormat('es-ES', { month: 'short', timeZone: 'UTC' })
+        .format(fecha)
+        .replace('.', '');
+    }
+
+    function formatoFechaCorta(fechaISO){
+      return new Intl.DateTimeFormat('es-ES', {
+        weekday: 'long', day: '2-digit', month: 'short', timeZone: 'UTC'
+      }).format(new Date(`${fechaISO}T00:00:00Z`)).replaceAll('.', '');
+    }
+
+    function pasoEje(maximo){
+      const crudo = maximo / 5 || 1;
+      const potencia = 10 ** Math.floor(Math.log10(crudo));
+      const normalizado = crudo / potencia;
+      const factor = normalizado <= 1 ? 1 : normalizado <= 2 ? 2 : normalizado <= 5 ? 5 : 10;
+      return factor * potencia;
+    }
+
+    function dibujarGrafico(datos, anio){
+      svg.replaceChildren(svg.querySelector('desc'));
+      if(datos.length === 0){
+        svg.setAttribute('hidden', '');
+        vacio.hidden = false;
+        vacio.textContent = 'No hay ventas con datos para este año.';
+        resumen.textContent = '';
+        return;
+      }
+
+      vacio.hidden = true;
+      svg.removeAttribute('hidden');
+      const margen = window.matchMedia('(max-width: 560px)').matches
+        ? { top: 30, right: 45, bottom: 100, left: 155 }
+        : MARGEN;
+      const area = {
+        izquierda: margen.left,
+        derecha: ANCHO - margen.right,
+        arriba: margen.top,
+        abajo: ALTO - margen.bottom
+      };
+      const anchoGrafico = area.derecha - area.izquierda;
+      const altoGrafico = area.abajo - area.arriba;
+      const mayorCaja = Math.max(0, ...datos.map((punto) => punto.totalCaja));
+      const paso = pasoEje(mayorCaja);
+      const maximoEje = Math.max(paso, Math.ceil(mayorCaja / paso) * paso);
+      const x = (mes) => area.izquierda + ((mes - 1) / 11) * anchoGrafico;
+      const y = (caja) => area.abajo - (caja / maximoEje) * altoGrafico;
+
+      for(let indice = 0; indice <= 5; indice++){
+        const valor = maximoEje * (indice / 5);
+        const posicionY = y(valor);
+        svg.appendChild(crearElementoSvg('line', {
+          x1: area.izquierda, y1: posicionY, x2: area.derecha, y2: posicionY,
+          class: 'grid-line'
+        }));
+        textoSvg(formatoDinero(valor), area.izquierda - 12, posicionY + 4, { 'text-anchor': 'end' });
+      }
+
+      svg.appendChild(crearElementoSvg('line', {
+        x1: area.izquierda, y1: area.arriba, x2: area.izquierda, y2: area.abajo, class: 'axis-line'
+      }));
+      svg.appendChild(crearElementoSvg('line', {
+        x1: area.izquierda, y1: area.abajo, x2: area.derecha, y2: area.abajo, class: 'axis-line'
+      }));
+
+      for(let mes = 1; mes <= 12; mes++){
+        const posicionX = x(mes);
+        svg.appendChild(crearElementoSvg('line', {
+          x1: posicionX, y1: area.abajo, x2: posicionX, y2: area.abajo + 6, class: 'axis-line'
+        }));
+        textoSvg(formatoMes(mes), posicionX, area.abajo + 25, { 'text-anchor': 'middle' });
+      }
+
+      textoSvg('Caja (€)', 22, (area.arriba + area.abajo) / 2, {
+        class: 'axis-title', 'text-anchor': 'middle', transform: `rotate(-90 22 ${(area.arriba + area.abajo) / 2})`
+      });
+      textoSvg('Meses', (area.izquierda + area.derecha) / 2, ALTO - 28, {
+        class: 'axis-title', 'text-anchor': 'middle'
+      });
+
+      const trazado = datos.map((punto, indice) => {
+        const segmento = indice === 0 || punto.mes > datos[indice - 1].mes + 1 ? 'M' : 'L';
+        return `${segmento}${x(punto.mes).toFixed(2)},${y(punto.totalCaja).toFixed(2)}`;
+      }).join(' ');
+      svg.appendChild(crearElementoSvg('path', { d: trazado, class: 'series-line' }));
+      datos.forEach((punto) => {
+        const circulo = crearElementoSvg('circle', {
+          cx: x(punto.mes), cy: y(punto.totalCaja), r: 4, class: 'series-point'
+        });
+        const titulo = crearElementoSvg('title');
+        titulo.textContent = `${formatoMes(punto.mes)} ${anio}: ${formatoDinero(punto.totalCaja, 2)} (${punto.diasConDatos} días)`;
+        circulo.appendChild(titulo);
+        svg.appendChild(circulo);
+      });
+
+      const totalAnual = datos.reduce((total, punto) => total + punto.totalCaja, 0);
+      resumen.textContent = `Total del año: ${formatoDinero(totalAnual, 2)} · ${datos.length} meses con ventas`;
+    }
+
+    function actualizarGrafico(){
+      const anio = anioGrafico.value;
+      tituloGrafico.textContent = anio ? `Caja mensual ${anio}` : 'Caja mensual';
+      const totalesMensuales = window.GraficosVentas.obtenerTotalesMensuales(filasVentas, anio);
+      dibujarGrafico(totalesMensuales, anio);
+      estado.textContent = totalesMensuales.length ? '' : 'Sin datos para mostrar.';
+      actualizarEstadisticas(anio);
+    }
+
+    function actualizarEstadisticas(anio){
+      const resumenAnual = window.GraficosVentas.obtenerResumenAnual(filasVentas, anio);
+      mediaAnual.textContent = resumenAnual.numeroCajas ? formatoDinero(resumenAnual.media, 2) : '—';
+      mediaDetalle.textContent = resumenAnual.numeroCajas
+        ? `${formatoDinero(resumenAnual.totalCaja, 2)} / ${resumenAnual.numeroCajas} días con caja`
+        : 'Sin días con caja registrada.';
+      topDiezDias.replaceChildren(...resumenAnual.topDiez.map((venta) => {
+        const item = document.createElement('li');
+        const fecha = document.createElement('span');
+        fecha.className = 'top-diez-fecha';
+        const nombreFiesta = fiestasPorFecha[venta.fecha];
+        fecha.textContent = `${formatoFechaCorta(venta.fecha)}${nombreFiesta ? ` (${nombreFiesta})` : ''}`;
+        if(nombreFiesta) fecha.title = nombreFiesta;
+        const importe = document.createElement('strong');
+        importe.className = 'top-diez-importe';
+        importe.textContent = formatoDinero(venta.caja, 2);
+        item.append(fecha, importe);
+        return item;
+      }));
+      topDiezVacio.hidden = resumenAnual.topDiez.length > 0;
+    }
+
+    async function cargarFiestas(){
+      try {
+        const respuesta = await fetch('/admin/api/tiempo', { headers: { 'Accept': 'application/json' } });
+        const datos = await respuesta.json().catch(() => ({}));
+        if(!respuesta.ok || !datos.ok) return;
+        fiestasPorFecha = { ...(datos.fechasEspeciales || {}), ...(datos.festivos || {}) };
+      } catch(_error){
+        fiestasPorFecha = {};
+      }
+    }
+
+    async function cargarGrafico(){
+      estado.classList.remove('error');
+      try {
+        const [respuesta] = await Promise.all([
+          fetch('/admin/api/ventas', { headers: { 'Accept': 'application/json' } }),
+          cargarFiestas()
+        ]);
+        const datos = await respuesta.json().catch(() => ({}));
+        if(!respuesta.ok || !datos.ok) throw new Error(datos.error || 'No se pudieron cargar las ventas.');
+        filasVentas = Array.isArray(datos.data) ? datos.data : [];
+        const anios = window.GraficosVentas.obtenerAniosVentas(filasVentas);
+        anioGrafico.replaceChildren(...anios.map((anio) => {
+          const opcion = document.createElement('option');
+          opcion.value = String(anio);
+          opcion.textContent = String(anio);
+          return opcion;
+        }));
+        anioGrafico.disabled = anios.length === 0;
+        if(anios.length > 0){
+          anioGrafico.value = String(anios.includes(2025) ? 2025 : anios[0]);
+        }
+        actualizarGrafico();
+      } catch(error){
+        svg.setAttribute('hidden', '');
+        vacio.hidden = false;
+        vacio.textContent = error.message || 'No se pudieron cargar las ventas.';
+        resumen.textContent = '';
+        mediaAnual.textContent = '—';
+        mediaDetalle.textContent = 'Sin datos con caja registrada.';
+        topDiezDias.replaceChildren();
+        topDiezVacio.hidden = false;
+        estado.classList.add('error');
+        estado.textContent = 'Error al cargar los datos.';
+      }
+    }
+
+    anioGrafico.addEventListener('change', actualizarGrafico);
+    cargarGrafico();
+  </script>
+</body>
+</html>

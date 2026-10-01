@@ -125,6 +125,7 @@
     <button type="button" id="menuToggleBtn" class="menu-toggle-btn" aria-label="Abrir menú" aria-expanded="false" aria-controls="actionsMenu">☰</button>
     <div class="actions" id="actionsMenu">
       <button type="button" id="menuBtn" title="Menu">Menu</button>
+      <button type="button" id="graficosBtn">Gráficos</button>
     </div>
   </div>
 
@@ -215,6 +216,9 @@
     document.getElementById('menuBtn').addEventListener('click', () => {
       location.href = '/admin';
     });
+    document.getElementById('graficosBtn').addEventListener('click', () => {
+      location.href = '/admin/ventas/graficos';
+    });
 
     const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -277,11 +281,11 @@
 
     function poblarAnios(){
       const anioActual = new Date().getFullYear();
-      const anios = new Set([anioActual]);
+      const anios = new Set([anioActual, 2025]);
       ventasPorFecha.forEach((_valor, fecha) => anios.add(Number(fecha.slice(0, 4))));
       const listaAnios = Array.from(anios).sort((a, b) => b - a);
       anioSel.innerHTML = listaAnios.map((anio) => `<option value="${anio}">${anio}</option>`).join('');
-      anioSel.value = String(anioActual);
+      anioSel.value = '2025';
     }
 
     function renderCalendario(){
