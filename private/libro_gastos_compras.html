@@ -123,6 +123,14 @@
     @media (max-width: 560px){ .proveedor-edit-grid{ grid-template-columns: 1fr; } .proveedor-edit-grid .field-full{ grid-column: auto; } }
     .view-switch{ display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
     .view-switch-left, .view-switch-right{ display: flex; flex-wrap: wrap; gap: 8px; }
+    @media (max-width: 680px){
+      .view-switch{ display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+      .view-switch-left{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+      .view-switch-left .view-toggle{ min-width: 0; padding: 8px 6px; font-size: 0.82rem; }
+      #filtrosToggleBtn{ grid-column: 1 / -1; width: 100%; }
+      .view-switch-right{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+      .view-switch-right .view-toggle{ min-width: 0; padding: 8px 6px; font-size: 0.82rem; }
+    }
     .view-toggle{
       display: inline-flex;
       align-items: center;
