@@ -623,8 +623,8 @@
         if(!productos.length) return;
 
         messageLines.push(seccion.nombre);
-        productos.forEach(({ nombre, unidad, quantityInput }) => {
-          messageLines.push('- ' + nombre + ': ' + quantityInput.value + ' ' + unidad);
+        productos.forEach(({ nombre, quantityInput }) => {
+          messageLines.push('- ' + nombre + ': ' + quantityInput.value);
         });
         messageLines.push('');
       });
