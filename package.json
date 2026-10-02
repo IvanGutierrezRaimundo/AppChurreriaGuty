@@ -2,7 +2,7 @@
   "name": "app-pedidos-guty",
   "version": "0.1.0",
   "private": true,
-  "description": "Formulario simple de pedidos (solo frontend + servidor estático)",
+  "description": "Aplicación completa de gestión para churrería con pedidos públicos, panel admin, ventas, clientes, proveedores y libro de gastos/compras",
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
