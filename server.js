@@ -957,22 +957,47 @@ app.put('/admin/api/proveedores/:id', ensureAdmin, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Introduce un email valido.' });
     }
 
-    await pool.execute(
-      `UPDATE proveedores
-       SET nif = ?, nombre = ?, telefono = ?, email = ?, direccion = ?, ciudad = ?, provincia = ?, cp = ?
-       WHERE id = ?`,
-      [
-        nifFinal ? String(nifFinal).toUpperCase() : null,
-        nombreFinal,
-        String(telefonoFinal).trim(),
-        emailFinal ? String(emailFinal).trim() : null,
-        direccionFinal,
-        ciudadFinal,
-        provinciaFinal,
-        cpFinal,
-        id
-      ]
-    );
+    const previousNif = current.nif ? String(current.nif).trim().toUpperCase() : null;
+    const nextNif = nifFinal ? String(nifFinal).trim().toUpperCase() : null;
+    const nextTelefono = telefonoFinal ? String(telefonoFinal).trim() : null;
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.execute(
+        `UPDATE proveedores
+         SET nif = ?, nombre = ?, telefono = ?, email = ?, direccion = ?, ciudad = ?, provincia = ?, cp = ?
+         WHERE id = ?`,
+        [
+          nextNif,
+          nombreFinal,
+          nextTelefono,
+          emailFinal ? String(emailFinal).trim() : null,
+          direccionFinal,
+          ciudadFinal,
+          provinciaFinal,
+          cpFinal,
+          id
+        ]
+      );
+
+      if (previousNif) {
+        await conn.execute(
+          `UPDATE libro_compras_gastos
+           SET proveedor = ?, nif_cif = ?
+           WHERE nif_cif = ?`,
+          [nombreFinal, nextNif, previousNif]
+        );
+      }
+
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    } finally {
+      conn.release();
+    }
 
     const [updatedRows] = await pool.execute(
       'SELECT id, nif, nombre, telefono, email, direccion, ciudad, provincia, cp, fecha_registro FROM proveedores WHERE id = ? LIMIT 1',

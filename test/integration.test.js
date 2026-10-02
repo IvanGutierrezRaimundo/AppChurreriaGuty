@@ -12,6 +12,7 @@ function makeDbState() {
     precios: [{ precio_churro: 1.2, precio_chocolate: 1.1, precio_envio: 3.5 }],
     clientes: [],
     proveedores: [],
+    libroComprasGastos: [],
     pedidos: [],
   };
 
@@ -235,6 +236,16 @@ function makeDbState() {
         return [{}];
       }
 
+      if (query.includes('UPDATE libro_compras_gastos')) {
+        const [proveedorNombre, nifFinal, nifAnterior] = params;
+        state.libroComprasGastos = state.libroComprasGastos.map((registro) => (
+          registro.nif_cif === nifAnterior
+            ? { ...registro, proveedor: proveedorNombre, nif_cif: nifFinal }
+            : registro
+        ));
+        return [{}];
+      }
+
       if (query.includes('UPDATE precios SET')) {
         state.precios[0] = {
           precio_churro: Number(params[0]),
@@ -407,6 +418,45 @@ test('CRUD de proveedores en /admin/api/proveedores', async () => {
   const deleteRes = await agent.delete(`/admin/api/proveedores/${id}`);
   assert.equal(deleteRes.status, 200);
   assert.equal(deleteRes.body.ok, true);
+});
+
+test('editar proveedor sincroniza nombre y nif en libro de gastos', async () => {
+  const db = makeDbState();
+  const proveedorId = db.state.nextId++;
+  db.state.proveedores.push({
+    id: proveedorId,
+    nif: 'B12345678',
+    nombre: 'Proveedor Central',
+    telefono: '678123456',
+    email: 'proveedor@ejemplo.com',
+    direccion: 'Calle Fábrica 8',
+    ciudad: 'Valencia',
+    provincia: 'Valencia',
+    cp: '46001',
+    fecha_registro: '2026-09-01',
+  });
+  db.state.libroComprasGastos.push({
+    id: db.state.nextId++,
+    proveedor: 'Proveedor Central',
+    nif_cif: 'B12345678',
+  });
+
+  const app = loadAppWithDb(db);
+  const agent = request.agent(app);
+
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+
+  const updateRes = await agent.put(`/admin/api/proveedores/${proveedorId}`).send({
+    nif: 'B87654321',
+    nombre: 'Proveedor Central Renovado',
+    telefono: '678123457',
+    email: 'nuevo@ejemplo.com',
+  });
+
+  assert.equal(updateRes.status, 200);
+  assert.equal(updateRes.body.ok, true);
+  assert.equal(db.state.libroComprasGastos[0].proveedor, 'Proveedor Central Renovado');
+  assert.equal(db.state.libroComprasGastos[0].nif_cif, 'B87654321');
 });
 
 test('validaciones de admin/api rechazan datos inválidos', async () => {

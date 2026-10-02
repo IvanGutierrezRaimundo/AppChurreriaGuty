@@ -327,6 +327,30 @@ El calculador de pedidos resuelve equivalencias operativas como bolsas, cajas, b
 
 ![](C:\Users\Guty\Desktop\AppChurreriaGuty\img\iva.png)
 
+
+
+## Versión móvil o responsive. Dispositivos de pantalla reducida
+
+La aplicación incluye una adaptación específica para móviles y dispositivos con pantalla reducida. Las vistas administrativas y de consulta ajustan su distribución para mejorar la lectura, simplificar la navegacion táctil y evitar tablas dificiles de usar en anchos pequeños.
+
+En los apartados mas extensos, la interfaz cambia automaticamente de tablas a fichas o bloques verticales cuando el ancho de pantalla lo requiere. También se reorganizan botones, filtros y acciones para que sigan siendo accesibles desde teléfonos y tablets sin perder funcionalidad.
+
+La experiencia móvil esta pensada para permitir consultas, edición de datos y gestión diaria desde dispositivos pequeños, manteniendo la misma lógica de negocio que en escritorio pero con una presentación mas cómoda y adaptada al tacto.
+
+Se ha añadido una adaptación responsive mediante media queries en CSS para pantallas pequeñas, reorganizando la interfaz cuando el ancho del dispositivo es reducido.
+
+
+
+![](C:\Users\Guty\Desktop\AppChurreriaGuty\img\movil1.png)
+
+
+
+![](C:\Users\Guty\Desktop\AppChurreriaGuty\img\movil 2.png)
+
+
+
+
+
 ## Reglas de negocio importantes
 
 Estas son algunas reglas que conviene conocer antes de tocar código:
