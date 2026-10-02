@@ -28,6 +28,64 @@ La aplicación no es solo un formulario de pedidos. A día de hoy cubre varias �
 - Herramientas internas de apoyo: lista de reposición, calculador de pedidos, calculadora de IVA y escandallo.
 - Información interna de empresa y páginas legales públicas.
 
+## Diagrama de casos de uso
+
+```mermaid
+flowchart LR
+	cliente[Cliente]
+	admin[Administrador]
+	panel((Panel interno))
+
+	subgraph publico[Sitio público]
+		p1[Consultar precios]
+		p2[Crear pedido]
+		p3[Solicitar factura]
+	end
+
+	subgraph pedidos[Gestión de pedidos]
+		g1[Consultar pedidos]
+		g2[Editar pedido y estado]
+		g3[Crear pedido manual]
+		g4[Generar factura PDF]
+	end
+
+	subgraph negocio[Gestión comercial]
+		n1[Gestionar clientes]
+		n2[Gestionar proveedores]
+		n3[Actualizar precios]
+		n4[Gestionar información de empresa]
+	end
+
+	subgraph analitica[Ventas y analítica]
+		a1[Consultar ventas]
+		a2[Ver gráficos y estadísticas]
+	end
+
+	subgraph fiscal[Compras y fiscalidad]
+		f1[Registrar gasto o compra]
+		f2[Consultar libro de gastos]
+		f3[Calcular modelos fiscales]
+	end
+
+	subgraph herramientas[Herramientas internas]
+		h1[Usar lista de reposición]
+		h2[Usar calculador de pedidos]
+		h3[Usar calculadora IVA]
+		h4[Usar escandallo]
+	end
+
+	cliente --> p1
+	cliente --> p2
+	cliente --> p3
+
+	admin --> panel
+	panel --> pedidos
+	panel --> negocio
+	panel --> analitica
+	panel --> fiscal
+	panel --> herramientas
+```
+
 ## Requisitos
 
 - Node.js 18 o superior.
