@@ -1027,12 +1027,6 @@
       document.querySelectorAll('button.del').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');
-          const row = currentRows.find((r) => String(r.id) === String(id));
-          const estado = row?.estado || 'Pendiente';
-          if (estado !== 'Cancelado') {
-            await showActionAlert({ title: 'Aviso', message: 'Solo se puede eliminar un pedido con estado Cancelado.' });
-            return;
-          }
           const confirmed = await askActionConfirm({
             title: 'Confirmación',
             message: 'Vas a eliminar el pedido #' + id + ' para siempre de la base de datos.\n\n¿Deseas continuar?',

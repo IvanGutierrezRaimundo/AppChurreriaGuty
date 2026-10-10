@@ -1223,14 +1223,27 @@ app.delete('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     if (!rows || rows.length === 0) {
       return res.status(404).json({ ok: false, error: 'Pedido no encontrado' });
     }
-    const estadoActual = rows[0].estado || 'Pendiente';
-    if (estadoActual !== 'Cancelado') {
+    if ((rows[0].estado || 'Pendiente') !== 'Cancelado') {
       return res.status(400).json({
         ok: false,
         error: 'Solo se puede eliminar un pedido con estado Cancelado.'
       });
     }
+    // Solo se puede borrar el último pedido para no romper la numeración correlativa de facturas.
+    const [maxRows] = await pool.execute('SELECT MAX(id) AS max_id FROM pedidos');
+    if (Number(maxRows?.[0]?.max_id) !== id) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Solo se puede eliminar el último pedido (el de mayor número) y debe estar Cancelado.'
+      });
+    }
     const [result] = await pool.execute('DELETE FROM pedidos WHERE id = ?', [id]);
+    // Reajusta el contador para que el siguiente pedido reutilice el número y no haya huecos.
+    try {
+      await pool.query('ALTER TABLE pedidos AUTO_INCREMENT = 1');
+    } catch (alterErr) {
+      console.error('No se pudo reajustar AUTO_INCREMENT de pedidos:', alterErr);
+    }
     res.json({ ok: true, affectedRows: result.affectedRows });
   } catch (err) {
     console.error('Error eliminando pedido:', err);

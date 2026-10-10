@@ -782,12 +782,6 @@
 
     async function deleteCurrentPedido(){
       if(!currentPedido || !currentPedido.id) return;
-      const estado = currentPedido.estado || 'Pendiente';
-      if(estado !== 'Cancelado'){
-        await showActionAlert({ title: 'Aviso', message: 'Solo se puede eliminar un pedido con estado Cancelado.' });
-        return;
-      }
-
       const id = currentPedido.id;
       const confirmed = await askActionConfirm({
         title: 'Confirmación',

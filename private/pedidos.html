@@ -1073,6 +1073,18 @@
         doc.text('ES50 3059 0090 0135 3459 7822 Caja Rural Asturias', 40, footerY + 12);
       }
 
+      if(String(pedido?.estado || '').trim() === 'Cancelado'){
+        const pageHeight = doc.internal.pageSize.getHeight();
+        doc.saveGraphicsState();
+        if(typeof doc.GState === 'function') doc.setGState(new doc.GState({ opacity: 0.55 }));
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(90);
+        doc.setTextColor(220, 0, 0);
+        doc.text('CANCELADA', pageWidth / 2, pageHeight / 2, { align: 'center', angle: 35 });
+        doc.restoreGraphicsState();
+        doc.setTextColor(0, 0, 0);
+      }
+
       const fileSafeNumero = String(pedido?.id || '').trim();
       const fileSafeAnio = String(new Date(pedido?.fecha || new Date()).getFullYear() || '').trim();
       const fileSafeCliente = String(pedido?.nombre || 'cliente').trim().replace(/[^A-Za-z0-9.-]/g, '_');

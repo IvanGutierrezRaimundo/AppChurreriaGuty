@@ -126,6 +126,11 @@ function makeDbState() {
         return [[{ estado: pedido ? (pedido.estado || 'Pendiente') : null }]];
       }
 
+      if (query.includes('SELECT MAX(id) AS max_id FROM pedidos')) {
+        const maxId = state.pedidos.reduce((acc, item) => Math.max(acc, item.id), 0);
+        return [[{ max_id: maxId || null }]];
+      }
+
       if (query.includes('SELECT * FROM pedidos WHERE id = ? LIMIT 1')) {
         const id = Number(params[0]);
         return [state.pedidos.filter((pedido) => pedido.id === id)];
@@ -520,6 +525,39 @@ test('DELETE /admin/api/pedidos/:id solo permite borrar con estado Cancelado', a
   const canceledDelete = await agent.delete(`/admin/api/pedidos/${created.body.id}`);
   assert.equal(canceledDelete.status, 200);
   assert.equal(canceledDelete.body.ok, true);
+});
+
+test('DELETE /admin/api/pedidos/:id solo permite borrar el último pedido', async () => {
+  const app = loadAppWithDb(makeDbState());
+  const agent = request.agent(app);
+
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+
+  const payload = {
+    nombre: 'Ana García',
+    telefono: '612345678',
+    fecha: '2026-09-01',
+    hora: '18:00',
+    metodo_pago: 'efectivo',
+    personas: 10,
+    churros_por_persona: 12,
+    chocolates: 0,
+  };
+  const first = await request(app).post('/api/pedidos').send(payload);
+  const second = await request(app).post('/api/pedidos').send(payload);
+
+  await agent.put(`/admin/api/pedidos/${first.body.id}`).send({ estado: 'Cancelado' });
+  await agent.put(`/admin/api/pedidos/${second.body.id}`).send({ estado: 'Cancelado' });
+
+  const notLast = await agent.delete(`/admin/api/pedidos/${first.body.id}`);
+  assert.equal(notLast.status, 400);
+  assert.match(notLast.body.error, /último/i);
+
+  const last = await agent.delete(`/admin/api/pedidos/${second.body.id}`);
+  assert.equal(last.status, 200);
+
+  const nowLast = await agent.delete(`/admin/api/pedidos/${first.body.id}`);
+  assert.equal(nowLast.status, 200);
 });
 
 test('GET /admin/api/pedidos soporta búsqueda y paginación', async () => {
