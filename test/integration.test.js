@@ -137,11 +137,12 @@ function makeDbState() {
       }
 
       if (query.includes('SELECT id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, descuento, estado, created_at')) {
-        const searchTerm = String(params[0] || '').replace(/[%_]/g, '').trim();
-        const estadoFilter = params.find((p) => typeof p === 'string' && ['Pendiente', 'Realizado', 'Cobrado', 'Cancelado'].includes(p)) || null;
+        const estadoValues = ['Pendiente', 'Realizado', 'Cobrado', 'Cancelado'];
+        const searchTerm = estadoValues.includes(params[0]) ? '' : String(params[0] || '').replace(/[%_]/g, '').trim();
+        const estadoFilters = params.filter((p) => typeof p === 'string' && estadoValues.includes(p));
         const items = state.pedidos.filter((pedido) => {
           const hayQ = !searchTerm || [pedido.nombre, pedido.email, pedido.telefono, pedido.ciudad, pedido.provincia].some((value) => String(value || '').toLowerCase().includes(searchTerm.toLowerCase()));
-          const hayEstado = !estadoFilter || pedido.estado === estadoFilter;
+          const hayEstado = estadoFilters.length === 0 || estadoFilters.includes(pedido.estado);
           return hayQ && hayEstado;
         });
         return [items.slice(0, 20)];
@@ -310,6 +311,30 @@ test('GET /admin/ventas/graficos requiere sesión y se abre desde ventas', async
   const utilidad = await agent.get('/admin/assets/graficos-ventas.js');
   assert.equal(utilidad.status, 200);
   assert.match(utilidad.text, /obtenerTotalesMensuales/);
+});
+
+test('El script de factura se sirve solo a admin y lo cargan Pedidos e Historial', async () => {
+  const app = loadAppWithDb(makeDbState());
+
+  const sinSesion = await request(app).get('/admin/assets/factura-pedido.js');
+  assert.equal(sinSesion.status, 401);
+
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+
+  const script = await agent.get('/admin/assets/factura-pedido.js');
+  assert.equal(script.status, 200);
+  assert.match(script.text, /async function downloadFacturaPdf/);
+
+  for (const ruta of ['/admin/pedidos', '/admin/historial-pedidos']) {
+    const pagina = await agent.get(ruta);
+    assert.equal(pagina.status, 200, ruta);
+    assert.match(pagina.text, /\/admin\/assets\/factura-pedido\.js/, ruta);
+    assert.match(pagina.text, /class="factura"/, ruta);
+  }
+
+  const historial = await agent.get('/admin/historial-pedidos');
+  assert.doesNotMatch(historial.text, /class="del"/);
 });
 
 test('POST /admin/login acepta credenciales válidas', async () => {
@@ -844,6 +869,36 @@ test('Pedido con estado Cobrado aparece en historial', async () => {
   const updatedPedido = afterRes.body.data.find((p) => p.id === pedidoId);
   assert.ok(updatedPedido, 'Pedido debe existir en la lista');
   assert.equal(updatedPedido.estado, 'Cobrado', 'Pedido debe tener estado Cobrado después de actualizar');
+});
+
+test('GET /admin/api/pedidos acepta varios estados para el historial (Cobrado y Cancelado)', async () => {
+  const app = loadAppWithDb(makeDbState());
+  const agent = request.agent(app);
+
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+
+  const payload = {
+    nombre: 'Cliente Historial',
+    telefono: '612345678',
+    fecha: '2026-09-01',
+    hora: '18:00',
+    metodo_pago: 'tarjeta',
+    personas: 10,
+    churros_por_persona: 12,
+    chocolates: 0,
+  };
+  const ids = [];
+  for (let i = 0; i < 3; i += 1) {
+    const res = await request(app).post('/api/pedidos').send(payload);
+    ids.push(res.body.id);
+  }
+  await agent.put(`/admin/api/pedidos/${ids[0]}`).send({ estado: 'Cobrado' });
+  await agent.put(`/admin/api/pedidos/${ids[1]}`).send({ estado: 'Cancelado' });
+
+  const res = await agent.get('/admin/api/pedidos').query({ estado: 'Cobrado,Cancelado' });
+  assert.equal(res.status, 200);
+  const found = res.body.data.map((p) => p.id).sort();
+  assert.deepEqual(found, [ids[0], ids[1]].sort());
 });
 
 test('Factura incluye envío, descuento y método de pago correcto', async () => {

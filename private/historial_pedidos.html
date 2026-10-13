@@ -91,8 +91,15 @@
     }
     .admin-table-wrap{ max-width: 1200px; margin: 0 auto; }
     .admin-doc{ max-width: 1200px; margin: 0 auto; }
-    th.sortable{ cursor: pointer; user-select: none; }
-    th .sort-icons{ margin-left: 6px; font-size: 0.82rem; color: var(--color-muted); display:inline-flex; gap:2px; }
+    #pedidosTable th{
+      font-size: 0.72rem;
+      line-height: 1.15;
+      padding: 8px 6px;
+      white-space: nowrap;
+    }
+    th.sortable{ cursor: pointer; user-select: none; white-space: nowrap; }
+    #pedidosTable td:nth-child(n+3):nth-child(-n+5){ text-align: center; }
+    th .sort-icons{ margin-left: 3px; font-size: 0.68rem; color: var(--color-muted); display:inline-flex; gap:1px; }
     th[data-dir="asc"] .arrow-up{ color: var(--color-brown); }
     th[data-dir="desc"] .arrow-down{ color: var(--color-brown); }
     /* (Revert) Usar estilos corporativos por defecto para tablas y acciones */
@@ -377,7 +384,7 @@
         <select id="estadoModalSelect">
           <option value="Pendiente">Pendiente</option>
           <option value="Realizado">Realizado</option>
-          <option value="Cobrado">Cobrado</option>
+          <option value="Cobrado">Cobrado/Fin</option>
           <option value="Cancelado">Cancelado</option>
         </select>
       </div>
@@ -405,6 +412,7 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.3/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="/admin/assets/factura-pedido.js"></script>
   <script>
     const tbody = document.getElementById('tbody');
     const pageSizeSel = document.getElementById('pageSize');
@@ -492,9 +500,13 @@
           return 'pedido-estado-pendiente';
       }
     }
+    function getEstadoBadgeText(estadoRaw){
+      const estado = estadoRaw || 'Pendiente';
+      return estado === 'Cobrado' ? 'Cobrado/Fin' : estado;
+    }
     function renderEstadoBadge(estadoRaw){
       const estado = estadoRaw || 'Pendiente';
-      return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${estado}</span>`;
+      return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${getEstadoBadgeText(estado)}</span>`;
     }
     function updateViewButtons(){
       const isTabla = currentView === 'tabla';
@@ -659,7 +671,7 @@
           </div>
           <span class="btn-row">
             <button data-id="${r.id}" class="open">Abrir</button>
-            <button data-id="${r.id}" class="del">Eliminar</button>
+            <button data-id="${r.id}" class="factura">Factura</button>
           </span>
         </article>
       `;
@@ -832,7 +844,7 @@
           <td>
             <span class="btn-row">
               <button data-id="${r.id}" class="open">Abrir</button>
-              <button data-id="${r.id}" class="del">Eliminar</button>
+              <button data-id="${r.id}" class="factura">Factura</button>
             </span>
           </td>
         `;
@@ -849,7 +861,7 @@
       const desde = document.getElementById('desde').value;
       const hasta = document.getElementById('hasta').value;
       const params = new URLSearchParams({ pageSize: String(pageSize), sort: currentSort, dir: currentDir });
-      params.set('estado', 'Cobrado');
+      params.set('estado', 'Cobrado,Cancelado');
       if (q) params.set('q', q);
       if (desde) params.set('desde', desde);
       if (hasta) params.set('hasta', hasta);
@@ -924,7 +936,7 @@
       const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
 
       doc.setFontSize(16);
-      doc.text('Historial de Pedidos Cobrados', 40, 40);
+      doc.text('Historial de Pedidos (Cobrados y Cancelados)', 40, 40);
       doc.setFontSize(10);
       doc.text(`Generado: ${now.toLocaleString('es-ES')}`, 40, 58);
 
@@ -940,7 +952,7 @@
         formatDate(r.fecha),
         formatTime(r.hora),
         (typeof r.presupuesto_total !== 'undefined' && r.presupuesto_total !== null) ? Number(r.presupuesto_total).toFixed(2) : '',
-        r.estado || 'Pendiente'
+        (r.estado === 'Cobrado' ? 'Cobrado/Fin' : (r.estado || 'Pendiente'))
       ]);
 
       doc.autoTable({
@@ -1024,19 +1036,11 @@
     }
 
     function bindActions() {
-      document.querySelectorAll('button.del').forEach(btn => {
+      document.querySelectorAll('button.factura').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');
-          const confirmed = await askActionConfirm({
-            title: 'Confirmación',
-            message: 'Vas a eliminar el pedido #' + id + ' para siempre de la base de datos.\n\n¿Deseas continuar?',
-            acceptText: 'Eliminar'
-          });
-          if (!confirmed) return;
-          const res = await fetch(`/admin/api/pedidos/${id}`, { method: 'DELETE' });
-          const data = await res.json();
-          if (data.ok) load();
-          else await showActionAlert({ title: 'Error', message: data.error || 'Error' });
+          if(!id) return;
+          await downloadFacturaPdf(Number(id));
         });
       });
       document.querySelectorAll('button.open').forEach(btn => {

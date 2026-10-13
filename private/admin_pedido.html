@@ -205,7 +205,7 @@
               <select id="e_estado" class="pedido-select">
                 <option value="Pendiente">Pendiente</option>
                 <option value="Realizado">Realizado</option>
-                <option value="Cobrado">Cobrado</option>
+                <option value="Cobrado">Cobrado/Fin</option>
                 <option value="Cancelado">Cancelado</option>
               </select>
             </div>
@@ -435,9 +435,14 @@
       }
     }
 
+    function getEstadoBadgeText(estadoRaw){
+      const estado = estadoRaw || 'Pendiente';
+      return estado === 'Cobrado' ? 'Cobrado/Fin' : estado;
+    }
+
     function renderEstadoBadge(estadoRaw){
       const estado = estadoRaw || 'Pendiente';
-      return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${estado}</span>`;
+      return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${getEstadoBadgeText(estado)}</span>`;
     }
 
     function setValue(id, value){
@@ -747,7 +752,7 @@
       addSmall(`Generado: ${now.toLocaleString('es-ES')}`);
 
       addSection('Estado y resumen');
-      addLine('Estado', p.estado || 'Pendiente');
+      addLine('Estado', p.estado === 'Cobrado' ? 'Cobrado/Fin' : (p.estado || 'Pendiente'));
       addLine('Fecha', formatDate(p.fecha));
       addLine('Hora', formatTime(p.hora));
       addLine('Total presupuesto', (typeof p.presupuesto_total !== 'undefined' && p.presupuesto_total !== null) ? nf.format(Number(p.presupuesto_total)) : '-');

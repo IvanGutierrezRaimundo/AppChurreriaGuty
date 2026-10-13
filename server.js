@@ -78,6 +78,12 @@ app.get('/admin/assets/graficos-ventas.js', ensureAdmin, (_req, res) => {
   });
 });
 
+app.get('/admin/assets/factura-pedido.js', ensureAdmin, (_req, res) => {
+  return res.sendFile(path.join(__dirname, 'utils', 'facturaPedido.js'), {
+    headers: { 'Cache-Control': 'no-store' }
+  });
+});
+
 function isValidSpanishNif(value) {
   if (!value) return false;
   const v = String(value).trim().toUpperCase();
@@ -566,8 +572,15 @@ app.get('/admin/api/pedidos', ensureAdmin, async (req, res) => {
       params.push(like, like, like, like, like);
     }
     if (estado) {
-      where.push('estado = ?');
-      params.push(estado);
+      // Admite varios estados separados por coma (p. ej. "Cobrado,Cancelado")
+      const estados = String(estado).split(',').map((e) => e.trim()).filter(Boolean);
+      if (estados.length === 1) {
+        where.push('estado = ?');
+        params.push(estados[0]);
+      } else if (estados.length > 1) {
+        where.push(`estado IN (${estados.map(() => '?').join(',')})`);
+        params.push(...estados);
+      }
     }
     if (desde) { where.push('fecha >= ?'); params.push(desde); }
     if (hasta) { where.push('fecha <= ?'); params.push(hasta); }
