@@ -596,10 +596,13 @@ app.get('/admin/api/pedidos', ensureAdmin, async (req, res) => {
     const safePageSize = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 500);
     const safePage = Math.max(parseInt(page, 10) || 1, 1);
     const offset = (safePage - 1) * safePageSize;
+    const orderBy = sortCol === 'estado'
+      ? `ORDER BY ${sortCol} ${sortDir}, fecha ASC, hora ASC, id ASC`
+      : `ORDER BY ${sortCol} ${sortDir}, id DESC`;
     const sql = `SELECT id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, descuento, estado, created_at
            FROM pedidos
            ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-           ORDER BY ${sortCol} ${sortDir}, id DESC
+           ${orderBy}
            LIMIT ${safePageSize} OFFSET ${offset}`;
     const [rows] = await pool.execute(sql, params);
     res.json({ ok: true, data: rows });

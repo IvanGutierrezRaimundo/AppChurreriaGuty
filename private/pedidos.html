@@ -835,6 +835,13 @@
         }
         return 0;
       }
+      function compareByFechaHoraId(a, b){
+        const byFecha = toDate(a.fecha) - toDate(b.fecha);
+        if(byFecha !== 0) return byFecha;
+        const byHora = toMinutes(a.hora) - toMinutes(b.hora);
+        if(byHora !== 0) return byHora;
+        return toNumber(a.id) - toNumber(b.id);
+      }
       rows.sort((a,b) => {
         let cmp = 0;
         switch(currentSort){
@@ -847,6 +854,7 @@
             const av = ESTADO_ORDER[a.estado] ?? 0;
             const bv = ESTADO_ORDER[b.estado] ?? 0;
             cmp = av - bv;
+            if(cmp === 0) cmp = compareByFechaHoraId(a, b);
             break;
           }
           case 'personas': cmp = toNumber(a.personas) - toNumber(b.personas); break;
