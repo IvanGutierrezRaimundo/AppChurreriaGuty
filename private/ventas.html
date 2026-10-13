@@ -171,9 +171,11 @@
       <button type="button" id="cerrarVentaDiaDialog" class="venta-dia-dialog-close">Cerrar</button>
     </div>
     <dl class="venta-dia-detalles">
-      <div><dt>Caja</dt><dd id="ventaDiaCaja"></dd></div>
-      <div><dt>Temperatura</dt><dd id="ventaDiaTemperatura"></dd></div>
-      <div><dt>Tiempo</dt><dd id="ventaDiaTiempo"></dd></div>
+      <div id="ventaDiaCajaRow"><dt>Caja</dt><dd id="ventaDiaCaja"></dd></div>
+      <div id="ventaDiaTemperaturaRow"><dt>Temperatura</dt><dd id="ventaDiaTemperatura"></dd></div>
+      <div id="ventaDiaTiempoRow"><dt>Tiempo</dt><dd id="ventaDiaTiempo"></dd></div>
+      <div id="ventaDiaFestivoRow" style="display:none;"><dt>Festivo</dt><dd id="ventaDiaFestivo"></dd></div>
+      <div id="ventaDiaEspecialRow" style="display:none;"><dt>Fecha especial</dt><dd id="ventaDiaEspecial"></dd></div>
     </dl>
   </dialog>
 
@@ -256,9 +258,16 @@
     const resumenMes = document.getElementById('resumenMes');
     const ventaDiaDialog = document.getElementById('ventaDiaDialog');
     const ventaDiaTitulo = document.getElementById('ventaDiaTitulo');
+    const ventaDiaCajaRow = document.getElementById('ventaDiaCajaRow');
     const ventaDiaCaja = document.getElementById('ventaDiaCaja');
+    const ventaDiaTemperaturaRow = document.getElementById('ventaDiaTemperaturaRow');
     const ventaDiaTemperatura = document.getElementById('ventaDiaTemperatura');
+    const ventaDiaTiempoRow = document.getElementById('ventaDiaTiempoRow');
     const ventaDiaTiempo = document.getElementById('ventaDiaTiempo');
+    const ventaDiaFestivoRow = document.getElementById('ventaDiaFestivoRow');
+    const ventaDiaFestivo = document.getElementById('ventaDiaFestivo');
+    const ventaDiaEspecialRow = document.getElementById('ventaDiaEspecialRow');
+    const ventaDiaEspecial = document.getElementById('ventaDiaEspecial');
 
     let ventasPorFecha = new Map();
     let temperaturasPorFecha = new Map();
@@ -273,6 +282,12 @@
 
     function diasEnMes(anio, mes){
       return new Date(anio, mes, 0).getDate();
+    }
+
+    function setDetalleDia(rowEl, valueEl, value){
+      const hasValue = value !== undefined && value !== null && String(value).trim() !== '';
+      rowEl.style.display = hasValue ? 'flex' : 'none';
+      valueEl.textContent = hasValue ? String(value) : '';
     }
 
     async function cargarVentas(){
@@ -368,13 +383,17 @@
       const caja = ventasPorFecha.get(fechaISO);
       const temperatura = temperaturasPorFecha.get(fechaISO);
       const tiempo = lluviaPorFecha.get(fechaISO);
+      const festivo = festivosPorFecha.get(fechaISO);
+      const fechaEspecial = fechasEspecialesPorFecha.get(fechaISO);
       const fecha = new Date(`${fechaISO}T00:00:00Z`);
       ventaDiaTitulo.textContent = new Intl.DateTimeFormat('es-ES', {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
       }).format(fecha);
-      ventaDiaCaja.textContent = caja !== undefined ? formatMoney(caja) : 'Sin datos';
-      ventaDiaTemperatura.textContent = temperatura !== undefined ? `${temperatura} Cº` : 'Sin datos';
-      ventaDiaTiempo.textContent = tiempo || 'Sin datos';
+      setDetalleDia(ventaDiaCajaRow, ventaDiaCaja, caja !== undefined ? formatMoney(caja) : '');
+      setDetalleDia(ventaDiaTemperaturaRow, ventaDiaTemperatura, temperatura !== undefined ? `${temperatura} Cº` : '');
+      setDetalleDia(ventaDiaTiempoRow, ventaDiaTiempo, tiempo || '');
+      setDetalleDia(ventaDiaFestivoRow, ventaDiaFestivo, festivo || '');
+      setDetalleDia(ventaDiaEspecialRow, ventaDiaEspecial, fechaEspecial || '');
       ventaDiaDialog.showModal();
     }
 
