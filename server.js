@@ -1264,10 +1264,17 @@ app.delete('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     }
     const [result] = await pool.execute('DELETE FROM pedidos WHERE id = ?', [id]);
     // Reajusta el contador para que el siguiente pedido reutilice el número y no haya huecos.
+    const [nextRows] = await pool.execute('SELECT COALESCE(MAX(id), 0) + 1 AS siguiente FROM pedidos');
+    const siguienteId = Math.trunc(Number(nextRows?.[0]?.siguiente)) || 1;
     try {
-      await pool.query('ALTER TABLE pedidos AUTO_INCREMENT = 1');
-    } catch (alterErr) {
-      console.error('No se pudo reajustar AUTO_INCREMENT de pedidos:', alterErr);
+      // TiDB solo permite bajar el contador con FORCE; MySQL no soporta esa sintaxis.
+      await pool.query(`ALTER TABLE pedidos FORCE AUTO_INCREMENT = ${siguienteId}`);
+    } catch (forceErr) {
+      try {
+        await pool.query(`ALTER TABLE pedidos AUTO_INCREMENT = ${siguienteId}`);
+      } catch (alterErr) {
+        console.error('No se pudo reajustar AUTO_INCREMENT de pedidos:', alterErr);
+      }
     }
     res.json({ ok: true, affectedRows: result.affectedRows });
   } catch (err) {

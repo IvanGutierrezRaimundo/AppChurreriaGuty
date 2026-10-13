@@ -155,7 +155,7 @@ CREATE TABLE `pedidos` (
   KEY `idx_pedidos_envio` (`requiere_envio`),
   KEY `idx_pedidos_nif` (`nif`),
   CONSTRAINT `chk_factura_campos` CHECK (((`solicita_factura` = false) or ((`provincia` is not null) and (`nif` is not null))))
-) ENGINE=InnoDB AUTO_INCREMENT=54 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=54 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
