@@ -446,6 +446,10 @@
       return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${getEstadoBadgeText(estado)}</span>`;
     }
 
+    function isPedidoCobradoState(estadoRaw){
+      return estadoRaw === 'Cobrado' || estadoRaw === 'Cobrado/Fin';
+    }
+
     function setValue(id, value){
       const el = document.getElementById(id);
       if(!el) return;
@@ -532,6 +536,19 @@
       detailBackdrop.setAttribute('aria-hidden', 'true');
       editBackdrop.classList.add('is-open');
       editBackdrop.setAttribute('aria-hidden', 'false');
+    }
+
+    async function handleEditClick(){
+      if(!currentPedido) return;
+      if(isPedidoCobradoState(currentPedido.estado)){
+        const accepted = await askActionConfirm({
+          title: 'Aviso',
+          message: 'Si cambia los datos de este pedido y la factura ya ha sido enviada al cliente se deverá enviar la nueva factura e indicarle que destruya la factura anterior.',
+          acceptText: 'Aceptar'
+        });
+        if(!accepted) return;
+      }
+      openEditModal();
     }
 
     function closeEditModal(reopenDetail){
@@ -844,7 +861,7 @@
     }
 
     document.getElementById('pedidoCloseBtn').addEventListener('click', closeDetailModal);
-    document.getElementById('pedidoEditBtn').addEventListener('click', openEditModal);
+    document.getElementById('pedidoEditBtn').addEventListener('click', handleEditClick);
     document.getElementById('pedidoDeleteBtn').addEventListener('click', deleteCurrentPedido);
     document.getElementById('pedidoPrintBtn').addEventListener('click', downloadPedidoPdf);
     document.getElementById('pedidoEditCancelBtn').addEventListener('click', () => closeEditModal(true));
