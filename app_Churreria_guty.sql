@@ -148,6 +148,7 @@ CREATE TABLE `pedidos` (
   `precio_chocolate` decimal(10,2) DEFAULT NULL,
   `precio_envio` decimal(10,2) DEFAULT NULL,
   `descuento` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `suplemento` decimal(10,2) NOT NULL DEFAULT '0.00',
   PRIMARY KEY (`id`),
   KEY `idx_pedidos_fecha` (`fecha`),
   KEY `idx_pedidos_pago` (`metodo_pago`),

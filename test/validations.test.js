@@ -104,3 +104,39 @@ test('validatePedidoPayload exige campos obligatorios y validaciones del pedido'
   assert.equal(budget.valid, false);
   assert.ok(containsError(budget.errors, 'presupuesto'));
 });
+
+test('validatePedidoPayload suma el suplemento antes de aplicar el descuento (solo admin)', () => {
+  const base = {
+    nombre: 'Ana García',
+    telefono: '612345678',
+    fecha: '2026-09-01',
+    hora: '18:00',
+    metodo_pago: 'tarjeta',
+    personas: 10,
+    churros_por_persona: 10,
+  };
+  const options = { precios: { churro: 1, chocolate: 1, envio: 0 } };
+
+  const admin = validatePedidoPayload({ ...base, suplemento: '11,00', descuento: 5 }, { ...options, isAdminCreate: true });
+  assert.equal(admin.valid, true);
+  assert.equal(admin.subtotal, 100);
+  assert.equal(admin.suplemento, 11);
+  assert.equal(admin.presupuestoFinal, 106);
+
+  // El descuento puede superar el subtotal si el suplemento lo cubre.
+  const cubierto = validatePedidoPayload({ ...base, suplemento: 20, descuento: 110 }, { ...options, isAdminCreate: true });
+  assert.equal(cubierto.valid, true);
+  assert.equal(cubierto.presupuestoFinal, 10);
+
+  const excedido = validatePedidoPayload({ ...base, suplemento: 20, descuento: 121 }, { ...options, isAdminCreate: true });
+  assert.equal(excedido.valid, false);
+
+  const negativo = validatePedidoPayload({ ...base, suplemento: -1 }, { ...options, isAdminCreate: true });
+  assert.equal(negativo.valid, false);
+  assert.ok(negativo.errors.some((e) => /suplemento/i.test(e)));
+
+  // Un cliente público no puede aplicar suplemento.
+  const publico = validatePedidoPayload({ ...base, suplemento: 50 }, { ...options, isAdminCreate: false });
+  assert.equal(publico.suplemento, 0);
+  assert.equal(publico.presupuestoFinal, 100);
+});

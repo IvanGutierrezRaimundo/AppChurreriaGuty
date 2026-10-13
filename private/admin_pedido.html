@@ -237,6 +237,7 @@
             <div class="pedido-field"><p class="pedido-field-label">Churros por persona</p><input id="e_churros" class="pedido-input" type="number" min="1" max="100" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Chocolates</p><input id="e_chocolates" class="pedido-input" type="number" min="0" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Descuento (€)</p><input id="e_descuento" class="pedido-input" type="number" min="0" step="0.01" /></div>
+            <div class="pedido-field"><p class="pedido-field-label">Suplemento día especial (€)</p><input id="e_suplemento" class="pedido-input" type="number" min="0" step="0.01" /></div>
             <div class="pedido-field"><p class="pedido-field-label">Total automatico</p><p id="e_total_auto" class="pedido-field-value">-</p></div>
           </div>
         </div>
@@ -515,6 +516,7 @@
       document.getElementById('e_churros').value = p.churros_por_persona ?? '';
       document.getElementById('e_chocolates').value = p.chocolates ?? '';
       document.getElementById('e_descuento').value = Number(p.descuento) > 0 ? Number(p.descuento).toFixed(2) : '';
+      document.getElementById('e_suplemento').value = Number(p.suplemento) > 0 ? Number(p.suplemento).toFixed(2) : '';
       document.getElementById('e_fecha').value = toDateInputValue(p.fecha);
       document.getElementById('e_hora').value = formatTime(p.hora);
       document.getElementById('e_requiere_envio').checked = !!p.requiere_envio;
@@ -560,12 +562,13 @@
       const chocolates = toNumOrNull(document.getElementById('e_chocolates').value);
       const envio = !!document.getElementById('e_requiere_envio').checked;
       const descuento = toNumOrNull(document.getElementById('e_descuento').value) || 0;
+      const suplemento = toNumOrNull(document.getElementById('e_suplemento').value) || 0;
 
       const churrosOk = Number.isFinite(personas) && personas > 0 && Number.isFinite(churrosPor) && churrosPor >= 1 && churrosPor <= 100;
       const priceChurros = churrosOk ? personas * churrosPor * PRECIOS.churro : 0;
       const priceChoco = Number.isFinite(chocolates) && chocolates >= 0 ? chocolates * PRECIOS.chocolate : 0;
       const priceEnvio = envio ? PRECIOS.envio : 0;
-      const subtotal = priceChurros + priceChoco + priceEnvio;
+      const subtotal = priceChurros + priceChoco + priceEnvio + suplemento;
       return Number(Math.max(0, subtotal - descuento).toFixed(2));
     }
 
@@ -613,6 +616,12 @@
         editError.textContent = 'El descuento debe ser un número válido mayor o igual a 0.';
         return;
       }
+      const suplementoRaw = document.getElementById('e_suplemento').value;
+      const suplemento = toNumOrNull(suplementoRaw) || 0;
+      if(suplementoRaw.trim() !== '' && (suplemento === null || suplemento < 0)){
+        editError.textContent = 'El suplemento debe ser un número válido mayor o igual a 0.';
+        return;
+      }
 
       const payload = {
         estado: document.getElementById('e_estado').value,
@@ -629,6 +638,7 @@
         churros_por_persona: toNumOrNull(document.getElementById('e_churros').value),
         chocolates: toNumOrNull(document.getElementById('e_chocolates').value),
         descuento,
+        suplemento,
         fecha: document.getElementById('e_fecha').value.trim(),
         hora: document.getElementById('e_hora').value.trim(),
         requiere_envio: !!document.getElementById('e_requiere_envio').checked,
@@ -839,7 +849,7 @@
     document.getElementById('pedidoPrintBtn').addEventListener('click', downloadPedidoPdf);
     document.getElementById('pedidoEditCancelBtn').addEventListener('click', () => closeEditModal(true));
     document.getElementById('pedidoEditSubmitBtn').addEventListener('click', submitEdit);
-    ['e_personas','e_churros','e_chocolates','e_descuento'].forEach((id) => {
+    ['e_personas','e_churros','e_chocolates','e_descuento','e_suplemento'].forEach((id) => {
       const el = document.getElementById(id);
       if(!el) return;
       el.addEventListener('input', updateEditTotalFields);

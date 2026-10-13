@@ -410,7 +410,8 @@ app.post('/api/pedidos', async (req, res) => {
       direccion_entrega,
       metodo_pago,
       comentarios,
-      descuento
+      descuento,
+      suplemento
     } = req.body || {};
 
     const telefonoNormalizado = normalizeSpanishPhone(telefono);
@@ -443,18 +444,26 @@ app.post('/api/pedidos', async (req, res) => {
     const priceEnvio = envioBool ? precios.envio : 0;
     const subtotal = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
 
-    // El descuento solo puede aplicarlo un admin al crear el pedido manualmente.
+    // El descuento y el suplemento solo puede aplicarlos un admin al crear el pedido manualmente.
+    // El suplemento (con IVA) se suma al presupuesto antes de aplicar el descuento.
+    let suplementoNum = 0;
+    if (isAdminCreate && typeof suplemento !== 'undefined' && suplemento !== null && String(suplemento).trim() !== '') {
+      suplementoNum = Number(String(suplemento).replace(',', '.'));
+      if (!Number.isFinite(suplementoNum) || suplementoNum < 0) {
+        return res.status(400).json({ ok: false, error: 'El suplemento debe ser un número válido mayor o igual a 0.' });
+      }
+    }
     let descuentoNum = 0;
     if (isAdminCreate && typeof descuento !== 'undefined' && descuento !== null && String(descuento).trim() !== '') {
       descuentoNum = Number(String(descuento).replace(',', '.'));
       if (!Number.isFinite(descuentoNum) || descuentoNum < 0) {
         return res.status(400).json({ ok: false, error: 'El descuento debe ser un número válido mayor o igual a 0.' });
       }
-      if (descuentoNum > subtotal) {
+      if (descuentoNum > subtotal + suplementoNum) {
         return res.status(400).json({ ok: false, error: 'El descuento no puede ser mayor que el total del presupuesto.' });
       }
     }
-    const presupuestoFinal = Number((subtotal - descuentoNum).toFixed(2));
+    const presupuestoFinal = Number((subtotal + suplementoNum - descuentoNum).toFixed(2));
 
     if (!isAdminCreate && presupuestoFinal < 100) {
       return res.status(400).json({ ok: false, error: 'El presupuesto mínimo es 100 €.' });
@@ -481,8 +490,8 @@ app.post('/api/pedidos', async (req, res) => {
         nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura,
         personas, churros_por_persona, chocolates, fecha, hora,
         requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total,
-        precio_churro, precio_chocolate, precio_envio, descuento
-      ) VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?,?)
+        precio_churro, precio_chocolate, precio_envio, descuento, suplemento
+      ) VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)
     `;
 
     const params = [
@@ -492,7 +501,7 @@ app.post('/api/pedidos', async (req, res) => {
       Number.isFinite(chocolatesNum) ? chocolatesNum : null,
       fecha, hora,
       envioBool, direccion_entrega || null, metodo_pago, comentarios || null, presupuestoFinal,
-      precios.churro, precios.chocolate, envioBool ? precios.envio : null, descuentoNum
+      precios.churro, precios.chocolate, envioBool ? precios.envio : null, descuentoNum, suplementoNum
     ];
 
     const nullIfEmpty = (v) => {
@@ -1279,7 +1288,7 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
       'nombre','telefono','email','cp','direccion','ciudad','provincia','nif','solicita_factura',
       'personas','churros_por_persona','chocolates','fecha','hora',
       'requiere_envio','direccion_entrega','metodo_pago','comentarios',
-      'estado','descuento'
+      'estado','descuento','suplemento'
     ];
 
     // Mezclar: valores actuales + cambios del body
@@ -1304,6 +1313,10 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     merged.descuento = numOrNull(merged.descuento) || 0;
     if (merged.descuento < 0) {
       return res.status(400).json({ ok: false, error: 'El descuento debe ser un número válido mayor o igual a 0.' });
+    }
+    merged.suplemento = numOrNull(merged.suplemento) || 0;
+    if (merged.suplemento < 0) {
+      return res.status(400).json({ ok: false, error: 'El suplemento debe ser un número válido mayor o igual a 0.' });
     }
     // Fecha YYYY-MM-DD
     if (typeof merged.fecha === 'string') {
@@ -1354,10 +1367,10 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     const priceChoco = Number.isFinite(chocolatesNum) && chocolatesNum >= 0 ? chocolatesNum * precios.chocolate : 0;
     const priceEnvio = envioBool ? precios.envio : 0;
     const subtotalAuto = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
-    if (merged.descuento > subtotalAuto) {
+    if (merged.descuento > subtotalAuto + merged.suplemento) {
       return res.status(400).json({ ok: false, error: 'El descuento no puede ser mayor que el total del presupuesto.' });
     }
-    const presupuestoAuto = Number((subtotalAuto - merged.descuento).toFixed(2));
+    const presupuestoAuto = Number((subtotalAuto + merged.suplemento - merged.descuento).toFixed(2));
     const overwriteCliente = !!body.overwrite_cliente;
     const telefonoAnterior = normalizeSpanishPhone(current.telefono || '');
     const telefonoNuevo = String(merged.telefono || '').trim();
@@ -1583,6 +1596,7 @@ async function ensureSchema() {
       precio_chocolate DECIMAL(10,2) DEFAULT NULL,
       precio_envio DECIMAL(10,2) DEFAULT NULL,
       descuento DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+      suplemento DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       estado ENUM('Pendiente','Realizado','Cobrado','Cancelado') NOT NULL DEFAULT 'Pendiente',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -1665,6 +1679,7 @@ async function ensureSchema() {
     await ensureColumn('precio_chocolate', 'DECIMAL(10,2) DEFAULT NULL');
     await ensureColumn('precio_envio', 'DECIMAL(10,2) DEFAULT NULL');
     await ensureColumn('descuento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('suplemento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
     // Fila única de precios vigentes; se siembra solo si la tabla está vacía.
     await pool.execute(
       'INSERT INTO precios (id, precio_churro, precio_chocolate, precio_envio) SELECT 1, 0.25, 1.50, 25.00 WHERE NOT EXISTS (SELECT 1 FROM precios WHERE id = 1)'

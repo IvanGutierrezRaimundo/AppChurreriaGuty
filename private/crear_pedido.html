@@ -274,6 +274,7 @@
         <li><span>Churros</span><strong>${formatCurrency(Math.max(0, (payload.personas || 0) * (Number.isFinite(payload.churros_por_persona) ? payload.churros_por_persona : 0) * PRECIOS.churro))}</strong></li>
         <li><span>Chocolate</span><strong>${formatCurrency((payload.chocolates || 0) * PRECIOS.chocolate)}</strong></li>
         <li><span>Envío</span><strong>${formatCurrency(envioSi ? PRECIOS.envio : 0)}</strong></li>
+        ${payload.suplemento > 0 ? `<li><span>Suplemento día especial</span><strong>+${formatCurrency(payload.suplemento)}</strong></li>` : ''}
         ${payload.descuento > 0 ? `<li><span>Descuento</span><strong>-${formatCurrency(payload.descuento)}</strong></li>` : ''}
         <li class="confirm-total"><span>Total</span><strong>${formatCurrency(totalPresupuesto)}</strong></li>`;
       order.textContent = provisionalId;
@@ -331,7 +332,9 @@
       const elEn = document.getElementById('pres-envio');
       const elTo = document.getElementById('pres-total');
       const elDeRow = document.getElementById('pres-descuento-row');
+      const elSuRow = document.getElementById('pres-suplemento-row');
       const descuentoInput = document.getElementById('descuento');
+      const suplementoInput = document.getElementById('suplemento');
       const emailInput = document.getElementById('email');
       const emailErr = document.getElementById('email-error');
 
@@ -350,7 +353,9 @@
       if(elEn) elEn.textContent = '0,00 €';
       if(elTo) elTo.textContent = '0,00 €';
       if(elDeRow) elDeRow.classList.add('hidden');
+      if(elSuRow) elSuRow.classList.add('hidden');
       if(descuentoInput) descuentoInput.value = '';
+      if(suplementoInput) suplementoInput.value = '';
       if(emailInput) emailInput.setCustomValidity('');
       if(emailErr){ emailErr.textContent=''; emailErr.classList.add('hidden'); }
       if(typeof updateChurrosRequirement === 'function') updateChurrosRequirement();
@@ -559,6 +564,18 @@
       churrosEl?.setCustomValidity('');
       if(!okChocolates){ chocolatesEl?.reportValidity(); status.textContent = 'Chocolates debe ser entre 0 y 1000.'; return; }
 
+      const suplementoEl = document.getElementById('suplemento');
+      const suplementoRaw = (suplementoEl?.value || '').toString().trim();
+      const suplemento = suplementoRaw === '' ? 0 : Number(suplementoRaw);
+      if(suplementoRaw !== '' && (!Number.isFinite(suplemento) || suplemento < 0)){
+        const msg = 'El suplemento debe ser un número válido mayor o igual a 0.';
+        status.textContent = msg;
+        suplementoEl?.setCustomValidity(msg);
+        suplementoEl?.reportValidity();
+        return;
+      }
+      suplementoEl?.setCustomValidity('');
+
       const descuentoEl = document.getElementById('descuento');
       const descuentoRaw = (descuentoEl?.value || '').toString().trim();
       const descuento = descuentoRaw === '' ? 0 : Number(descuentoRaw);
@@ -573,7 +590,8 @@
 
       const subtotalPresupuesto = (Number.isFinite(personas) && Number.isFinite(churrosPorPersona) ? personas * churrosPorPersona * PRECIOS.churro : 0)
         + (Number.isFinite(chocolates) ? chocolates * PRECIOS.chocolate : 0)
-        + (requiereEnvio ? PRECIOS.envio : 0);
+        + (requiereEnvio ? PRECIOS.envio : 0)
+        + suplemento;
       if(descuento > subtotalPresupuesto){
         const msg = 'El descuento no puede ser mayor que el total del presupuesto.';
         status.textContent = msg;
@@ -602,7 +620,8 @@
         direccion_entrega: direccionEntrega,
         metodo_pago: metodoPago,
         comentarios,
-        descuento
+        descuento,
+        suplemento
       };
 
       showConfirmModal(payload, totalPresupuesto, 'Se asignará al confirmar');
@@ -857,6 +876,8 @@
         setValue('direccion_entrega', pedido.direccion_entrega || '');
         setValue('comentarios', pedido.comentarios || '');
         setValue('descuento', Number(pedido.descuento) > 0 ? Number(pedido.descuento).toFixed(2) : '');
+        // El suplemento es propio de un día concreto: no se hereda del pedido anterior.
+        setValue('suplemento', '');
 
         const factura = document.getElementById('factura');
         if(factura){
@@ -1088,29 +1109,35 @@
         const chocolatesVal = safeNumber(document.getElementById('chocolates'));
         const envioSi = document.querySelector('input[name="envio"]:checked')?.value === 'si';
         const descuentoVal = safeNumber(document.getElementById('descuento'));
+        const suplementoVal = safeNumber(document.getElementById('suplemento'));
 
         const churrosOk = Number.isFinite(personasVal) && personasVal > 0 && Number.isFinite(churrosPorVal) && churrosPorVal >= 2 && churrosPorVal <= 100;
         const priceChurros = churrosOk ? personasVal * churrosPorVal * PRECIOS.churro : 0;
         const priceChoco = Number.isFinite(chocolatesVal) && chocolatesVal >= 0 ? chocolatesVal * PRECIOS.chocolate : 0;
         const priceEnvio = envioSi ? PRECIOS.envio : 0;
         const subtotal = priceChurros + priceChoco + priceEnvio;
+        const suplemento = Number.isFinite(suplementoVal) && suplementoVal > 0 ? suplementoVal : 0;
         const descuento = Number.isFinite(descuentoVal) && descuentoVal > 0 ? descuentoVal : 0;
-        const total = Math.max(0, subtotal - descuento);
+        const total = Math.max(0, subtotal + suplemento - descuento);
 
         const elCh = document.getElementById('pres-churros');
         const elCo = document.getElementById('pres-chocolate');
         const elEn = document.getElementById('pres-envio');
+        const elSu = document.getElementById('pres-suplemento');
+        const elSuRow = document.getElementById('pres-suplemento-row');
         const elDe = document.getElementById('pres-descuento');
         const elDeRow = document.getElementById('pres-descuento-row');
         const elTo = document.getElementById('pres-total');
         if(elCh) elCh.textContent = nf.format(priceChurros);
         if(elCo) elCo.textContent = nf.format(priceChoco);
         if(elEn) elEn.textContent = nf.format(priceEnvio);
+        if(elSuRow) elSuRow.classList.toggle('hidden', suplemento <= 0);
+        if(elSu) elSu.textContent = `+${nf.format(suplemento)}`;
         if(elDeRow) elDeRow.classList.toggle('hidden', descuento <= 0);
         if(elDe) elDe.textContent = `-${nf.format(descuento)}`;
         if(elTo) elTo.textContent = nf.format(total);
       }
-      ['personas','churros_por_persona','chocolates','fecha_text','hora','descuento'].forEach(id => {
+      ['personas','churros_por_persona','chocolates','fecha_text','hora','descuento','suplemento'].forEach(id => {
         const el = document.getElementById(id);
         el?.addEventListener('input', updateBudget);
         el?.addEventListener('change', updateBudget);
@@ -1312,6 +1339,7 @@
             <div class="budget-row"><span>Churros</span><span id="pres-churros">0,00 €</span></div>
             <div class="budget-row"><span>Chocolate</span><span id="pres-chocolate">0,00 €</span></div>
             <div class="budget-row"><span>Envío</span><span id="pres-envio">0,00 €</span></div>
+            <div class="budget-row hidden" id="pres-suplemento-row"><span>Suplemento día especial</span><span id="pres-suplemento">+0,00 €</span></div>
             <div class="budget-row hidden" id="pres-descuento-row"><span>Descuento</span><span id="pres-descuento">-0,00 €</span></div>
             <div class="budget-sep"></div>
             <div class="budget-row total"><span>Total (IVA inc.)</span><span id="pres-total">0,00 €</span></div>
@@ -1319,6 +1347,10 @@
           <div class="field" style="margin-top:10px;">
             <label for="descuento">Descuento (€) <span class="hint">(opcional)</span></label>
             <input id="descuento" type="number" min="0" step="0.01" placeholder="Ej: 10,00">
+          </div>
+          <div class="field" style="margin-top:10px;">
+            <label for="suplemento">Suplemento día especial (€) <span class="hint">(opcional)</span></label>
+            <input id="suplemento" type="number" min="0" step="0.01" placeholder="Ej: 10,00">
           </div>
           <div id="budget-warning" class="warning hidden" aria-live="polite"></div>
           <div class="hint">Los precios incluyen IVA.</div>

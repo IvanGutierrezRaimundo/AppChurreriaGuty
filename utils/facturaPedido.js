@@ -170,14 +170,20 @@ async function downloadFacturaPdf(pedidoId){
   const totalEnvasesConIva = roundMoney(baseEnvioSinIva + ivaEnvio);
   // El descuento se lee directamente del pedido (no se reconstruye por diferencia de redondeo).
   const descuentoImporte = roundMoney(Math.max(0, Number(pedido?.descuento) || 0));
-  let baseProductosSinIvaConDescuento = baseProductosSinIva;
+  // El suplemento (introducido con IVA) se suma a la base de productos y tributa al mismo tipo.
+  const suplementoImporte = roundMoney(Math.max(0, Number(pedido?.suplemento) || 0));
+  const suplementoSinIva = suplementoImporte > 0 ? roundMoney(suplementoImporte / (1 + FACTURA_IVA_RATE_PRODUCTOS)) : 0;
+  const baseProductosConSuplemento = roundMoney(baseProductosSinIva + suplementoSinIva);
+  // Base imponible de productos: tras sumar el suplemento y restar el descuento.
+  let baseProductosSinIvaConDescuento = baseProductosConSuplemento;
   let ivaProductos = ivaProductosBase;
-  if(descuentoImporte > 0){
-    const totalProductosConIvaConDescuento = roundMoney(Math.max(0, totalProductosConIvaBase - descuentoImporte));
-    const baseProductosSinIvaTrasDescuento = totalProductosConIvaConDescuento / (1 + FACTURA_IVA_RATE_PRODUCTOS);
-    baseProductosSinIvaConDescuento = roundMoney(Math.max(0, baseProductosSinIvaTrasDescuento));
+  if(descuentoImporte > 0 || suplementoImporte > 0){
+    const totalProductosConIvaFinal = roundMoney(Math.max(0, totalProductosConIvaBase + suplementoImporte - descuentoImporte));
+    if(descuentoImporte > 0){
+      baseProductosSinIvaConDescuento = roundMoney(Math.max(0, totalProductosConIvaFinal / (1 + FACTURA_IVA_RATE_PRODUCTOS)));
+    }
     // Ajusta el IVA como complemento del total con IVA para evitar desfases de 0,01 por redondeo.
-    ivaProductos = roundMoney(totalProductosConIvaConDescuento - baseProductosSinIvaConDescuento);
+    ivaProductos = roundMoney(totalProductosConIvaFinal - baseProductosSinIvaConDescuento);
   }
   const subtotalSinIva = roundMoney(baseProductosSinIvaConDescuento + baseEnvioSinIva);
   const ivaTotal = roundMoney(ivaProductos + ivaEnvio);
@@ -287,11 +293,18 @@ async function downloadFacturaPdf(pedidoId){
     resumenY += 16;
   }
 
-  // La base de productos se muestra íntegra (sin descuento) y el descuento aparece aparte, sin IVA.
-  const descuentoSinIva = roundMoney(Math.max(0, baseProductosSinIva - baseProductosSinIvaConDescuento));
+  // La base de productos se muestra íntegra; el suplemento y el descuento aparecen aparte, sin IVA.
+  const descuentoSinIva = descuentoImporte > 0
+    ? roundMoney(Math.max(0, baseProductosConSuplemento - baseProductosSinIvaConDescuento))
+    : 0;
   drawResumenLine('Base productos (sin IVA):', formatMoney(baseProductosSinIva), false);
+  if(suplementoImporte > 0){
+    drawResumenLine('Suplemento día especial (sin IVA):', `+${formatMoney(suplementoSinIva)}`, false);
+  }
   if(descuentoImporte > 0){
     drawResumenLine('Descuento (sin IVA):', `-${formatMoney(descuentoSinIva)}`, false);
+  }
+  if(descuentoImporte > 0 || suplementoImporte > 0){
     drawResumenLine('Base imponible productos:', formatMoney(baseProductosSinIvaConDescuento), false);
   }
   if(envioItem){

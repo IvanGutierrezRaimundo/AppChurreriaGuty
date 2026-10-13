@@ -88,7 +88,7 @@ function makeDbState() {
       }
 
       if (query.includes('INSERT INTO pedidos')) {
-        const [nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, precio_churro, precio_chocolate, precio_envio, descuento] = params;
+        const [nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, precio_churro, precio_chocolate, precio_envio, descuento, suplemento] = params;
         const row = {
           id: state.nextId++,
           nombre,
@@ -114,6 +114,7 @@ function makeDbState() {
           precio_chocolate: precio_chocolate ?? null,
           precio_envio: precio_envio ?? null,
           descuento: descuento ?? 0,
+          suplemento: suplemento ?? 0,
           estado: 'Pendiente',
         };
         state.pedidos.push(row);
@@ -164,7 +165,7 @@ function makeDbState() {
           const updateKeys = [
             'nombre','telefono','email','cp','direccion','ciudad','provincia','nif','solicita_factura',
             'personas','churros_por_persona','chocolates','fecha','hora','requiere_envio','direccion_entrega',
-            'metodo_pago','comentarios','estado','descuento','presupuesto_total','precio_churro','precio_chocolate','precio_envio'
+            'metodo_pago','comentarios','estado','descuento','suplemento','presupuesto_total','precio_churro','precio_chocolate','precio_envio'
           ];
           const next = { ...current };
           for (let i = 0; i < updateKeys.length && i < params.length - 1; i += 1) {
@@ -972,4 +973,52 @@ test('Factura incluye envío, descuento y método de pago correcto', async () =>
   assert.equal(detalle2.body.data.precio_envio, null, 'Precio de envío debe ser null');
   assert.equal(detalle2.body.data.descuento, 0, 'Descuento debe ser 0');
   assert.equal(detalle2.body.data.metodo_pago, 'efectivo', 'Debe ser efectivo');
+});
+
+test('Suplemento día especial: lo aplica solo el admin, se guarda y entra en el presupuesto', async () => {
+  const app = loadAppWithDb(makeDbState());
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+
+  const payload = {
+    nombre: 'Cliente Suplemento',
+    telefono: '612345678',
+    fecha: '2026-09-01',
+    hora: '18:00',
+    metodo_pago: 'transferencia',
+    personas: 20,
+    churros_por_persona: 12,
+    chocolates: 0,
+  };
+
+  const base = await agent.post('/api/pedidos').send(payload);
+  assert.equal(base.status, 201);
+  const conSuplemento = await agent.post('/api/pedidos').send({ ...payload, suplemento: 11, descuento: 5 });
+  assert.equal(conSuplemento.status, 201);
+
+  const detalleBase = (await agent.get(`/admin/api/pedidos/${base.body.id}`)).body.data;
+  const detalle = (await agent.get(`/admin/api/pedidos/${conSuplemento.body.id}`)).body.data;
+  assert.equal(Number(detalle.suplemento), 11);
+  assert.equal(Number(detalle.descuento), 5);
+  assert.equal(Number(detalle.presupuesto_total), Number((Number(detalleBase.presupuesto_total) + 11 - 5).toFixed(2)));
+
+  // Edición: cambiar el suplemento recalcula el total y no se puede superar con el descuento.
+  const editado = await agent.put(`/admin/api/pedidos/${conSuplemento.body.id}`).send({ suplemento: 21 });
+  assert.equal(editado.status, 200);
+  assert.equal(Number(editado.body.data.suplemento), 21);
+  assert.equal(Number(editado.body.data.presupuesto_total), Number((Number(detalleBase.presupuesto_total) + 21 - 5).toFixed(2)));
+
+  const excedido = await agent.put(`/admin/api/pedidos/${conSuplemento.body.id}`).send({ suplemento: 0, descuento: 100000 });
+  assert.equal(excedido.status, 400);
+
+  const negativo = await agent.put(`/admin/api/pedidos/${conSuplemento.body.id}`).send({ suplemento: -3 });
+  assert.equal(negativo.status, 400);
+  assert.match(negativo.body.error, /suplemento/i);
+
+  // Un cliente sin sesión no puede colar suplemento ni descuento.
+  const publico = await request(app).post('/api/pedidos').send({ ...payload, suplemento: 500 });
+  assert.equal(publico.status, 201);
+  const detallePublico = (await agent.get(`/admin/api/pedidos/${publico.body.id}`)).body.data;
+  assert.equal(Number(detallePublico.suplemento), 0);
+  assert.equal(Number(detallePublico.presupuesto_total), Number(detalleBase.presupuesto_total));
 });

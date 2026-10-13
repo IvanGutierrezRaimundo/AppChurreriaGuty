@@ -106,18 +106,27 @@ function validatePedidoPayload(payload = {}, options = {}) {
   const priceEnvio = envioBool ? Number(precios.envio || 0) : 0;
   const subtotal = Number((priceChurros + priceChoco + priceEnvio).toFixed(2));
 
+  let suplementoNum = 0;
+  if (isAdminCreate && typeof payload.suplemento !== 'undefined' && payload.suplemento !== null && String(payload.suplemento).trim() !== '') {
+    suplementoNum = Number(String(payload.suplemento).replace(',', '.'));
+    if (!Number.isFinite(suplementoNum) || suplementoNum < 0) {
+      errors.push('El suplemento debe ser un número válido mayor o igual a 0.');
+      suplementoNum = 0;
+    }
+  }
+
   let descuentoNum = 0;
   if (isAdminCreate && typeof payload.descuento !== 'undefined' && payload.descuento !== null && String(payload.descuento).trim() !== '') {
     descuentoNum = Number(String(payload.descuento).replace(',', '.'));
     if (!Number.isFinite(descuentoNum) || descuentoNum < 0) {
       errors.push('El descuento debe ser un número válido mayor o igual a 0.');
     }
-    if (Number.isFinite(descuentoNum) && descuentoNum > subtotal) {
+    if (Number.isFinite(descuentoNum) && descuentoNum > subtotal + suplementoNum) {
       errors.push('El descuento no puede ser mayor que el total del presupuesto.');
     }
   }
 
-  const presupuestoFinal = Number((subtotal - descuentoNum).toFixed(2));
+  const presupuestoFinal = Number((subtotal + suplementoNum - descuentoNum).toFixed(2));
   if (!isAdminCreate && presupuestoFinal < 100) {
     errors.push('El presupuesto mínimo es 100 €.');
   }
@@ -127,6 +136,7 @@ function validatePedidoPayload(payload = {}, options = {}) {
     errors,
     subtotal,
     descuento: descuentoNum,
+    suplemento: suplementoNum,
     presupuestoFinal,
   };
 }
