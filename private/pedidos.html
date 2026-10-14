@@ -805,6 +805,9 @@
         }
         if(currentView === 'calendario') renderCalendar(currentRows);
         closeEstadoModal();
+        if(finalEstado === 'Cobrado' || finalEstado === 'Cancelado'){
+          await showActionAlert({ title: 'Aviso', message: 'Pedido enviado al historial' });
+        }
       } catch (_error) {
         estadoModalError.textContent = 'Error guardando estado.';
       } finally {

@@ -705,9 +705,14 @@
             return;
           }
 
+          const estadoAnterior = currentPedido.estado;
           currentPedido = data.data;
           closeEditModal(false);
           openDetailModal();
+          const eraHistorial = estadoAnterior === 'Cobrado' || estadoAnterior === 'Cancelado';
+          if(!eraHistorial && (currentPedido.estado === 'Cobrado' || currentPedido.estado === 'Cancelado')){
+            await showActionAlert({ title: 'Aviso', message: 'Pedido enviado al historial' });
+          }
           break;
         }
       } catch(_err) {
