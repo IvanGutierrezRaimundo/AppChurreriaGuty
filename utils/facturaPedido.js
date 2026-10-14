@@ -253,8 +253,6 @@ async function downloadFacturaPdf(pedidoId){
   const clienteLineas = [
     `Nombre: ${pedido.nombre || '-'}`,
     `NIF: ${pedido.nif || '-'}`,
-    `Teléfono: ${pedido.telefono || '-'}`,
-    `Email: ${pedido.email || '-'}`,
     `Dirección: ${pedido.direccion || '-'}${pedido.cp ? `, ${pedido.cp}` : ''}${pedido.ciudad ? `, ${pedido.ciudad}` : ''}${pedido.provincia ? `, ${pedido.provincia}` : ''}`
   ];
   let clienteLineY = clienteY + 38;
@@ -345,4 +343,3 @@ async function downloadFacturaPdf(pedidoId){
   const fileSafeCliente = String(pedido?.nombre || 'cliente').trim().replace(/[^A-Za-z0-9.-]/g, '_');
   doc.save(`${fileSafeNumero}-${fileSafeAnio}-${fileSafeCliente}.pdf`);
 }
-

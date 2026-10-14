@@ -292,7 +292,6 @@
       <table id="proveedoresTable">
         <thead>
           <tr>
-            <th class="sortable" data-sort="id">ID <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
             <th class="sortable" data-sort="nif">NIF <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
             <th class="sortable" data-sort="nombre">Nombre <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
             <th class="sortable" data-sort="telefono">Teléfono <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
@@ -464,9 +463,6 @@
     function renderCard(r){
       return `
         <article class="proveedor-card">
-          <div class="proveedor-card-head">
-            <span class="proveedor-card-id">#${escapeHtml(r.id)}</span>
-          </div>
           <div class="proveedor-card-grid">
             <div class="proveedor-card-row"><span class="proveedor-card-label">Nombre</span><span class="proveedor-card-value">${escapeHtml(r.nombre)}</span></div>
             <div class="proveedor-card-row"><span class="proveedor-card-label">Telefono</span><span class="proveedor-card-value">${escapeHtml(r.telefono)}</span></div>
@@ -917,7 +913,6 @@
       for (const r of rows){
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${escapeHtml(r.id)}</td>
           <td>${escapeHtml(r.nif)}</td>
           <td>${escapeHtml(r.nombre)}</td>
           <td>${escapeHtml(r.telefono)}</td>
@@ -965,7 +960,6 @@
         for (const r of chunk){
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${escapeHtml(r.id)}</td>
             <td>${escapeHtml(r.nif)}</td>
             <td>${escapeHtml(r.nombre)}</td>
             <td>${escapeHtml(r.telefono)}</td>
@@ -1024,7 +1018,6 @@
         for (const r of currentRows){
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${escapeHtml(r.id)}</td>
             <td>${escapeHtml(r.nif)}</td>
             <td>${escapeHtml(r.nombre)}</td>
             <td>${escapeHtml(r.telefono)}</td>

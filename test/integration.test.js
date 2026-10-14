@@ -326,6 +326,8 @@ test('El script de factura se sirve solo a admin y lo cargan Pedidos e Historial
   const script = await agent.get('/admin/assets/factura-pedido.js');
   assert.equal(script.status, 200);
   assert.match(script.text, /async function downloadFacturaPdf/);
+  assert.doesNotMatch(script.text, /`Teléfono: \$\{pedido\.telefono \|\| '-'\}`/);
+  assert.doesNotMatch(script.text, /`Email: \$\{pedido\.email \|\| '-'\}`/);
 
   for (const ruta of ['/admin/pedidos', '/admin/historial-pedidos']) {
     const pagina = await agent.get(ruta);
