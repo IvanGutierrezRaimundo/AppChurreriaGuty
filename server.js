@@ -1609,7 +1609,7 @@ async function ensureSchema() {
       suplemento DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       estado ENUM('Pendiente','Realizado','Cobrado','Cancelado') NOT NULL DEFAULT 'Pendiente',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
   `;
   const ddlClientes = `
     CREATE TABLE IF NOT EXISTS clientes (
