@@ -9,6 +9,7 @@ function estadoClienteDuplicado(state, telefono) {
 function makeDbState() {
   const state = {
     nextId: 1,
+    contador: 0,
     precios: [{ precio_churro: 1.2, precio_chocolate: 1.1, precio_envio: 3.5 }],
     clientes: [],
     proveedores: [],
@@ -87,10 +88,19 @@ function makeDbState() {
         return [{ insertId: row.id }];
       }
 
+      if (query.includes('SELECT ultimo FROM contador_pedidos')) {
+        return [[{ ultimo: state.contador }]];
+      }
+
+      if (query.includes('UPDATE contador_pedidos')) {
+        state.contador = Number(params[0]);
+        return [{ affectedRows: 1 }];
+      }
+
       if (query.includes('INSERT INTO pedidos')) {
-        const [nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, precio_churro, precio_chocolate, precio_envio, descuento, suplemento] = params;
+        const [id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, precio_churro, precio_chocolate, precio_envio, descuento, suplemento] = params;
         const row = {
-          id: state.nextId++,
+          id,
           nombre,
           telefono,
           email: email ?? null,

@@ -353,7 +353,7 @@
   <table id="pedidosTable">
     <thead>
       <tr>
-        <th class="sortable" data-sort="id">ID <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="id">Nº fact. <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="nombre">Cliente <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="personas">Personas <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="churros_por_persona">Churros por persona <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
@@ -941,7 +941,7 @@
       doc.text(`Generado: ${now.toLocaleString('es-ES')}`, 40, 58);
 
       const headers = [[
-        'ID', 'Cliente', 'Personas', 'Churros/persona', 'Chocolates', 'Fecha', 'Hora', 'Total (EUR)', 'Estado'
+        'Nº fact.', 'Cliente', 'Personas', 'Churros/persona', 'Chocolates', 'Fecha', 'Hora', 'Total (EUR)', 'Estado'
       ]];
       const body = currentRows.map((r) => [
         r.id ?? '',

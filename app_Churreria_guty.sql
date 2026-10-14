@@ -122,7 +122,7 @@ DROP TABLE IF EXISTS `pedidos`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `pedidos` (
-  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `id` int unsigned NOT NULL,
   `nombre` varchar(120) NOT NULL,
   `telefono` varchar(30) NOT NULL,
   `email` varchar(120) DEFAULT NULL,
@@ -155,8 +155,20 @@ CREATE TABLE `pedidos` (
   KEY `idx_pedidos_envio` (`requiere_envio`),
   KEY `idx_pedidos_nif` (`nif`),
   CONSTRAINT `chk_factura_campos` CHECK (((`solicita_factura` = false) or ((`provincia` is not null) and (`nif` is not null))))
-) ENGINE=InnoDB AUTO_INCREMENT=54 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `contador_pedidos` (Nº de factura = id de pedidos)
+--
+
+DROP TABLE IF EXISTS `contador_pedidos`;
+CREATE TABLE `contador_pedidos` (
+  `id` int NOT NULL,
+  `ultimo` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+INSERT INTO `contador_pedidos` VALUES (1,50);
 
 --
 -- Dumping data for table `pedidos`

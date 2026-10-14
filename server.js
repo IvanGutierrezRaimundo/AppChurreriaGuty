@@ -487,11 +487,11 @@ app.post('/api/pedidos', async (req, res) => {
 
     const sql = `
       INSERT INTO pedidos (
-        nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura,
+        id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura,
         personas, churros_por_persona, chocolates, fecha, hora,
         requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total,
         precio_churro, precio_chocolate, precio_envio, descuento, suplemento
-      ) VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)
+      ) VALUES (?, ?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)
     `;
 
     const params = [
@@ -514,7 +514,12 @@ app.post('/api/pedidos', async (req, res) => {
     try {
       await conn.beginTransaction();
 
-      const [pedidoResult] = await conn.execute(sql, params);
+      // El bloqueo de la fila del contador serializa las altas y garantiza números correlativos.
+      const [contadorRows] = await conn.execute('SELECT ultimo FROM contador_pedidos WHERE id = 1 FOR UPDATE');
+      const numeroPedido = Number(contadorRows?.[0]?.ultimo || 0) + 1;
+
+      await conn.execute(sql, [numeroPedido, ...params]);
+      await conn.execute('UPDATE contador_pedidos SET ultimo = ? WHERE id = 1', [numeroPedido]);
 
       await conn.execute(
         `INSERT INTO clientes (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
@@ -540,7 +545,7 @@ app.post('/api/pedidos', async (req, res) => {
       );
 
       await conn.commit();
-      return res.status(201).json({ ok: true, id: pedidoResult.insertId, presupuesto_total: presupuestoFinal });
+      return res.status(201).json({ ok: true, id: numeroPedido, presupuesto_total: presupuestoFinal });
     } catch (publicErr) {
       await conn.rollback();
       throw publicErr;
@@ -1255,28 +1260,31 @@ app.delete('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
       });
     }
     // Solo se puede borrar el último pedido para no romper la numeración correlativa de facturas.
-    const [maxRows] = await pool.execute('SELECT MAX(id) AS max_id FROM pedidos');
-    if (Number(maxRows?.[0]?.max_id) !== id) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Solo se puede eliminar el último pedido (el de mayor número) y debe estar Cancelado.'
-      });
-    }
-    const [result] = await pool.execute('DELETE FROM pedidos WHERE id = ?', [id]);
-    // Reajusta el contador para que el siguiente pedido reutilice el número y no haya huecos.
-    const [nextRows] = await pool.execute('SELECT COALESCE(MAX(id), 0) + 1 AS siguiente FROM pedidos');
-    const siguienteId = Math.trunc(Number(nextRows?.[0]?.siguiente)) || 1;
+    // El bloqueo del contador evita carreras con altas simultáneas.
+    const conn = await pool.getConnection();
     try {
-      // TiDB solo permite bajar el contador con FORCE; MySQL no soporta esa sintaxis.
-      await pool.query(`ALTER TABLE pedidos FORCE AUTO_INCREMENT = ${siguienteId}`);
-    } catch (forceErr) {
-      try {
-        await pool.query(`ALTER TABLE pedidos AUTO_INCREMENT = ${siguienteId}`);
-      } catch (alterErr) {
-        console.error('No se pudo reajustar AUTO_INCREMENT de pedidos:', alterErr);
+      await conn.beginTransaction();
+      await conn.execute('SELECT ultimo FROM contador_pedidos WHERE id = 1 FOR UPDATE');
+      const [maxRows] = await conn.execute('SELECT MAX(id) AS max_id FROM pedidos');
+      if (Number(maxRows?.[0]?.max_id) !== id) {
+        await conn.rollback();
+        return res.status(400).json({
+          ok: false,
+          error: 'Solo se puede eliminar el último pedido (el de mayor número) y debe estar Cancelado.'
+        });
       }
+      const [result] = await conn.execute('DELETE FROM pedidos WHERE id = ?', [id]);
+      // El contador retrocede para que el siguiente pedido reutilice el número y no haya huecos.
+      const [nuevoMaxRows] = await conn.execute('SELECT MAX(id) AS max_id FROM pedidos');
+      await conn.execute('UPDATE contador_pedidos SET ultimo = ? WHERE id = 1', [Number(nuevoMaxRows?.[0]?.max_id) || 0]);
+      await conn.commit();
+      return res.json({ ok: true, affectedRows: result.affectedRows });
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    } finally {
+      conn.release();
     }
-    res.json({ ok: true, affectedRows: result.affectedRows });
   } catch (err) {
     console.error('Error eliminando pedido:', err);
     res.status(500).json({ ok: false, error: 'Error interno' });
@@ -1582,7 +1590,7 @@ module.exports = { app, pool, start };
 async function ensureSchema() {
   const ddlPedidos = `
     CREATE TABLE IF NOT EXISTS pedidos (
-      id INT AUTO_INCREMENT PRIMARY KEY,
+      id INT NOT NULL PRIMARY KEY,
       nombre VARCHAR(120) NOT NULL,
       telefono VARCHAR(40) NOT NULL,
       email VARCHAR(160),
@@ -1609,7 +1617,14 @@ async function ensureSchema() {
       suplemento DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       estado ENUM('Pendiente','Realizado','Cobrado','Cancelado') NOT NULL DEFAULT 'Pendiente',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 /*T![auto_id_cache] AUTO_ID_CACHE=1 */;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `;
+  // Contador de Nº de factura (= id del pedido): una única fila con el último número asignado.
+  const ddlContadorPedidos = `
+    CREATE TABLE IF NOT EXISTS contador_pedidos (
+      id INT NOT NULL PRIMARY KEY,
+      ultimo INT NOT NULL DEFAULT 0
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `;
   const ddlClientes = `
     CREATE TABLE IF NOT EXISTS clientes (
@@ -1666,6 +1681,9 @@ async function ensureSchema() {
   `;
   try {
     await pool.execute(ddlPedidos);
+    await pool.execute(ddlContadorPedidos);
+    // Siembra la fila del contador con el mayor Nº existente; no hace nada si ya existe.
+    await pool.execute('INSERT IGNORE INTO contador_pedidos (id, ultimo) SELECT 1, COALESCE(MAX(id), 0) FROM pedidos');
     await pool.execute(ddlClientes);
     await pool.execute(ddlProveedores);
     await pool.execute(ddlPrecios);
