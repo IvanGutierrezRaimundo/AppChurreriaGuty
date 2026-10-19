@@ -466,7 +466,7 @@
         else pedidoTopSection.removeAttribute('title');
       }
       document.getElementById('pedidoDetailTitle').textContent = p.nombre ? `Detalle de pedido - ${p.nombre}` : 'Detalle de pedido';
-      setValue('d_id', p.id);
+      setValue('d_id', p.num_factura || p.id);
       document.getElementById('d_estado').innerHTML = renderEstadoBadge(p.estado);
       setValue('d_nombre', p.nombre);
       setValue('d_telefono', p.telefono);
@@ -505,7 +505,7 @@
     function openEditModal(){
       if(!currentPedido) return;
       const p = currentPedido;
-      document.getElementById('e_id').textContent = valueText(p.id);
+      document.getElementById('e_id').textContent = valueText(p.num_factura || p.id);
       document.getElementById('e_estado').value = p.estado || 'Pendiente';
       document.getElementById('e_nombre').value = p.nombre || '';
       document.getElementById('e_telefono').value = p.telefono || '';
@@ -780,7 +780,7 @@
 
       const p = currentPedido;
       const now = new Date();
-      addTitle(`Pedido #${valueText(p.id)}`);
+      addTitle(`Pedido #${valueText(p.num_factura || p.id)}`);
       addSmall(`Generado: ${now.toLocaleString('es-ES')}`);
 
       addSection('Estado y resumen');
@@ -814,7 +814,7 @@
       addLine('Notas', p.comentarios);
 
       const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
-      doc.save(`pedido_${valueText(p.id)}_${stamp}.pdf`);
+      doc.save(`pedido_${valueText(p.num_factura || p.id).replace(/[^A-Za-z0-9.-]/g, '-')}_${stamp}.pdf`);
     }
 
     async function deleteCurrentPedido(){
@@ -822,7 +822,7 @@
       const id = currentPedido.id;
       const confirmed = await askActionConfirm({
         title: 'Confirmación',
-        message: 'Vas a eliminar el pedido #' + id + ' para siempre de la base de datos.\n\n¿Deseas continuar?',
+        message: 'Vas a eliminar el pedido #' + (currentPedido.num_factura || id) + ' para siempre de la base de datos.\n\n¿Deseas continuar?',
         acceptText: 'Eliminar'
       });
       if(!confirmed) return;

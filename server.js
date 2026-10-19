@@ -389,6 +389,38 @@ app.put('/admin/api/precios', ensureAdmin, async (req, res) => {
   }
 });
 
+// Año de la fecha (YYYY-MM-DD) que determina la serie del Nº de factura; null si no es válida.
+function anioDeFecha(fecha) {
+  const m = /^(\d{4})-\d{2}-\d{2}/.exec(String(fecha || ''));
+  return m ? Number(m[1]) : null;
+}
+
+// Reserva el siguiente id interno y el siguiente Nº de factura del año (1/2026, 2/2026... 1/2027).
+// Bloquea siempre primero la fila global (anio = 0) y después la del año, para serializar altas
+// sin interbloqueos. Debe llamarse dentro de una transacción.
+async function reservarNumeroPedido(conn, anio) {
+  await conn.execute('INSERT IGNORE INTO contador_facturas (anio, ultimo) VALUES (0, 0)');
+  await conn.execute('INSERT IGNORE INTO contador_facturas (anio, ultimo) VALUES (?, 0)', [anio]);
+  const [globalRows] = await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = 0 FOR UPDATE');
+  const [anioRows] = await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = ? FOR UPDATE', [anio]);
+  const [maxRows] = await conn.execute(
+    'SELECT COALESCE(MAX(id), 0) AS max_id, COALESCE(MAX(CASE WHEN anio = ? THEN numero END), 0) AS max_num FROM pedidos',
+    [anio]
+  );
+  const id = Math.max(Number(globalRows?.[0]?.ultimo || 0), Number(maxRows?.[0]?.max_id || 0)) + 1;
+  const numero = Math.max(Number(anioRows?.[0]?.ultimo || 0), Number(maxRows?.[0]?.max_num || 0)) + 1;
+  await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = 0', [id]);
+  await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = ?', [numero, anio]);
+  return { id, numero };
+}
+
+function conNumFactura(row) {
+  if (row && row.numero != null && row.anio != null) {
+    return { ...row, num_factura: `${row.numero}/${row.anio}` };
+  }
+  return row;
+}
+
 app.post('/api/pedidos', async (req, res) => {
   try {
     const {
@@ -418,6 +450,10 @@ app.post('/api/pedidos', async (req, res) => {
 
     if (!nombre || !telefono || !fecha || !hora || !metodo_pago) {
       return res.status(400).json({ ok: false, error: 'Campos obligatorios faltan: nombre, teléfono, fecha, hora, método de pago.' });
+    }
+    const anioPedido = anioDeFecha(fecha);
+    if (!anioPedido) {
+      return res.status(400).json({ ok: false, error: 'La fecha no es válida.' });
     }
     if (!isValidSpanishPhone(telefonoNormalizado)) {
       return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
@@ -487,11 +523,11 @@ app.post('/api/pedidos', async (req, res) => {
 
     const sql = `
       INSERT INTO pedidos (
-        id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura,
+        id, anio, numero, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura,
         personas, churros_por_persona, chocolates, fecha, hora,
         requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total,
         precio_churro, precio_chocolate, precio_envio, descuento, suplemento
-      ) VALUES (?, ?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)
+      ) VALUES (?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)
     `;
 
     const params = [
@@ -514,12 +550,9 @@ app.post('/api/pedidos', async (req, res) => {
     try {
       await conn.beginTransaction();
 
-      // El bloqueo de la fila del contador serializa las altas y garantiza números correlativos.
-      const [contadorRows] = await conn.execute('SELECT ultimo FROM contador_pedidos WHERE id = 1 FOR UPDATE');
-      const numeroPedido = Number(contadorRows?.[0]?.ultimo || 0) + 1;
+      const { id: pedidoId, numero: numeroPedido } = await reservarNumeroPedido(conn, anioPedido);
 
-      await conn.execute(sql, [numeroPedido, ...params]);
-      await conn.execute('UPDATE contador_pedidos SET ultimo = ? WHERE id = 1', [numeroPedido]);
+      await conn.execute(sql, [pedidoId, anioPedido, numeroPedido, ...params]);
 
       await conn.execute(
         `INSERT INTO clientes (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
@@ -545,7 +578,7 @@ app.post('/api/pedidos', async (req, res) => {
       );
 
       await conn.commit();
-      return res.status(201).json({ ok: true, id: numeroPedido, presupuesto_total: presupuestoFinal });
+      return res.status(201).json({ ok: true, id: pedidoId, anio: anioPedido, numero: numeroPedido, num_factura: `${numeroPedido}/${anioPedido}`, presupuesto_total: presupuestoFinal });
     } catch (publicErr) {
       await conn.rollback();
       throw publicErr;
@@ -601,16 +634,18 @@ app.get('/admin/api/pedidos', ensureAdmin, async (req, res) => {
     const safePageSize = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 500);
     const safePage = Math.max(parseInt(page, 10) || 1, 1);
     const offset = (safePage - 1) * safePageSize;
-    const orderBy = sortCol === 'estado'
-      ? `ORDER BY ${sortCol} ${sortDir}, fecha ASC, hora ASC, id ASC`
-      : `ORDER BY ${sortCol} ${sortDir}, id DESC`;
-    const sql = `SELECT id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, descuento, estado, created_at
+    const orderBy = sortParam === 'id'
+      ? `ORDER BY anio ${sortDir}, numero ${sortDir}, id ${sortDir}`
+      : sortCol === 'estado'
+        ? `ORDER BY ${sortCol} ${sortDir}, fecha ASC, hora ASC, id ASC`
+        : `ORDER BY ${sortCol} ${sortDir}, id DESC`;
+    const sql = `SELECT id, anio, numero, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, descuento, estado, created_at
            FROM pedidos
            ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
            ${orderBy}
            LIMIT ${safePageSize} OFFSET ${offset}`;
     const [rows] = await pool.execute(sql, params);
-    res.json({ ok: true, data: rows });
+    res.json({ ok: true, data: rows.map(conNumFactura) });
   } catch (err) {
     console.error('Error listando pedidos:', err);
     res.status(500).json({ ok: false, error: 'Error interno' });
@@ -1238,7 +1273,7 @@ app.get('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'ID inválido' });
     const [rows] = await pool.execute('SELECT * FROM pedidos WHERE id = ? LIMIT 1', [id]);
     if (!rows || rows.length === 0) return res.status(404).json({ ok: false, error: 'No encontrado' });
-    res.json({ ok: true, data: rows[0] });
+    res.json({ ok: true, data: conNumFactura(rows[0]) });
   } catch (err) {
     console.error('Error obteniendo pedido:', err);
     res.status(500).json({ ok: false, error: 'Error interno' });
@@ -1249,7 +1284,7 @@ app.delete('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'ID inválido' });
-    const [rows] = await pool.execute('SELECT estado FROM pedidos WHERE id = ? LIMIT 1', [id]);
+    const [rows] = await pool.execute('SELECT estado, anio, numero FROM pedidos WHERE id = ? LIMIT 1', [id]);
     if (!rows || rows.length === 0) {
       return res.status(404).json({ ok: false, error: 'Pedido no encontrado' });
     }
@@ -1259,24 +1294,29 @@ app.delete('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
         error: 'Solo se puede eliminar un pedido con estado Cancelado.'
       });
     }
-    // Solo se puede borrar el último pedido para no romper la numeración correlativa de facturas.
-    // El bloqueo del contador evita carreras con altas simultáneas.
+    const anioPedido = Number(rows[0].anio);
+    const numeroPedido = Number(rows[0].numero);
+    // Solo se puede borrar el último pedido de su año para no romper la numeración correlativa de facturas.
+    // El bloqueo de los contadores evita carreras con altas simultáneas.
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      await conn.execute('SELECT ultimo FROM contador_pedidos WHERE id = 1 FOR UPDATE');
-      const [maxRows] = await conn.execute('SELECT MAX(id) AS max_id FROM pedidos');
-      if (Number(maxRows?.[0]?.max_id) !== id) {
+      await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = 0 FOR UPDATE');
+      await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = ? FOR UPDATE', [anioPedido]);
+      const [maxNumRows] = await conn.execute('SELECT MAX(numero) AS max_num FROM pedidos WHERE anio = ?', [anioPedido]);
+      if (Number(maxNumRows?.[0]?.max_num) !== numeroPedido) {
         await conn.rollback();
         return res.status(400).json({
           ok: false,
-          error: 'Solo se puede eliminar el último pedido (el de mayor número) y debe estar Cancelado.'
+          error: 'Solo se puede eliminar el último pedido (el de mayor número) de su año y debe estar Cancelado.'
         });
       }
       const [result] = await conn.execute('DELETE FROM pedidos WHERE id = ?', [id]);
-      // El contador retrocede para que el siguiente pedido reutilice el número y no haya huecos.
-      const [nuevoMaxRows] = await conn.execute('SELECT MAX(id) AS max_id FROM pedidos');
-      await conn.execute('UPDATE contador_pedidos SET ultimo = ? WHERE id = 1', [Number(nuevoMaxRows?.[0]?.max_id) || 0]);
+      // Los contadores retroceden para que el siguiente pedido reutilice el número y no haya huecos.
+      const [nuevoNumRows] = await conn.execute('SELECT MAX(numero) AS max_num FROM pedidos WHERE anio = ?', [anioPedido]);
+      const [nuevoIdRows] = await conn.execute('SELECT MAX(id) AS max_id FROM pedidos');
+      await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = ?', [Number(nuevoNumRows?.[0]?.max_num) || 0, anioPedido]);
+      await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = 0', [Number(nuevoIdRows?.[0]?.max_id) || 0]);
       await conn.commit();
       return res.json({ ok: true, affectedRows: result.affectedRows });
     } catch (txErr) {
@@ -1370,6 +1410,16 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     if (!isValidSpanishPhone(merged.telefono)) {
       return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
     }
+    const anioNuevo = anioDeFecha(merged.fecha);
+    if (!anioNuevo) {
+      return res.status(400).json({ ok: false, error: 'La fecha no es válida.' });
+    }
+    if (current.anio != null && anioNuevo !== Number(current.anio)) {
+      return res.status(400).json({
+        ok: false,
+        error: `No se puede cambiar el pedido a otro año (${current.anio}): cambiaría su Nº de factura ${current.numero}/${current.anio}.`
+      });
+    }
     if (merged.solicita_factura === 1 && (!merged.provincia || !merged.nif)) {
       return res.status(400).json({ ok: false, error: 'Provincia y NIF son obligatorios si se solicita factura.' });
     }
@@ -1456,7 +1506,7 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
 
       // Devolver el registro actualizado
       const [rows2] = await conn.execute('SELECT * FROM pedidos WHERE id = ? LIMIT 1', [id]);
-      const row = rows2 && rows2[0] ? rows2[0] : null;
+      const row = rows2 && rows2[0] ? conNumFactura(rows2[0]) : null;
       res.json({ ok: true, affectedRows: result.affectedRows, data: row });
     } catch (txErr) {
       await conn.rollback();
@@ -1472,9 +1522,9 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
 
 app.get('/admin/api/export.csv', ensureAdmin, async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT id, nombre, telefono, email, ciudad, provincia, fecha, hora, presupuesto_total FROM pedidos ORDER BY fecha DESC, hora DESC');
-    const header = 'id;nombre;telefono;email;ciudad;provincia;fecha;hora;presupuesto_total\n';
-    const body = rows.map(r => [r.id, r.nombre, r.telefono, r.email || '', r.ciudad || '', r.provincia || '', r.fecha, r.hora, r.presupuesto_total].join(';')).join('\n');
+    const [rows] = await pool.execute('SELECT id, anio, numero, nombre, telefono, email, ciudad, provincia, fecha, hora, presupuesto_total FROM pedidos ORDER BY fecha DESC, hora DESC');
+    const header = 'num_factura;nombre;telefono;email;ciudad;provincia;fecha;hora;presupuesto_total\n';
+    const body = rows.map(r => [r.numero != null ? `${r.numero}/${r.anio}` : r.id, r.nombre, r.telefono, r.email || '', r.ciudad || '', r.provincia || '', r.fecha, r.hora, r.presupuesto_total].join(';')).join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="pedidos.csv"');
     res.send(header + body);
@@ -1591,6 +1641,8 @@ async function ensureSchema() {
   const ddlPedidos = `
     CREATE TABLE IF NOT EXISTS pedidos (
       id INT NOT NULL PRIMARY KEY,
+      anio SMALLINT DEFAULT NULL,
+      numero INT DEFAULT NULL,
       nombre VARCHAR(120) NOT NULL,
       telefono VARCHAR(40) NOT NULL,
       email VARCHAR(160),
@@ -1619,10 +1671,10 @@ async function ensureSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `;
-  // Contador de Nº de factura (= id del pedido): una única fila con el último número asignado.
-  const ddlContadorPedidos = `
-    CREATE TABLE IF NOT EXISTS contador_pedidos (
-      id INT NOT NULL PRIMARY KEY,
+  // Contadores de numeración. anio = 0: último id interno de pedidos; anio = YYYY: último Nº de factura de ese año.
+  const ddlContadorFacturas = `
+    CREATE TABLE IF NOT EXISTS contador_facturas (
+      anio INT NOT NULL PRIMARY KEY,
       ultimo INT NOT NULL DEFAULT 0
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `;
@@ -1681,9 +1733,7 @@ async function ensureSchema() {
   `;
   try {
     await pool.execute(ddlPedidos);
-    await pool.execute(ddlContadorPedidos);
-    // Siembra la fila del contador con el mayor Nº existente; no hace nada si ya existe.
-    await pool.execute('INSERT IGNORE INTO contador_pedidos (id, ultimo) SELECT 1, COALESCE(MAX(id), 0) FROM pedidos');
+    await pool.execute(ddlContadorFacturas);
     await pool.execute(ddlClientes);
     await pool.execute(ddlProveedores);
     await pool.execute(ddlPrecios);
@@ -1708,6 +1758,33 @@ async function ensureSchema() {
     await ensureColumn('precio_envio', 'DECIMAL(10,2) DEFAULT NULL');
     await ensureColumn('descuento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
     await ensureColumn('suplemento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+    // Nº de factura por año: id es solo el identificador interno; la factura es numero/anio.
+    await ensureColumn('anio', 'SMALLINT DEFAULT NULL');
+    await ensureColumn('numero', 'INT DEFAULT NULL');
+    // Migración inicial: numera los pedidos existentes por año de su fecha y por orden de id.
+    const [numerados] = await pool.execute('SELECT COUNT(*) AS n FROM pedidos WHERE numero IS NOT NULL');
+    const [sinNumero] = await pool.execute('SELECT COUNT(*) AS n FROM pedidos WHERE numero IS NULL');
+    if (Number(numerados[0].n) === 0 && Number(sinNumero[0].n) > 0) {
+      await pool.execute(
+        `UPDATE pedidos p
+         JOIN (SELECT id, YEAR(fecha) AS a, ROW_NUMBER() OVER (PARTITION BY YEAR(fecha) ORDER BY id) AS n
+               FROM pedidos) t ON t.id = p.id
+         SET p.anio = t.a, p.numero = t.n`
+      );
+    }
+    const [indiceRows] = await pool.execute(
+      `SELECT INDEX_NAME FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pedidos' AND INDEX_NAME = 'uk_pedidos_anio_numero'
+       LIMIT 1`
+    );
+    if (!Array.isArray(indiceRows) || indiceRows.length === 0) {
+      await pool.execute('ALTER TABLE pedidos ADD UNIQUE KEY uk_pedidos_anio_numero (anio, numero)');
+    }
+    // Siembra los contadores con los máximos existentes; no hace nada si ya existen.
+    await pool.execute('INSERT IGNORE INTO contador_facturas (anio, ultimo) SELECT 0, COALESCE(MAX(id), 0) FROM pedidos');
+    await pool.execute(
+      'INSERT IGNORE INTO contador_facturas (anio, ultimo) SELECT anio, MAX(numero) FROM pedidos WHERE anio IS NOT NULL GROUP BY anio'
+    );
     // Fila única de precios vigentes; se siembra solo si la tabla está vacía.
     await pool.execute(
       'INSERT INTO precios (id, precio_churro, precio_chocolate, precio_envio) SELECT 1, 0.25, 1.50, 25.00 WHERE NOT EXISTS (SELECT 1 FROM precios WHERE id = 1)'

@@ -447,8 +447,8 @@
       if(!term) return [...pedidosPendientes];
       return pedidosPendientes.filter((pedido) => {
         const nombre = normalizeSearchText(pedido?.nombre || '');
-        const id = String(pedido?.id ?? '');
-        return nombre.includes(term) || id.includes(term);
+        const id = String(pedido?.num_factura ?? pedido?.id ?? '');
+        return nombre.includes(term) || normalizeSearchText(id).includes(term);
       });
     }
 
@@ -488,7 +488,7 @@
         tr.className = 'pedido-picker-row';
 
         const tdId = document.createElement('td');
-        tdId.textContent = String(pedido.id ?? '—');
+        tdId.textContent = String(pedido.num_factura ?? pedido.id ?? '—');
         const tdNombre = document.createElement('td');
         tdNombre.textContent = String(pedido.nombre || '').trim() || '—';
         const tdFecha = document.createElement('td');
@@ -569,7 +569,7 @@
       document.getElementById('numChurros').value = personas * churrosPorPersona;
       document.getElementById('numChocolates').value = chocolates;
       pedidoInfoSeleccionado = {
-        id: pedidoSeleccionado.id,
+        id: pedidoSeleccionado.num_factura || pedidoSeleccionado.id,
         nombre: pedidoSeleccionado.nombre,
         fecha: pedidoSeleccionado.fecha ? String(pedidoSeleccionado.fecha).slice(0, 10) : ''
       };

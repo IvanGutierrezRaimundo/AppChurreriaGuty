@@ -9,7 +9,7 @@ function estadoClienteDuplicado(state, telefono) {
 function makeDbState() {
   const state = {
     nextId: 1,
-    contador: 0,
+    contadores: {},
     precios: [{ precio_churro: 1.2, precio_chocolate: 1.1, precio_envio: 3.5 }],
     clientes: [],
     proveedores: [],
@@ -88,19 +88,43 @@ function makeDbState() {
         return [{ insertId: row.id }];
       }
 
-      if (query.includes('SELECT ultimo FROM contador_pedidos')) {
-        return [[{ ultimo: state.contador }]];
-      }
-
-      if (query.includes('UPDATE contador_pedidos')) {
-        state.contador = Number(params[0]);
+      if (query.includes('INSERT IGNORE INTO contador_facturas')) {
+        const anio = params.length ? Number(params[0]) : 0;
+        if (!(anio in state.contadores)) state.contadores[anio] = 0;
         return [{ affectedRows: 1 }];
       }
 
+      if (query.includes('SELECT ultimo FROM contador_facturas WHERE anio = 0')) {
+        return [[{ ultimo: state.contadores[0] || 0 }]];
+      }
+
+      if (query.includes('SELECT ultimo FROM contador_facturas WHERE anio = ?')) {
+        return [[{ ultimo: state.contadores[Number(params[0])] || 0 }]];
+      }
+
+      if (query.includes('UPDATE contador_facturas SET ultimo = ? WHERE anio = 0')) {
+        state.contadores[0] = Number(params[0]);
+        return [{ affectedRows: 1 }];
+      }
+
+      if (query.includes('UPDATE contador_facturas SET ultimo = ? WHERE anio = ?')) {
+        state.contadores[Number(params[1])] = Number(params[0]);
+        return [{ affectedRows: 1 }];
+      }
+
+      if (query.includes('SELECT COALESCE(MAX(id), 0) AS max_id, COALESCE(MAX(CASE')) {
+        const anio = Number(params[0]);
+        const maxId = state.pedidos.reduce((acc, item) => Math.max(acc, item.id), 0);
+        const maxNum = state.pedidos.filter((item) => item.anio === anio).reduce((acc, item) => Math.max(acc, item.numero), 0);
+        return [[{ max_id: maxId, max_num: maxNum }]];
+      }
+
       if (query.includes('INSERT INTO pedidos')) {
-        const [id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, precio_churro, precio_chocolate, precio_envio, descuento, suplemento] = params;
+        const [id, anio, numero, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, precio_churro, precio_chocolate, precio_envio, descuento, suplemento] = params;
         const row = {
           id,
+          anio,
+          numero,
           nombre,
           telefono,
           email: email ?? null,
@@ -131,10 +155,16 @@ function makeDbState() {
         return [{ insertId: row.id }];
       }
 
-      if (query.includes('SELECT estado FROM pedidos WHERE id = ? LIMIT 1')) {
+      if (query.includes('SELECT estado, anio, numero FROM pedidos WHERE id = ? LIMIT 1')) {
         const id = Number(params[0]);
         const pedido = state.pedidos.find((item) => item.id === id);
-        return [[{ estado: pedido ? (pedido.estado || 'Pendiente') : null }]];
+        return [pedido ? [{ estado: pedido.estado || 'Pendiente', anio: pedido.anio, numero: pedido.numero }] : []];
+      }
+
+      if (query.includes('SELECT MAX(numero) AS max_num FROM pedidos WHERE anio = ?')) {
+        const anio = Number(params[0]);
+        const maxNum = state.pedidos.filter((item) => item.anio === anio).reduce((acc, item) => Math.max(acc, item.numero), 0);
+        return [[{ max_num: maxNum || null }]];
       }
 
       if (query.includes('SELECT MAX(id) AS max_id FROM pedidos')) {
@@ -147,7 +177,7 @@ function makeDbState() {
         return [state.pedidos.filter((pedido) => pedido.id === id)];
       }
 
-      if (query.includes('SELECT id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, descuento, estado, created_at')) {
+      if (query.includes('SELECT id, anio, numero, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, descuento, estado, created_at')) {
         const estadoValues = ['Pendiente', 'Realizado', 'Cobrado', 'Cancelado'];
         const searchTerm = estadoValues.includes(params[0]) ? '' : String(params[0] || '').replace(/[%_]/g, '').trim();
         const estadoFilters = params.filter((p) => typeof p === 'string' && estadoValues.includes(p));
@@ -596,6 +626,46 @@ test('DELETE /admin/api/pedidos/:id solo permite borrar el último pedido', asyn
 
   const nowLast = await agent.delete(`/admin/api/pedidos/${first.body.id}`);
   assert.equal(nowLast.status, 200);
+});
+
+test('el Nº de factura se reinicia cada año y no repite id interno', async () => {
+  const app = loadAppWithDb(makeDbState());
+  const agent = request.agent(app);
+
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+
+  const base = {
+    nombre: 'Ana García',
+    telefono: '612345678',
+    hora: '18:00',
+    metodo_pago: 'efectivo',
+    personas: 10,
+    churros_por_persona: 12,
+    chocolates: 0,
+  };
+  const a = await request(app).post('/api/pedidos').send({ ...base, fecha: '2026-12-30' });
+  const b = await request(app).post('/api/pedidos').send({ ...base, fecha: '2026-12-31' });
+  const c = await request(app).post('/api/pedidos').send({ ...base, fecha: '2027-01-01' });
+  const d = await request(app).post('/api/pedidos').send({ ...base, fecha: '2027-01-02' });
+
+  assert.deepEqual([a, b, c, d].map((r) => r.body.num_factura), ['1/2026', '2/2026', '1/2027', '2/2027']);
+  assert.equal(new Set([a, b, c, d].map((r) => r.body.id)).size, 4);
+
+  const detalle = await agent.get(`/admin/api/pedidos/${c.body.id}`);
+  assert.equal(detalle.body.data.num_factura, '1/2027');
+
+  // Cambiar la fecha a otro año cambiaría el Nº de factura: se rechaza.
+  const cambioAnio = await agent.put(`/admin/api/pedidos/${b.body.id}`).send({ fecha: '2027-01-05' });
+  assert.equal(cambioAnio.status, 400);
+
+  // Borrar el último de 2026 libera el 2/2026 para el siguiente pedido de ese año.
+  await agent.put(`/admin/api/pedidos/${b.body.id}`).send({ estado: 'Cancelado' });
+  const noUltimoDelAnio = await agent.delete(`/admin/api/pedidos/${a.body.id}`);
+  assert.equal(noUltimoDelAnio.status, 400);
+  const borrado = await agent.delete(`/admin/api/pedidos/${b.body.id}`);
+  assert.equal(borrado.status, 200);
+  const e = await request(app).post('/api/pedidos').send({ ...base, fecha: '2026-12-31' });
+  assert.equal(e.body.num_factura, '2/2026');
 });
 
 test('GET /admin/api/pedidos soporta búsqueda y paginación', async () => {

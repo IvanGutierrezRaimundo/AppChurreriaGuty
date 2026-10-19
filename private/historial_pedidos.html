@@ -657,7 +657,7 @@
       return `
         <article class="pedido-card">
           <div class="pedido-card-head">
-            <span class="pedido-card-id">#${r.id}</span>
+            <span class="pedido-card-id">#${r.num_factura || r.id}</span>
             <span class="estado-cell" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="Cambiar estado">${renderEstadoBadge(r.estado)}</span>
           </div>
           <div class="pedido-card-grid">
@@ -679,7 +679,8 @@
     function openEstadoModal(id, estadoRaw, nombre){
       editingEstadoId = Number(id);
       estadoModalSelect.value = estadoRaw || 'Pendiente';
-      estadoModalText.textContent = `Pedido #${id}${nombre ? ` · ${nombre}` : ''}`;
+      const filaEstado = currentRows.find((r) => Number(r.id) === Number(id));
+      estadoModalText.textContent = `Pedido #${(filaEstado && filaEstado.num_factura) || id}${nombre ? ` · ${nombre}` : ''}`;
       estadoModalError.textContent = '';
       estadoModalBackdrop.classList.add('is-open');
       estadoModalBackdrop.setAttribute('aria-hidden', 'false');
@@ -801,7 +802,7 @@
       rows.sort((a,b) => {
         let cmp = 0;
         switch(currentSort){
-          case 'id': cmp = toNumber(a.id) - toNumber(b.id); break;
+          case 'id': cmp = (toNumber(a.anio) - toNumber(b.anio)) || (toNumber(a.numero) - toNumber(b.numero)) || (toNumber(a.id) - toNumber(b.id)); break;
           case 'presupuesto_total': cmp = toNumber(a.presupuesto_total) - toNumber(b.presupuesto_total); break;
           case 'fecha': cmp = toDate(a.fecha) - toDate(b.fecha); break;
           case 'hora': cmp = toMinutes(a.hora) - toMinutes(b.hora); break;
@@ -832,7 +833,7 @@
       for (const r of rows) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${r.id}</td>
+          <td>${r.num_factura || r.id}</td>
           <td>${r.nombre}</td>
           <td>${r.personas ?? ''}</td>
           <td>${r.churros_por_persona ?? ''}</td>
@@ -944,7 +945,7 @@
         'Nº fact.', 'Cliente', 'Personas', 'Churros/persona', 'Chocolates', 'Fecha', 'Hora', 'Total (EUR)', 'Estado'
       ]];
       const body = currentRows.map((r) => [
-        r.id ?? '',
+        r.num_factura ?? r.id ?? '',
         r.nombre ?? '',
         r.personas ?? '',
         r.churros_por_persona ?? '',

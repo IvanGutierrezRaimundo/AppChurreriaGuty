@@ -41,6 +41,7 @@ function formatInvoiceDate(value){
 }
 
 function generateFacturaNumero(pedido){
+  if(pedido?.numero != null && pedido?.anio != null) return `${pedido.numero}/${pedido.anio}`;
   const fechaRaw = String(pedido?.fecha || '').trim();
   const fecha = /^\d{4}-\d{2}-\d{2}$/.test(fechaRaw) ? new Date(fechaRaw) : new Date();
   const anio = fecha.getFullYear();
@@ -338,8 +339,8 @@ async function downloadFacturaPdf(pedidoId){
     doc.setTextColor(0, 0, 0);
   }
 
-  const fileSafeNumero = String(pedido?.id || '').trim();
-  const fileSafeAnio = String(new Date(pedido?.fecha || new Date()).getFullYear() || '').trim();
+  const fileSafeNumero = String(pedido?.numero ?? pedido?.id ?? '').trim();
+  const fileSafeAnio = String(pedido?.anio ?? new Date(pedido?.fecha || new Date()).getFullYear() ?? '').trim();
   const fileSafeCliente = String(pedido?.nombre || 'cliente').trim().replace(/[^A-Za-z0-9.-]/g, '_');
   doc.save(`${fileSafeNumero}-${fileSafeAnio}-${fileSafeCliente}.pdf`);
 }

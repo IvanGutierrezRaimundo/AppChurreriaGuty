@@ -393,7 +393,7 @@
           return;
         }
         closeConfirmModal();
-        showSuccessModal(data.id);
+        showSuccessModal(data.num_factura || data.id);
       } catch (err) {
         console.error('Error enviando pedido:', err);
         showConfirmMessage('Lo sentimos, ha habido un error de conexión. Disculpe las molestias. Puede volver al formulario e intentarlo de nuevo.', { isError: true });
