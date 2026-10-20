@@ -680,6 +680,13 @@
     function openEstadoModal(id, estadoRaw, nombre){
       editingEstadoId = Number(id);
       estadoModalSelect.value = estadoRaw || 'Pendiente';
+      // Pendiente solo admite Cancelado; Realizado no puede volver a Pendiente.
+      const optPendiente = estadoModalSelect.querySelector('option[value="Pendiente"]');
+      if(optPendiente) optPendiente.disabled = estadoRaw === 'Realizado';
+      ['Realizado', 'Cobrado'].forEach((valor) => {
+        const opt = estadoModalSelect.querySelector(`option[value="${valor}"]`);
+        if(opt) opt.disabled = (estadoRaw || 'Pendiente') === 'Pendiente';
+      });
       const filaEstado = currentRows.find((r) => Number(r.id) === Number(id));
       estadoModalText.textContent = `Pedido #${(filaEstado && filaEstado.num_factura) || id}${nombre ? ` · ${nombre}` : ''}`;
       estadoModalError.textContent = '';

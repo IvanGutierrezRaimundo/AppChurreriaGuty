@@ -151,7 +151,9 @@ async function downloadFacturaPdf(pedidoId){
   }
 
   const estado = String(pedido?.estado || '').trim().toLowerCase();
-  if(estado !== 'realizado' && estado !== 'cobrado'){
+  // Un pedido cancelado solo tiene factura (marcada CANCELADA) si llegó a numerarse al estar Realizado.
+  const cancelConNumero = estado === 'cancelado' && pedido?.numero != null;
+  if(estado !== 'realizado' && estado !== 'cobrado' && !cancelConNumero){
     await showActionAlert({
       title: 'Aviso',
       message: 'Sólo se pueden generar facturas con estado realizado o cobrado'

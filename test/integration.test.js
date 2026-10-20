@@ -348,6 +348,14 @@ function loadAppWithDb(db) {
   return app;
 }
 
+// Simula que el pedido ha vencido: el barrido lo pasa a Realizado y le asigna su Nº de factura.
+async function vencer(db, id) {
+  const pedido = db.state.pedidos.find((p) => p.id === id);
+  pedido.fecha = '2000-01-01';
+  const { marcarPedidosVencidos } = require('../server');
+  await marcarPedidosVencidos();
+}
+
 test('GET /health responde OK', async () => {
   const app = loadAppWithDb(makeDbState());
   const res = await request(app).get('/health');
@@ -619,7 +627,8 @@ test('DELETE /admin/api/pedidos/:id solo permite borrar con estado Cancelado', a
 });
 
 test('DELETE /admin/api/pedidos/:id solo permite borrar el último pedido', async () => {
-  const app = loadAppWithDb(makeDbState());
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
   const agent = request.agent(app);
 
   await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
@@ -637,8 +646,8 @@ test('DELETE /admin/api/pedidos/:id solo permite borrar el último pedido', asyn
   const first = await request(app).post('/api/pedidos').send(payload);
   const second = await request(app).post('/api/pedidos').send(payload);
 
-  await agent.put(`/admin/api/pedidos/${first.body.id}`).send({ estado: 'Realizado' });
-  await agent.put(`/admin/api/pedidos/${second.body.id}`).send({ estado: 'Realizado' });
+  await vencer(db, first.body.id);
+  await vencer(db, second.body.id);
   await agent.put(`/admin/api/pedidos/${first.body.id}`).send({ estado: 'Cancelado' });
   await agent.put(`/admin/api/pedidos/${second.body.id}`).send({ estado: 'Cancelado' });
 
@@ -679,10 +688,14 @@ test('el Nº de factura se asigna al pasar a Realizado/Cobrado, correlativo por 
   assert.equal(db.state.pedidos.every((p) => p.numero === null && p.anio === null), true);
 
   const anioActual = new Date().getFullYear();
-  const putB = await agent.put(`/admin/api/pedidos/${b.body.id}`).send({ estado: 'Realizado' });
-  assert.equal(putB.body.data.num_factura, `1/${anioActual}`);
-  const putA = await agent.put(`/admin/api/pedidos/${a.body.id}`).send({ estado: 'Cobrado' });
-  assert.equal(putA.body.data.num_factura, `2/${anioActual}`);
+  const putB = await vencer(db, b.body.id);
+  assert.equal(db.state.pedidos.find((p) => p.id === b.body.id).numero, 1);
+  const putA = await vencer(db, a.body.id);
+  assert.equal(db.state.pedidos.find((p) => p.id === a.body.id).numero, 2);
+  assert.equal(db.state.pedidos.find((p) => p.id === a.body.id).anio, anioActual);
+  const pendienteARealizado = await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ estado: 'Realizado' });
+  assert.equal(pendienteARealizado.status, 400);
+  assert.match(pendienteARealizado.body.error, /solo puede pasar a Cancelado/);
 
   // Cambiar de Realizado a Cobrado no cambia el número ya asignado.
   const putB2 = await agent.put(`/admin/api/pedidos/${b.body.id}`).send({ estado: 'Cobrado' });
@@ -728,6 +741,49 @@ test('marcarPedidosVencidos pasa a Realizado los pendientes vencidos y les asign
 
   // Una segunda pasada no repite ni renumera.
   assert.equal(await marcarPedidosVencidos(ahora), 0);
+});
+
+test('un pedido Realizado no puede volver a Pendiente, solo pasar a Cobrado o Cancelado', async () => {
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+
+  const created = await request(app).post('/api/pedidos').send({
+    nombre: 'Ana García',
+    telefono: '612345678',
+    fecha: '2099-01-01',
+    hora: '18:00',
+    metodo_pago: 'efectivo',
+    personas: 10,
+    churros_por_persona: 12,
+    chocolates: 0,
+  });
+  const id = created.body.id;
+
+  await vencer(db, id);
+  const vuelta = await agent.put(`/admin/api/pedidos/${id}`).send({ estado: 'Pendiente' });
+  assert.equal(vuelta.status, 400);
+  assert.match(vuelta.body.error, /Cobrado o Cancelado/);
+
+  const cancelar = await agent.put(`/admin/api/pedidos/${id}`).send({ estado: 'Cancelado' });
+  assert.equal(cancelar.status, 200);
+  assert.equal(cancelar.body.data.estado, 'Cancelado');
+  assert.ok(cancelar.body.data.num_factura);
+
+  const otro = await request(app).post('/api/pedidos').send({
+    nombre: 'Ana García',
+    telefono: '612345678',
+    fecha: '2099-01-01',
+    hora: '18:00',
+    metodo_pago: 'efectivo',
+    personas: 10,
+    churros_por_persona: 12,
+    chocolates: 0,
+  });
+  await vencer(db, otro.body.id);
+  const cobrar = await agent.put(`/admin/api/pedidos/${otro.body.id}`).send({ estado: 'Cobrado' });
+  assert.equal(cobrar.status, 200);
 });
 
 test('GET /admin/api/pedidos soporta búsqueda y paginación', async () => {
@@ -981,7 +1037,8 @@ test('Un cambio de precios no afecta a pedidos ya creados (respetan el precio an
 });
 
 test('Pedido con estado Cobrado aparece en historial', async () => {
-  const app = loadAppWithDb(makeDbState());
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
   const agent = request.agent(app);
 
   await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
@@ -1004,7 +1061,8 @@ test('Pedido con estado Cobrado aparece en historial', async () => {
   const allRes = await agent.get('/admin/api/pedidos');
   assert.ok(allRes.body.data.some((p) => p.id === pedidoId && p.estado === 'Pendiente'), 'Pedido debe estar con estado Pendiente');
 
-  // Cambiar a Cobrado
+  // Cambiar a Cobrado (antes pasa a Realizado al vencer)
+  await vencer(db, pedidoId);
   const updateRes = await agent.put(`/admin/api/pedidos/${pedidoId}`).send({ estado: 'Cobrado' });
   assert.equal(updateRes.status, 200);
   assert.equal(updateRes.body.ok, true);
@@ -1017,7 +1075,8 @@ test('Pedido con estado Cobrado aparece en historial', async () => {
 });
 
 test('GET /admin/api/pedidos acepta varios estados para el historial (Cobrado y Cancelado)', async () => {
-  const app = loadAppWithDb(makeDbState());
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
   const agent = request.agent(app);
 
   await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
@@ -1037,6 +1096,7 @@ test('GET /admin/api/pedidos acepta varios estados para el historial (Cobrado y 
     const res = await request(app).post('/api/pedidos').send(payload);
     ids.push(res.body.id);
   }
+  await vencer(db, ids[0]);
   await agent.put(`/admin/api/pedidos/${ids[0]}`).send({ estado: 'Cobrado' });
   await agent.put(`/admin/api/pedidos/${ids[1]}`).send({ estado: 'Cancelado' });
 

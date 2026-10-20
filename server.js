@@ -1395,6 +1395,15 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     if (!rows || rows.length === 0) return res.status(404).json({ ok: false, error: 'No encontrado' });
     const current = rows[0];
 
+    // Un pedido Realizado ya tiene Nº de factura: no puede volver a Pendiente.
+    if (current.estado === 'Realizado' && body.estado === 'Pendiente') {
+      return res.status(400).json({ ok: false, error: 'Un pedido Realizado solo puede pasar a Cobrado o Cancelado.' });
+    }
+    // Un pedido Pendiente solo puede cancelarse; pasa a Realizado automáticamente al vencer.
+    if (current.estado === 'Pendiente' && typeof body.estado !== 'undefined' && body.estado !== 'Pendiente' && body.estado !== 'Cancelado') {
+      return res.status(400).json({ ok: false, error: 'Un pedido Pendiente solo puede pasar a Cancelado.' });
+    }
+
     // Lista blanca de campos actualizables (igual que inserción)
     const allowed = [
       'nombre','telefono','email','cp','direccion','ciudad','provincia','nif','solicita_factura',

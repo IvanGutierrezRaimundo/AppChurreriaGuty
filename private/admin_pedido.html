@@ -477,6 +477,13 @@
       const p = currentPedido;
       document.getElementById('e_id').textContent = valueText(p.num_factura || p.id);
       document.getElementById('e_estado').value = p.estado || 'Pendiente';
+      // Pendiente solo admite Cancelado; Realizado no puede volver a Pendiente.
+      const optPendiente = document.querySelector('#e_estado option[value="Pendiente"]');
+      if(optPendiente) optPendiente.disabled = p.estado === 'Realizado';
+      ['Realizado', 'Cobrado'].forEach((valor) => {
+        const opt = document.querySelector(`#e_estado option[value="${valor}"]`);
+        if(opt) opt.disabled = (p.estado || 'Pendiente') === 'Pendiente';
+      });
       document.getElementById('e_nombre').value = p.nombre || '';
       document.getElementById('e_telefono').value = p.telefono || '';
       document.getElementById('e_email').value = p.email || '';
