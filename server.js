@@ -389,29 +389,79 @@ app.put('/admin/api/precios', ensureAdmin, async (req, res) => {
   }
 });
 
-// Año de la fecha (YYYY-MM-DD) que determina la serie del Nº de factura; null si no es válida.
+// Reserva el siguiente id interno del pedido (contador global, anio = 0). El pedido nace sin
+// Nº de factura: este se asigna cuando pasa a Realizado/Cobrado (ver asignarNumeroFactura).
+// Debe llamarse dentro de una transacción.
+async function reservarIdPedido(conn) {
+  await conn.execute('INSERT IGNORE INTO contador_facturas (anio, ultimo) VALUES (0, 0)');
+  const [globalRows] = await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = 0 FOR UPDATE');
+  const [maxRows] = await conn.execute('SELECT MAX(id) AS max_id FROM pedidos');
+  const id = Math.max(Number(globalRows?.[0]?.ultimo || 0), Number(maxRows?.[0]?.max_id || 0)) + 1;
+  await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = 0', [id]);
+  return id;
+}
+
+// Asigna al pedido el siguiente Nº de factura correlativo del año en curso (1/2026, 2/2026...).
+// No hace nada si ya tiene número. Debe llamarse dentro de una transacción.
+async function asignarNumeroFactura(conn, pedidoId, ahora = new Date()) {
+  const anio = ahora.getFullYear();
+  await conn.execute('INSERT IGNORE INTO contador_facturas (anio, ultimo) VALUES (?, 0)', [anio]);
+  const [anioRows] = await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = ? FOR UPDATE', [anio]);
+  const [maxRows] = await conn.execute('SELECT COALESCE(MAX(numero), 0) AS max_num FROM pedidos WHERE anio = ?', [anio]);
+  const numero = Math.max(Number(anioRows?.[0]?.ultimo || 0), Number(maxRows?.[0]?.max_num || 0)) + 1;
+  const [result] = await conn.execute(
+    'UPDATE pedidos SET anio = ?, numero = ? WHERE id = ? AND numero IS NULL',
+    [anio, numero, pedidoId]
+  );
+  if (!result || result.affectedRows !== 1) return null;
+  await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = ?', [numero, anio]);
+  return { anio, numero };
+}
+
+function esEstadoFacturable(estado) {
+  return estado === 'Realizado' || estado === 'Cobrado';
+}
+
+function formatoFechaHoraLocal(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+// Pasa a Realizado los pedidos Pendientes cuya fecha y hora ya han pasado y les asigna su Nº de factura,
+// en orden cronológico para que la numeración sea correlativa.
+async function marcarPedidosVencidos(ahora = new Date()) {
+  const [vencidos] = await pool.execute(
+    `SELECT id FROM pedidos WHERE estado = 'Pendiente' AND TIMESTAMP(fecha, hora) <= ? ORDER BY fecha, hora, id`,
+    [formatoFechaHoraLocal(ahora)]
+  );
+  let actualizados = 0;
+  for (const { id } of vencidos || []) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [upd] = await conn.execute(
+        `UPDATE pedidos SET estado = 'Realizado' WHERE id = ? AND estado = 'Pendiente'`,
+        [id]
+      );
+      if (upd && upd.affectedRows === 1) {
+        await asignarNumeroFactura(conn, id, ahora);
+        actualizados += 1;
+      }
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+  return actualizados;
+}
+
+// Año de la fecha (YYYY-MM-DD); null si no es válida.
 function anioDeFecha(fecha) {
   const m = /^(\d{4})-\d{2}-\d{2}/.exec(String(fecha || ''));
   return m ? Number(m[1]) : null;
-}
-
-// Reserva el siguiente id interno y el siguiente Nº de factura del año (1/2026, 2/2026... 1/2027).
-// Bloquea siempre primero la fila global (anio = 0) y después la del año, para serializar altas
-// sin interbloqueos. Debe llamarse dentro de una transacción.
-async function reservarNumeroPedido(conn, anio) {
-  await conn.execute('INSERT IGNORE INTO contador_facturas (anio, ultimo) VALUES (0, 0)');
-  await conn.execute('INSERT IGNORE INTO contador_facturas (anio, ultimo) VALUES (?, 0)', [anio]);
-  const [globalRows] = await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = 0 FOR UPDATE');
-  const [anioRows] = await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = ? FOR UPDATE', [anio]);
-  const [maxRows] = await conn.execute(
-    'SELECT COALESCE(MAX(id), 0) AS max_id, COALESCE(MAX(CASE WHEN anio = ? THEN numero END), 0) AS max_num FROM pedidos',
-    [anio]
-  );
-  const id = Math.max(Number(globalRows?.[0]?.ultimo || 0), Number(maxRows?.[0]?.max_id || 0)) + 1;
-  const numero = Math.max(Number(anioRows?.[0]?.ultimo || 0), Number(maxRows?.[0]?.max_num || 0)) + 1;
-  await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = 0', [id]);
-  await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = ?', [numero, anio]);
-  return { id, numero };
 }
 
 function conNumFactura(row) {
@@ -451,8 +501,7 @@ app.post('/api/pedidos', async (req, res) => {
     if (!nombre || !telefono || !fecha || !hora || !metodo_pago) {
       return res.status(400).json({ ok: false, error: 'Campos obligatorios faltan: nombre, teléfono, fecha, hora, método de pago.' });
     }
-    const anioPedido = anioDeFecha(fecha);
-    if (!anioPedido) {
+    if (!anioDeFecha(fecha)) {
       return res.status(400).json({ ok: false, error: 'La fecha no es válida.' });
     }
     if (!isValidSpanishPhone(telefonoNormalizado)) {
@@ -523,11 +572,11 @@ app.post('/api/pedidos', async (req, res) => {
 
     const sql = `
       INSERT INTO pedidos (
-        id, anio, numero, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura,
+        id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura,
         personas, churros_por_persona, chocolates, fecha, hora,
         requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total,
         precio_churro, precio_chocolate, precio_envio, descuento, suplemento
-      ) VALUES (?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)
+      ) VALUES (?, ?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?)
     `;
 
     const params = [
@@ -550,9 +599,9 @@ app.post('/api/pedidos', async (req, res) => {
     try {
       await conn.beginTransaction();
 
-      const { id: pedidoId, numero: numeroPedido } = await reservarNumeroPedido(conn, anioPedido);
+      const pedidoId = await reservarIdPedido(conn);
 
-      await conn.execute(sql, [pedidoId, anioPedido, numeroPedido, ...params]);
+      await conn.execute(sql, [pedidoId, ...params]);
 
       await conn.execute(
         `INSERT INTO clientes (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
@@ -578,7 +627,7 @@ app.post('/api/pedidos', async (req, res) => {
       );
 
       await conn.commit();
-      return res.status(201).json({ ok: true, id: pedidoId, anio: anioPedido, numero: numeroPedido, num_factura: `${numeroPedido}/${anioPedido}`, presupuesto_total: presupuestoFinal });
+      return res.status(201).json({ ok: true, id: pedidoId, presupuesto_total: presupuestoFinal });
     } catch (publicErr) {
       await conn.rollback();
       throw publicErr;
@@ -1294,28 +1343,33 @@ app.delete('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
         error: 'Solo se puede eliminar un pedido con estado Cancelado.'
       });
     }
-    const anioPedido = Number(rows[0].anio);
-    const numeroPedido = Number(rows[0].numero);
-    // Solo se puede borrar el último pedido de su año para no romper la numeración correlativa de facturas.
+    const anioPedido = rows[0].anio == null ? null : Number(rows[0].anio);
+    const numeroPedido = rows[0].numero == null ? null : Number(rows[0].numero);
+    // Un pedido con Nº de factura solo se puede borrar si es el último de su año, para no romper la
+    // numeración correlativa. Los pedidos sin número (nunca realizados) se borran libremente.
     // El bloqueo de los contadores evita carreras con altas simultáneas.
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
       await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = 0 FOR UPDATE');
-      await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = ? FOR UPDATE', [anioPedido]);
-      const [maxNumRows] = await conn.execute('SELECT MAX(numero) AS max_num FROM pedidos WHERE anio = ?', [anioPedido]);
-      if (Number(maxNumRows?.[0]?.max_num) !== numeroPedido) {
-        await conn.rollback();
-        return res.status(400).json({
-          ok: false,
-          error: 'Solo se puede eliminar el último pedido (el de mayor número) de su año y debe estar Cancelado.'
-        });
+      if (numeroPedido !== null) {
+        await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = ? FOR UPDATE', [anioPedido]);
+        const [maxNumRows] = await conn.execute('SELECT MAX(numero) AS max_num FROM pedidos WHERE anio = ?', [anioPedido]);
+        if (Number(maxNumRows?.[0]?.max_num) !== numeroPedido) {
+          await conn.rollback();
+          return res.status(400).json({
+            ok: false,
+            error: 'Solo se puede eliminar el último pedido (el de mayor número) de su año y debe estar Cancelado.'
+          });
+        }
       }
       const [result] = await conn.execute('DELETE FROM pedidos WHERE id = ?', [id]);
       // Los contadores retroceden para que el siguiente pedido reutilice el número y no haya huecos.
-      const [nuevoNumRows] = await conn.execute('SELECT MAX(numero) AS max_num FROM pedidos WHERE anio = ?', [anioPedido]);
+      if (numeroPedido !== null) {
+        const [nuevoNumRows] = await conn.execute('SELECT MAX(numero) AS max_num FROM pedidos WHERE anio = ?', [anioPedido]);
+        await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = ?', [Number(nuevoNumRows?.[0]?.max_num) || 0, anioPedido]);
+      }
       const [nuevoIdRows] = await conn.execute('SELECT MAX(id) AS max_id FROM pedidos');
-      await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = ?', [Number(nuevoNumRows?.[0]?.max_num) || 0, anioPedido]);
       await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = 0', [Number(nuevoIdRows?.[0]?.max_id) || 0]);
       await conn.commit();
       return res.json({ ok: true, affectedRows: result.affectedRows });
@@ -1410,15 +1464,8 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     if (!isValidSpanishPhone(merged.telefono)) {
       return res.status(400).json({ ok: false, error: 'El telefono debe tener exactamente 9 digitos.' });
     }
-    const anioNuevo = anioDeFecha(merged.fecha);
-    if (!anioNuevo) {
+    if (!anioDeFecha(merged.fecha)) {
       return res.status(400).json({ ok: false, error: 'La fecha no es válida.' });
-    }
-    if (current.anio != null && anioNuevo !== Number(current.anio)) {
-      return res.status(400).json({
-        ok: false,
-        error: `No se puede cambiar el pedido a otro año (${current.anio}): cambiaría su Nº de factura ${current.numero}/${current.anio}.`
-      });
     }
     if (merged.solicita_factura === 1 && (!merged.provincia || !merged.nif)) {
       return res.status(400).json({ ok: false, error: 'Provincia y NIF son obligatorios si se solicita factura.' });
@@ -1479,6 +1526,10 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
 
       const [result] = await conn.execute(sql, params);
 
+      // El Nº de factura se asigna la primera vez que el pedido pasa a Realizado o Cobrado.
+      if (esEstadoFacturable(merged.estado) && current.numero == null) {
+        await asignarNumeroFactura(conn, id);
+      }
       await conn.execute(
         `INSERT INTO clientes (nif, nombre, telefono, email, direccion, ciudad, provincia, cp)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1622,6 +1673,10 @@ async function start() {
     }
     // Asegura el esquema necesario
     await ensureSchema();
+    await marcarPedidosVencidos().catch((err) => console.error('Error marcando pedidos vencidos:', err));
+    setInterval(() => {
+      marcarPedidosVencidos().catch((err) => console.error('Error marcando pedidos vencidos:', err));
+    }, 60 * 1000).unref();
     app.listen(PORT, () => {
       console.log(`Servidor en http://localhost:${PORT}`);
     });
@@ -1635,7 +1690,7 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, pool, start };
+module.exports = { app, pool, start, marcarPedidosVencidos };
 
 async function ensureSchema() {
   const ddlPedidos = `
@@ -1758,17 +1813,17 @@ async function ensureSchema() {
     await ensureColumn('precio_envio', 'DECIMAL(10,2) DEFAULT NULL');
     await ensureColumn('descuento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
     await ensureColumn('suplemento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
-    // Nº de factura por año: id es solo el identificador interno; la factura es numero/anio.
+    // Nº de factura: se asigna al pasar a Realizado/Cobrado; id es solo el identificador interno.
     await ensureColumn('anio', 'SMALLINT DEFAULT NULL');
     await ensureColumn('numero', 'INT DEFAULT NULL');
-    // Migración inicial: numera los pedidos existentes por año de su fecha y por orden de id.
+    // Migración inicial: numera los pedidos ya facturables (Realizado/Cobrado) por año de su fecha.
     const [numerados] = await pool.execute('SELECT COUNT(*) AS n FROM pedidos WHERE numero IS NOT NULL');
-    const [sinNumero] = await pool.execute('SELECT COUNT(*) AS n FROM pedidos WHERE numero IS NULL');
+    const [sinNumero] = await pool.execute(`SELECT COUNT(*) AS n FROM pedidos WHERE numero IS NULL AND estado IN ('Realizado','Cobrado')`);
     if (Number(numerados[0].n) === 0 && Number(sinNumero[0].n) > 0) {
       await pool.execute(
         `UPDATE pedidos p
-         JOIN (SELECT id, YEAR(fecha) AS a, ROW_NUMBER() OVER (PARTITION BY YEAR(fecha) ORDER BY id) AS n
-               FROM pedidos) t ON t.id = p.id
+         JOIN (SELECT id, YEAR(fecha) AS a, ROW_NUMBER() OVER (PARTITION BY YEAR(fecha) ORDER BY fecha, hora, id) AS n
+               FROM pedidos WHERE estado IN ('Realizado','Cobrado')) t ON t.id = p.id
          SET p.anio = t.a, p.numero = t.n`
       );
     }

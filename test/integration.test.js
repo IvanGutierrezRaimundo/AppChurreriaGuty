@@ -112,19 +112,42 @@ function makeDbState() {
         return [{ affectedRows: 1 }];
       }
 
-      if (query.includes('SELECT COALESCE(MAX(id), 0) AS max_id, COALESCE(MAX(CASE')) {
+      if (query.includes('SELECT COALESCE(MAX(numero), 0) AS max_num FROM pedidos WHERE anio = ?')) {
         const anio = Number(params[0]);
-        const maxId = state.pedidos.reduce((acc, item) => Math.max(acc, item.id), 0);
-        const maxNum = state.pedidos.filter((item) => item.anio === anio).reduce((acc, item) => Math.max(acc, item.numero), 0);
-        return [[{ max_id: maxId, max_num: maxNum }]];
+        const maxNum = state.pedidos.filter((item) => item.anio === anio).reduce((acc, item) => Math.max(acc, item.numero || 0), 0);
+        return [[{ max_num: maxNum }]];
+      }
+
+      if (query.includes('UPDATE pedidos SET anio = ?, numero = ? WHERE id = ? AND numero IS NULL')) {
+        const [anio, numero, id] = params;
+        const pedido = state.pedidos.find((item) => item.id === Number(id) && item.numero == null);
+        if (!pedido) return [{ affectedRows: 0 }];
+        pedido.anio = anio;
+        pedido.numero = numero;
+        return [{ affectedRows: 1 }];
+      }
+
+      if (query.includes(`UPDATE pedidos SET estado = 'Realizado' WHERE id = ? AND estado = 'Pendiente'`)) {
+        const pedido = state.pedidos.find((item) => item.id === Number(params[0]) && item.estado === 'Pendiente');
+        if (!pedido) return [{ affectedRows: 0 }];
+        pedido.estado = 'Realizado';
+        return [{ affectedRows: 1 }];
+      }
+
+      if (query.includes(`SELECT id FROM pedidos WHERE estado = 'Pendiente' AND TIMESTAMP(fecha, hora) <= ?`)) {
+        const limite = String(params[0]);
+        const vencidos = state.pedidos
+          .filter((item) => item.estado === 'Pendiente' && `${item.fecha} ${item.hora}`.slice(0, 19) <= limite)
+          .sort((a, b) => `${a.fecha} ${a.hora}`.localeCompare(`${b.fecha} ${b.hora}`) || a.id - b.id);
+        return [vencidos.map((item) => ({ id: item.id }))];
       }
 
       if (query.includes('INSERT INTO pedidos')) {
-        const [id, anio, numero, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, precio_churro, precio_chocolate, precio_envio, descuento, suplemento] = params;
+        const [id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, precio_churro, precio_chocolate, precio_envio, descuento, suplemento] = params;
         const row = {
           id,
-          anio,
-          numero,
+          anio: null,
+          numero: null,
           nombre,
           telefono,
           email: email ?? null,
@@ -614,6 +637,8 @@ test('DELETE /admin/api/pedidos/:id solo permite borrar el último pedido', asyn
   const first = await request(app).post('/api/pedidos').send(payload);
   const second = await request(app).post('/api/pedidos').send(payload);
 
+  await agent.put(`/admin/api/pedidos/${first.body.id}`).send({ estado: 'Realizado' });
+  await agent.put(`/admin/api/pedidos/${second.body.id}`).send({ estado: 'Realizado' });
   await agent.put(`/admin/api/pedidos/${first.body.id}`).send({ estado: 'Cancelado' });
   await agent.put(`/admin/api/pedidos/${second.body.id}`).send({ estado: 'Cancelado' });
 
@@ -628,8 +653,9 @@ test('DELETE /admin/api/pedidos/:id solo permite borrar el último pedido', asyn
   assert.equal(nowLast.status, 200);
 });
 
-test('el Nº de factura se reinicia cada año y no repite id interno', async () => {
-  const app = loadAppWithDb(makeDbState());
+test('el Nº de factura se asigna al pasar a Realizado/Cobrado, correlativo por año en curso', async () => {
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
   const agent = request.agent(app);
 
   await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
@@ -643,29 +669,65 @@ test('el Nº de factura se reinicia cada año y no repite id interno', async () 
     churros_por_persona: 12,
     chocolates: 0,
   };
-  const a = await request(app).post('/api/pedidos').send({ ...base, fecha: '2026-12-30' });
-  const b = await request(app).post('/api/pedidos').send({ ...base, fecha: '2026-12-31' });
-  const c = await request(app).post('/api/pedidos').send({ ...base, fecha: '2027-01-01' });
-  const d = await request(app).post('/api/pedidos').send({ ...base, fecha: '2027-01-02' });
+  const a = await request(app).post('/api/pedidos').send({ ...base, fecha: '2099-12-30' });
+  const b = await request(app).post('/api/pedidos').send({ ...base, fecha: '2099-12-31' });
+  const c = await request(app).post('/api/pedidos').send({ ...base, fecha: '2099-12-31' });
 
-  assert.deepEqual([a, b, c, d].map((r) => r.body.num_factura), ['1/2026', '2/2026', '1/2027', '2/2027']);
-  assert.equal(new Set([a, b, c, d].map((r) => r.body.id)).size, 4);
+  // Un pedido nuevo no tiene Nº de factura.
+  assert.equal(a.body.num_factura, undefined);
+  assert.equal(new Set([a, b, c].map((r) => r.body.id)).size, 3);
+  assert.equal(db.state.pedidos.every((p) => p.numero === null && p.anio === null), true);
 
-  const detalle = await agent.get(`/admin/api/pedidos/${c.body.id}`);
-  assert.equal(detalle.body.data.num_factura, '1/2027');
+  const anioActual = new Date().getFullYear();
+  const putB = await agent.put(`/admin/api/pedidos/${b.body.id}`).send({ estado: 'Realizado' });
+  assert.equal(putB.body.data.num_factura, `1/${anioActual}`);
+  const putA = await agent.put(`/admin/api/pedidos/${a.body.id}`).send({ estado: 'Cobrado' });
+  assert.equal(putA.body.data.num_factura, `2/${anioActual}`);
 
-  // Cambiar la fecha a otro año cambiaría el Nº de factura: se rechaza.
-  const cambioAnio = await agent.put(`/admin/api/pedidos/${b.body.id}`).send({ fecha: '2027-01-05' });
-  assert.equal(cambioAnio.status, 400);
+  // Cambiar de Realizado a Cobrado no cambia el número ya asignado.
+  const putB2 = await agent.put(`/admin/api/pedidos/${b.body.id}`).send({ estado: 'Cobrado' });
+  assert.equal(putB2.body.data.num_factura, `1/${anioActual}`);
 
-  // Borrar el último de 2026 libera el 2/2026 para el siguiente pedido de ese año.
+  // Cancelar un pedido pendiente no le asigna número y se puede borrar libremente.
+  await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ estado: 'Cancelado' });
+  const borradoSinNumero = await agent.delete(`/admin/api/pedidos/${c.body.id}`);
+  assert.equal(borradoSinNumero.status, 200);
+
+  // Un pedido numerado solo se borra si es el último del año.
   await agent.put(`/admin/api/pedidos/${b.body.id}`).send({ estado: 'Cancelado' });
-  const noUltimoDelAnio = await agent.delete(`/admin/api/pedidos/${a.body.id}`);
+  const noUltimoDelAnio = await agent.delete(`/admin/api/pedidos/${b.body.id}`);
   assert.equal(noUltimoDelAnio.status, 400);
-  const borrado = await agent.delete(`/admin/api/pedidos/${b.body.id}`);
-  assert.equal(borrado.status, 200);
-  const e = await request(app).post('/api/pedidos').send({ ...base, fecha: '2026-12-31' });
-  assert.equal(e.body.num_factura, '2/2026');
+});
+
+test('marcarPedidosVencidos pasa a Realizado los pendientes vencidos y les asigna número correlativo', async () => {
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
+  const { marcarPedidosVencidos } = require('../server');
+
+  const base = {
+    nombre: 'Ana García',
+    telefono: '612345678',
+    hora: '18:00',
+    metodo_pago: 'efectivo',
+    personas: 10,
+    churros_por_persona: 12,
+    chocolates: 0,
+  };
+  const tarde = await request(app).post('/api/pedidos').send({ ...base, fecha: '2020-01-02' });
+  const temprano = await request(app).post('/api/pedidos').send({ ...base, fecha: '2020-01-01' });
+  const futuro = await request(app).post('/api/pedidos').send({ ...base, fecha: '2099-01-01' });
+
+  const ahora = new Date(2026, 5, 15, 12, 0, 0);
+  const n = await marcarPedidosVencidos(ahora);
+  assert.equal(n, 2);
+
+  const porId = (id) => db.state.pedidos.find((p) => p.id === id);
+  assert.deepEqual([porId(temprano.body.id).estado, porId(temprano.body.id).anio, porId(temprano.body.id).numero], ['Realizado', 2026, 1]);
+  assert.deepEqual([porId(tarde.body.id).estado, porId(tarde.body.id).anio, porId(tarde.body.id).numero], ['Realizado', 2026, 2]);
+  assert.deepEqual([porId(futuro.body.id).estado, porId(futuro.body.id).numero], ['Pendiente', null]);
+
+  // Una segunda pasada no repite ni renumera.
+  assert.equal(await marcarPedidosVencidos(ahora), 0);
 });
 
 test('GET /admin/api/pedidos soporta búsqueda y paginación', async () => {

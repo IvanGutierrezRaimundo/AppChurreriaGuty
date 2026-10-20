@@ -138,11 +138,6 @@ async function buildFacturaItems(pedido){
 }
 
 async function downloadFacturaPdf(pedidoId){
-  if(!window.jspdf || !window.jspdf.jsPDF || typeof window.jspdf.jsPDF !== 'function'){
-    await showActionAlert({ title: 'Error', message: 'No se pudo cargar la librería PDF. Inténtalo de nuevo.' });
-    return;
-  }
-
   let pedido = null;
   try {
     pedido = await fetchPedidoById(pedidoId);
@@ -152,6 +147,20 @@ async function downloadFacturaPdf(pedidoId){
       return;
     }
     await showActionAlert({ title: 'Error', message: 'No se pudo cargar el pedido para generar la factura.' });
+    return;
+  }
+
+  const estado = String(pedido?.estado || '').trim().toLowerCase();
+  if(estado !== 'realizado' && estado !== 'cobrado'){
+    await showActionAlert({
+      title: 'Aviso',
+      message: 'Sólo se pueden generar facturas con estado realizado o cobrado'
+    });
+    return;
+  }
+
+  if(!window.jspdf || !window.jspdf.jsPDF || typeof window.jspdf.jsPDF !== 'function'){
+    await showActionAlert({ title: 'Error', message: 'No se pudo cargar la librería PDF. Inténtalo de nuevo.' });
     return;
   }
 

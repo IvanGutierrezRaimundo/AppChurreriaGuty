@@ -98,6 +98,7 @@
       white-space: nowrap;
     }
     th.sortable{ cursor: pointer; user-select: none; white-space: nowrap; }
+    #pedidosTable td:nth-child(1),
     #pedidosTable td:nth-child(n+3):nth-child(-n+5){ text-align: center; }
     th .sort-icons{ margin-left: 3px; font-size: 0.68rem; color: var(--color-muted); display:inline-flex; gap:1px; }
     th[data-dir="asc"] .arrow-up{ color: var(--color-brown); }
@@ -258,16 +259,6 @@
     }
     .estado-cell{ cursor: pointer; }
     .estado-cell .pedido-estado-badge{ pointer-events: none; }
-    td.estado-cell.estado-expirado{
-      background: #FEE2E2;
-      box-shadow: inset 0 0 0 1px #FCA5A5;
-    }
-    .pedido-card-head .estado-cell.estado-expirado{
-      background: #FEE2E2;
-      border: 1px solid #FCA5A5;
-      border-radius: 10px;
-      padding: 4px 8px;
-    }
     .estado-modal-backdrop{
       position: fixed;
       inset: 0;
@@ -361,7 +352,7 @@
   <table id="pedidosTable">
     <thead>
       <tr>
-        <th class="sortable" data-sort="id">Nº fact. <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
+        <th class="sortable" data-sort="id">Nº <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="nombre">Cliente <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="personas">Personas <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
         <th class="sortable" data-sort="churros_por_persona">Churros por persona <span class="sort-icons"><span class="arrow-up">▲</span><span class="arrow-down">▼</span></span></th>
@@ -517,24 +508,6 @@
       const estado = estadoRaw || 'Pendiente';
       return `<span class="pedido-estado-badge ${getEstadoBadgeClass(estado)}">${getEstadoBadgeText(estado)}</span>`;
     }
-    const PEDIDO_EXPIRADO_MSG = 'Pedido expirado, cambie el estado a realizado, cobrado o cancelado';
-    function isPedidoFechaAnteriorAHoy(fechaRaw){
-      if(!fechaRaw) return false;
-      let fecha = null;
-      const raw = String(fechaRaw).trim();
-      if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
-        fecha = new Date(`${raw}T00:00:00`);
-      } else {
-        const base = raw.includes('T') ? raw.slice(0, 10) : raw;
-        if(/^\d{4}-\d{2}-\d{2}$/.test(base)) fecha = new Date(`${base}T00:00:00`);
-        else fecha = new Date(raw);
-      }
-      if(!fecha || Number.isNaN(fecha.getTime())) return false;
-      fecha.setHours(0, 0, 0, 0);
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-      return fecha.getTime() < hoy.getTime();
-    }
     function updateViewButtons(){
       const isTabla = currentView === 'tabla';
       const isFichas = currentView === 'fichas';
@@ -682,15 +655,11 @@
       loadMoreBtn.style.display = (!infiniteMode && hasMore && currentView !== 'calendario') ? '' : 'none';
     }
     function renderCard(r){
-      const estado = (r.estado || 'Pendiente');
-      const isExpirado = estado === 'Pendiente' && isPedidoFechaAnteriorAHoy(r.fecha);
-      const estadoCellClass = isExpirado ? ' estado-expirado' : '';
-      const estadoTitle = isExpirado ? PEDIDO_EXPIRADO_MSG : 'Cambiar estado';
       return `
         <article class="pedido-card">
           <div class="pedido-card-head">
             <span class="pedido-card-id">#${r.num_factura || r.id}</span>
-            <span class="estado-cell${estadoCellClass}" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="${estadoTitle}">${renderEstadoBadge(r.estado)}</span>
+            <span class="estado-cell" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="Cambiar estado">${renderEstadoBadge(r.estado)}</span>
           </div>
           <div class="pedido-card-grid">
             <div class="pedido-card-row"><span class="pedido-card-label">Cliente</span><span class="pedido-card-value">${r.nombre || ''}</span></div>
@@ -880,10 +849,6 @@
       tbody.innerHTML = '';
       cardsGrid.innerHTML = '';
       for (const r of rows) {
-        const estado = (r.estado || 'Pendiente');
-        const isExpirado = estado === 'Pendiente' && isPedidoFechaAnteriorAHoy(r.fecha);
-        const estadoCellClass = isExpirado ? ' estado-expirado' : '';
-        const estadoTitle = isExpirado ? PEDIDO_EXPIRADO_MSG : 'Cambiar estado';
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${r.num_factura || r.id}</td>
@@ -894,7 +859,7 @@
           <td>${formatDate(r.fecha)}</td>
           <td>${formatTime(r.hora)}</td>
           <td>${r.presupuesto_total}</td>
-          <td class="estado-cell${estadoCellClass}" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="${estadoTitle}">${renderEstadoBadge(r.estado)}</td>
+          <td class="estado-cell" data-id="${r.id}" data-estado="${r.estado || 'Pendiente'}" data-nombre="${(r.nombre || '').replace(/"/g, '&quot;')}" title="Cambiar estado">${renderEstadoBadge(r.estado)}</td>
           <td>
             <span class="btn-row">
               <button data-id="${r.id}" class="open">Abrir</button>

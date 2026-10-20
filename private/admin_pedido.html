@@ -54,11 +54,6 @@
     .pedido-section-blue{ box-shadow: 0 6px 16px rgba(37, 99, 235, 0.14); }
     .pedido-section-rose{ box-shadow: 0 6px 16px rgba(244, 63, 94, 0.14); }
     .pedido-section-brown{ box-shadow: 0 6px 16px rgba(91, 58, 46, 0.16); }
-    .pedido-section-expired{
-      background: #FEE2E2;
-      border-color: #FCA5A5;
-      box-shadow: 0 8px 20px rgba(220, 38, 38, 0.18);
-    }
     .pedido-field{
       border: 1px solid var(--color-border);
       border-radius: 8px;
@@ -293,7 +288,6 @@
     let currentPedido = null;
     let actionAlertResolver = null;
     let actionAlertMode = 'alert';
-    const PEDIDO_EXPIRADO_MSG = 'Pedido expirado, cambie el estado a realizado, cobrado o cancelado';
 
     // Precios vigentes, cargados siempre desde la base de datos (nunca hardcodeados aquí).
     const PRECIOS = { churro: null, chocolate: null, envio: null };
@@ -407,24 +401,6 @@
 
     function boolText(v){ return v ? 'Sí' : 'No'; }
 
-    function isPedidoFechaAnteriorAHoy(fechaRaw){
-      if(!fechaRaw) return false;
-      let fecha = null;
-      const raw = String(fechaRaw).trim();
-      if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
-        fecha = new Date(`${raw}T00:00:00`);
-      } else {
-        const base = raw.includes('T') ? raw.slice(0, 10) : raw;
-        if(/^\d{4}-\d{2}-\d{2}$/.test(base)) fecha = new Date(`${base}T00:00:00`);
-        else fecha = new Date(raw);
-      }
-      if(!fecha || Number.isNaN(fecha.getTime())) return false;
-      fecha.setHours(0, 0, 0, 0);
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-      return fecha.getTime() < hoy.getTime();
-    }
-
     function getEstadoBadgeClass(estadoRaw){
       const estado = estadoRaw || 'Pendiente';
       switch(estado){
@@ -459,12 +435,6 @@
     function renderDetail(){
       if(!currentPedido) return;
       const p = currentPedido;
-      const isExpirado = (p.estado || 'Pendiente') === 'Pendiente' && isPedidoFechaAnteriorAHoy(p.fecha);
-      if(pedidoTopSection){
-        pedidoTopSection.classList.toggle('pedido-section-expired', isExpirado);
-        if(isExpirado) pedidoTopSection.setAttribute('title', PEDIDO_EXPIRADO_MSG);
-        else pedidoTopSection.removeAttribute('title');
-      }
       document.getElementById('pedidoDetailTitle').textContent = p.nombre ? `Detalle de pedido - ${p.nombre}` : 'Detalle de pedido';
       setValue('d_id', p.num_factura || p.id);
       document.getElementById('d_estado').innerHTML = renderEstadoBadge(p.estado);
