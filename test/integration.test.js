@@ -614,19 +614,29 @@ test('DELETE /admin/api/pedidos/:id solo permite borrar con estado Cancelado', a
       chocolates: 0,
     });
 
+  const db = makeDbState();
+  const app2 = loadAppWithDb(db);
+  const agent2 = request.agent(app2);
+  await agent2.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+  const base = {
+    nombre: 'Ana García', telefono: '612345678', fecha: '2099-01-01', hora: '18:00',
+    metodo_pago: 'efectivo', personas: 10, churros_por_persona: 12, chocolates: 0,
+  };
+  const p1 = await request(app2).post('/api/pedidos').send(base);
+  const p2 = await request(app2).post('/api/pedidos').send(base);
+  await vencer(db, p2.body.id);
+  const realizadoDelete = await agent2.delete(`/admin/api/pedidos/${p2.body.id}`);
+  assert.equal(realizadoDelete.status, 400);
+  assert.match(realizadoDelete.body.error, /Pendiente o Cancelado/);
+  const pendienteDelete = await agent2.delete(`/admin/api/pedidos/${p1.body.id}`);
+  assert.equal(pendienteDelete.status, 200);
+
   const pendingDelete = await agent.delete(`/admin/api/pedidos/${created.body.id}`);
-  assert.equal(pendingDelete.status, 400);
-  assert.match(pendingDelete.body.error, /Cancelado/i);
-
-  const changeStatus = await agent.put(`/admin/api/pedidos/${created.body.id}`).send({ estado: 'Cancelado' });
-  assert.equal(changeStatus.status, 200);
-
-  const canceledDelete = await agent.delete(`/admin/api/pedidos/${created.body.id}`);
-  assert.equal(canceledDelete.status, 200);
-  assert.equal(canceledDelete.body.ok, true);
+  assert.equal(pendingDelete.status, 200);
+  assert.equal(pendingDelete.body.ok, true);
 });
 
-test('DELETE /admin/api/pedidos/:id solo permite borrar el último pedido', async () => {
+test('DELETE /admin/api/pedidos/:id no permite borrar pedidos con Nº de factura', async () => {
   const db = makeDbState();
   const app = loadAppWithDb(db);
   const agent = request.agent(app);
@@ -653,13 +663,10 @@ test('DELETE /admin/api/pedidos/:id solo permite borrar el último pedido', asyn
 
   const notLast = await agent.delete(`/admin/api/pedidos/${first.body.id}`);
   assert.equal(notLast.status, 400);
-  assert.match(notLast.body.error, /último/i);
+  assert.match(notLast.body.error, /Nº de factura/i);
 
   const last = await agent.delete(`/admin/api/pedidos/${second.body.id}`);
-  assert.equal(last.status, 200);
-
-  const nowLast = await agent.delete(`/admin/api/pedidos/${first.body.id}`);
-  assert.equal(nowLast.status, 200);
+  assert.equal(last.status, 400);
 });
 
 test('el Nº de factura se asigna al pasar a Realizado/Cobrado, correlativo por año en curso', async () => {
@@ -706,7 +713,7 @@ test('el Nº de factura se asigna al pasar a Realizado/Cobrado, correlativo por 
   const borradoSinNumero = await agent.delete(`/admin/api/pedidos/${c.body.id}`);
   assert.equal(borradoSinNumero.status, 200);
 
-  // Un pedido numerado solo se borra si es el último del año.
+  // Un pedido con número no se puede borrar nunca.
   await agent.put(`/admin/api/pedidos/${b.body.id}`).send({ estado: 'Cancelado' });
   const noUltimoDelAnio = await agent.delete(`/admin/api/pedidos/${b.body.id}`);
   assert.equal(noUltimoDelAnio.status, 400);
@@ -784,6 +791,86 @@ test('un pedido Realizado no puede volver a Pendiente, solo pasar a Cobrado o Ca
   await vencer(db, otro.body.id);
   const cobrar = await agent.put(`/admin/api/pedidos/${otro.body.id}`).send({ estado: 'Cobrado' });
   assert.equal(cobrar.status, 200);
+});
+
+test('un pedido Cancelado vuelve a Pendiente si no ha vencido, o a Realizado con su mismo Nº si ya venció', async () => {
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+  const base = {
+    nombre: 'Ana García',
+    telefono: '612345678',
+    fecha: '2099-01-01',
+    hora: '18:00',
+    metodo_pago: 'efectivo',
+    personas: 10,
+    churros_por_persona: 12,
+    chocolates: 0,
+  };
+
+  const futuro = await request(app).post('/api/pedidos').send(base);
+  await agent.put(`/admin/api/pedidos/${futuro.body.id}`).send({ estado: 'Cancelado' });
+  const aRealizado = await agent.put(`/admin/api/pedidos/${futuro.body.id}`).send({ estado: 'Realizado' });
+  assert.equal(aRealizado.status, 400);
+  const aPendiente = await agent.put(`/admin/api/pedidos/${futuro.body.id}`).send({ estado: 'Pendiente' });
+  assert.equal(aPendiente.status, 200);
+  assert.equal(aPendiente.body.data.estado, 'Pendiente');
+
+  const vencido = await request(app).post('/api/pedidos').send(base);
+  await vencer(db, vencido.body.id);
+  const numero = db.state.pedidos.find((p) => p.id === vencido.body.id).numero;
+  assert.ok(numero);
+  await agent.put(`/admin/api/pedidos/${vencido.body.id}`).send({ estado: 'Cancelado' });
+  const aPend = await agent.put(`/admin/api/pedidos/${vencido.body.id}`).send({ estado: 'Pendiente' });
+  assert.equal(aPend.status, 400);
+  const aCobrado = await agent.put(`/admin/api/pedidos/${vencido.body.id}`).send({ estado: 'Cobrado' });
+  assert.equal(aCobrado.status, 400);
+  const vuelve = await agent.put(`/admin/api/pedidos/${vencido.body.id}`).send({ estado: 'Realizado' });
+  assert.equal(vuelve.status, 200);
+  assert.equal(db.state.pedidos.find((p) => p.id === vencido.body.id).numero, numero);
+});
+
+test('un pedido Cobrado solo puede pasar a Realizado o Cancelado, con el mismo Nº', async () => {
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+  const c = await request(app).post('/api/pedidos').send({
+    nombre: 'Ana García', telefono: '612345678', fecha: '2099-01-01', hora: '18:00',
+    metodo_pago: 'efectivo', personas: 10, churros_por_persona: 12, chocolates: 0,
+  });
+  await vencer(db, c.body.id);
+  await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ estado: 'Cobrado' });
+  const numero = db.state.pedidos.find((p) => p.id === c.body.id).numero;
+
+  const aPend = await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ estado: 'Pendiente' });
+  assert.equal(aPend.status, 400);
+  const aReal = await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ estado: 'Realizado' });
+  assert.equal(aReal.status, 200);
+  await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ estado: 'Cobrado' });
+  const aCanc = await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ estado: 'Cancelado' });
+  assert.equal(aCanc.status, 200);
+  assert.equal(db.state.pedidos.find((p) => p.id === c.body.id).numero, numero);
+});
+
+test('no se puede cambiar fecha/hora de un pedido con Nº de factura o vencido', async () => {
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+  const c = await request(app).post('/api/pedidos').send({
+    nombre: 'Ana García', telefono: '612345678', fecha: '2099-01-01', hora: '18:00',
+    metodo_pago: 'efectivo', personas: 10, churros_por_persona: 12, chocolates: 0,
+  });
+  const ok = await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ fecha: '2099-02-01', hora: '19:00' });
+  assert.equal(ok.status, 200);
+  await vencer(db, c.body.id);
+  const mal = await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ fecha: '2099-03-01' });
+  assert.equal(mal.status, 400);
+  assert.match(mal.body.error, /fecha ni la hora/);
+  const igual = await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ fecha: '2000-01-01', hora: '19:00', nombre: 'Otro' });
+  assert.equal(igual.status, 200);
 });
 
 test('GET /admin/api/pedidos soporta búsqueda y paginación', async () => {

@@ -672,22 +672,34 @@
           </div>
           <span class="btn-row">
             <button data-id="${r.id}" class="open">Abrir</button>
-            <button data-id="${r.id}" class="factura">Factura</button>
+            ${renderAccionFactura(r)}
           </span>
         </article>
       `;
     }
+    function pedidoVencido(fecha, hora){
+      const f = String(fecha || '').slice(0, 10);
+      const h = String(hora || '00:00').slice(0, 5);
+      const d = new Date(`${f}T${h}:00`);
+      return !Number.isNaN(d.getTime()) && d.getTime() <= Date.now();
+    }
+    function aplicarReglasEstado(selectEl, estado, vencido){
+      const actual = estado || 'Pendiente';
+      const permitidos = {
+        Pendiente: ['Pendiente', 'Cancelado'],
+        Realizado: ['Realizado', 'Cobrado', 'Cancelado'],
+        Cobrado: ['Cobrado', 'Realizado', 'Cancelado'],
+        Cancelado: vencido ? ['Cancelado', 'Realizado'] : ['Cancelado', 'Pendiente'],
+      }[actual];
+      selectEl.querySelectorAll('option').forEach((opt) => {
+        opt.disabled = permitidos ? !permitidos.includes(opt.value) : false;
+      });
+    }
     function openEstadoModal(id, estadoRaw, nombre){
       editingEstadoId = Number(id);
       estadoModalSelect.value = estadoRaw || 'Pendiente';
-      // Pendiente solo admite Cancelado; Realizado no puede volver a Pendiente.
-      const optPendiente = estadoModalSelect.querySelector('option[value="Pendiente"]');
-      if(optPendiente) optPendiente.disabled = estadoRaw === 'Realizado';
-      ['Realizado', 'Cobrado'].forEach((valor) => {
-        const opt = estadoModalSelect.querySelector(`option[value="${valor}"]`);
-        if(opt) opt.disabled = (estadoRaw || 'Pendiente') === 'Pendiente';
-      });
       const filaEstado = currentRows.find((r) => Number(r.id) === Number(id));
+      aplicarReglasEstado(estadoModalSelect, estadoRaw, filaEstado && pedidoVencido(filaEstado.fecha, filaEstado.hora));
       estadoModalText.textContent = `Pedido #${(filaEstado && filaEstado.num_factura) || id}${nombre ? ` · ${nombre}` : ''}`;
       estadoModalError.textContent = '';
       estadoModalBackdrop.classList.add('is-open');
@@ -870,7 +882,7 @@
           <td>
             <span class="btn-row">
               <button data-id="${r.id}" class="open">Abrir</button>
-              <button data-id="${r.id}" class="factura">Factura</button>
+              ${renderAccionFactura(r)}
             </span>
           </td>
         `;
@@ -1081,7 +1093,41 @@
       });
     }
 
+    // Sin Nº de factura (Pendiente, o Cancelado antes de vencer) no hay factura que imprimir: se ofrece eliminar.
+    function renderAccionFactura(r){
+      const estado = r.estado || 'Pendiente';
+      if(!r.num_factura && (estado === 'Pendiente' || estado === 'Cancelado')){
+        return `<button data-id="${r.id}" class="eliminar">Eliminar</button>`;
+      }
+      return `<button data-id="${r.id}" class="factura">Factura</button>`;
+    }
+
     function bindActions() {
+      document.querySelectorAll('button.eliminar').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          if(!id) return;
+          const fila = currentRows.find((r) => Number(r.id) === Number(id));
+          const confirmed = await askActionConfirm({
+            title: 'Confirmación',
+            message: `Vas a eliminar el pedido #${id}${fila && fila.nombre ? ` · ${fila.nombre}` : ''} para siempre de la base de datos.\n\n¿Deseas continuar?`,
+            acceptText: 'Eliminar'
+          });
+          if(!confirmed) return;
+          try {
+            const res = await fetch(`/admin/api/pedidos/${id}`, { method: 'DELETE' });
+            if(res.status === 401){ location.href = '/admin'; return; }
+            const data = await res.json();
+            if(!data || !data.ok){
+              await showActionAlert({ title: 'Error', message: data?.error || 'Error' });
+              return;
+            }
+            await load();
+          } catch(_err){
+            await showActionAlert({ title: 'Error', message: 'Error eliminando pedido.' });
+          }
+        });
+      });
       document.querySelectorAll('button.factura').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');

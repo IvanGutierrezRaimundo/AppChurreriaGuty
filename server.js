@@ -1337,38 +1337,27 @@ app.delete('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     if (!rows || rows.length === 0) {
       return res.status(404).json({ ok: false, error: 'Pedido no encontrado' });
     }
-    if ((rows[0].estado || 'Pendiente') !== 'Cancelado') {
+    const estadoPedido = rows[0].estado || 'Pendiente';
+    if (estadoPedido !== 'Cancelado' && estadoPedido !== 'Pendiente') {
       return res.status(400).json({
         ok: false,
-        error: 'Solo se puede eliminar un pedido con estado Cancelado.'
+        error: 'Solo se puede eliminar un pedido con estado Pendiente o Cancelado.'
       });
     }
-    const anioPedido = rows[0].anio == null ? null : Number(rows[0].anio);
     const numeroPedido = rows[0].numero == null ? null : Number(rows[0].numero);
-    // Un pedido con Nº de factura solo se puede borrar si es el último de su año, para no romper la
-    // numeración correlativa. Los pedidos sin número (nunca realizados) se borran libremente.
-    // El bloqueo de los contadores evita carreras con altas simultáneas.
+    // Un pedido con Nº de factura (fecha ya vencida) nunca se elimina: se conserva la numeración fiscal.
+    if (numeroPedido !== null) {
+      return res.status(400).json({
+        ok: false,
+        error: 'No se puede eliminar un pedido con Nº de factura.'
+      });
+    }
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
       await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = 0 FOR UPDATE');
-      if (numeroPedido !== null) {
-        await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = ? FOR UPDATE', [anioPedido]);
-        const [maxNumRows] = await conn.execute('SELECT MAX(numero) AS max_num FROM pedidos WHERE anio = ?', [anioPedido]);
-        if (Number(maxNumRows?.[0]?.max_num) !== numeroPedido) {
-          await conn.rollback();
-          return res.status(400).json({
-            ok: false,
-            error: 'Solo se puede eliminar el último pedido (el de mayor número) de su año y debe estar Cancelado.'
-          });
-        }
-      }
       const [result] = await conn.execute('DELETE FROM pedidos WHERE id = ?', [id]);
-      // Los contadores retroceden para que el siguiente pedido reutilice el número y no haya huecos.
-      if (numeroPedido !== null) {
-        const [nuevoNumRows] = await conn.execute('SELECT MAX(numero) AS max_num FROM pedidos WHERE anio = ?', [anioPedido]);
-        await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = ?', [Number(nuevoNumRows?.[0]?.max_num) || 0, anioPedido]);
-      }
+      // El contador de ids retrocede para que el siguiente pedido reutilice el id si era el último.
       const [nuevoIdRows] = await conn.execute('SELECT MAX(id) AS max_id FROM pedidos');
       await conn.execute('UPDATE contador_facturas SET ultimo = ? WHERE anio = 0', [Number(nuevoIdRows?.[0]?.max_id) || 0]);
       await conn.commit();
@@ -1398,6 +1387,10 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     // Un pedido Realizado ya tiene Nº de factura: no puede volver a Pendiente.
     if (current.estado === 'Realizado' && body.estado === 'Pendiente') {
       return res.status(400).json({ ok: false, error: 'Un pedido Realizado solo puede pasar a Cobrado o Cancelado.' });
+    }
+    // Un pedido Cobrado solo puede pasar a Realizado o Cancelado (conserva su Nº de factura).
+    if (current.estado === 'Cobrado' && body.estado === 'Pendiente') {
+      return res.status(400).json({ ok: false, error: 'Un pedido Cobrado solo puede pasar a Realizado o Cancelado.' });
     }
     // Un pedido Pendiente solo puede cancelarse; pasa a Realizado automáticamente al vencer.
     if (current.estado === 'Pendiente' && typeof body.estado !== 'undefined' && body.estado !== 'Pendiente' && body.estado !== 'Cancelado') {
@@ -1475,6 +1468,28 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     }
     if (!anioDeFecha(merged.fecha)) {
       return res.status(400).json({ ok: false, error: 'La fecha no es válida.' });
+    }
+    // Un pedido con Nº de factura o ya vencido no admite cambios de fecha/hora.
+    {
+      const fechaActual = current.fecha instanceof Date ? formatoFechaHoraLocal(current.fecha).slice(0, 10) : String(current.fecha).slice(0, 10);
+      const horaActual = String(current.hora || '').slice(0, 5);
+      const hayCambio = merged.fecha !== fechaActual || String(merged.hora).slice(0, 5) !== horaActual;
+      const yaVencido = `${fechaActual} ${String(current.hora || '00:00:00').slice(0, 8)}` <= formatoFechaHoraLocal(new Date());
+      if (hayCambio && (current.numero != null || yaVencido)) {
+        return res.status(400).json({ ok: false, error: 'No se puede modificar la fecha ni la hora de un pedido con Nº de factura o ya vencido.' });
+      }
+    }
+    // Un pedido Cancelado vuelve a Pendiente si su fecha/hora no ha vencido; si ya venció, solo a Realizado
+    // (conserva su Nº de factura si ya lo tenía).
+    if (current.estado === 'Cancelado' && typeof body.estado !== 'undefined' && body.estado !== 'Cancelado') {
+      const fechaStr = merged.fecha instanceof Date ? formatoFechaHoraLocal(merged.fecha).slice(0, 10) : String(merged.fecha).slice(0, 10);
+      const vencido = `${fechaStr} ${merged.hora}` <= formatoFechaHoraLocal(new Date());
+      if (vencido && body.estado !== 'Realizado') {
+        return res.status(400).json({ ok: false, error: 'Un pedido Cancelado con fecha vencida solo puede pasar a Realizado.' });
+      }
+      if (!vencido && body.estado !== 'Pendiente') {
+        return res.status(400).json({ ok: false, error: 'Un pedido Cancelado con fecha vigente solo puede pasar a Pendiente.' });
+      }
     }
     if (merged.solicita_factura === 1 && (!merged.provincia || !merged.nif)) {
       return res.status(400).json({ ok: false, error: 'Provincia y NIF son obligatorios si se solicita factura.' });
