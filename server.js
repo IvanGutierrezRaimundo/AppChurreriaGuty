@@ -401,10 +401,14 @@ async function reservarIdPedido(conn) {
   return id;
 }
 
-// Asigna al pedido el siguiente Nº de factura correlativo del año en curso (1/2026, 2/2026...).
-// No hace nada si ya tiene número. Debe llamarse dentro de una transacción.
+// Asigna al pedido el siguiente Nº de factura correlativo del año de la fecha del pedido (1/2026, 2/2026...),
+// no del año en que se ejecuta (el servidor puede despertar tarde). No hace nada si ya tiene número.
+// Debe llamarse dentro de una transacción.
 async function asignarNumeroFactura(conn, pedidoId, ahora = new Date()) {
-  const anio = ahora.getFullYear();
+  const [pedidoRows] = await conn.execute('SELECT * FROM pedidos WHERE id = ? LIMIT 1', [pedidoId]);
+  const fechaPedido = pedidoRows?.[0]?.fecha;
+  const fechaTexto = fechaPedido instanceof Date ? formatoFechaHoraLocal(fechaPedido) : fechaPedido;
+  const anio = anioDeFecha(fechaTexto) || ahora.getFullYear();
   await conn.execute('INSERT IGNORE INTO contador_facturas (anio, ultimo) VALUES (?, 0)', [anio]);
   const [anioRows] = await conn.execute('SELECT ultimo FROM contador_facturas WHERE anio = ? FOR UPDATE', [anio]);
   const [maxRows] = await conn.execute('SELECT COALESCE(MAX(numero), 0) AS max_num FROM pedidos WHERE anio = ?', [anio]);
@@ -1484,6 +1488,9 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
     if (current.estado === 'Cancelado' && typeof body.estado !== 'undefined' && body.estado !== 'Cancelado') {
       const fechaStr = merged.fecha instanceof Date ? formatoFechaHoraLocal(merged.fecha).slice(0, 10) : String(merged.fecha).slice(0, 10);
       const vencido = `${fechaStr} ${merged.hora}` <= formatoFechaHoraLocal(new Date());
+      if (vencido && current.numero == null) {
+        return res.status(400).json({ ok: false, error: 'Un pedido Cancelado con fecha vencida y sin Nº de factura solo puede eliminarse.' });
+      }
       if (vencido && body.estado !== 'Realizado') {
         return res.status(400).json({ ok: false, error: 'Un pedido Cancelado con fecha vencida solo puede pasar a Realizado.' });
       }

@@ -482,7 +482,7 @@
           Pendiente: ['Pendiente', 'Cancelado'],
           Realizado: ['Realizado', 'Cobrado', 'Cancelado'],
           Cobrado: ['Cobrado', 'Realizado', 'Cancelado'],
-          Cancelado: vencido ? ['Cancelado', 'Realizado'] : ['Cancelado', 'Pendiente'],
+          Cancelado: vencido ? (p.num_factura ? ['Cancelado', 'Realizado'] : ['Cancelado']) : ['Cancelado', 'Pendiente'],
         }[estado || 'Pendiente'];
         selectEl.querySelectorAll('option').forEach((opt) => {
           opt.disabled = permitidos ? !permitidos.includes(opt.value) : false;

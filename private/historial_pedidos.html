@@ -682,13 +682,13 @@
       const d = new Date(`${f}T${h}:00`);
       return !Number.isNaN(d.getTime()) && d.getTime() <= Date.now();
     }
-    function aplicarReglasEstado(selectEl, estado, vencido){
+    function aplicarReglasEstado(selectEl, estado, vencido, tieneNumero){
       const actual = estado || 'Pendiente';
       const permitidos = {
         Pendiente: ['Pendiente', 'Cancelado'],
         Realizado: ['Realizado', 'Cobrado', 'Cancelado'],
         Cobrado: ['Cobrado', 'Realizado', 'Cancelado'],
-        Cancelado: vencido ? ['Cancelado', 'Realizado'] : ['Cancelado', 'Pendiente'],
+        Cancelado: vencido ? (tieneNumero ? ['Cancelado', 'Realizado'] : ['Cancelado']) : ['Cancelado', 'Pendiente'],
       }[actual];
       selectEl.querySelectorAll('option').forEach((opt) => {
         opt.disabled = permitidos ? !permitidos.includes(opt.value) : false;
@@ -698,7 +698,7 @@
       editingEstadoId = Number(id);
       estadoModalSelect.value = estadoRaw || 'Pendiente';
       const filaEstado = currentRows.find((r) => Number(r.id) === Number(id));
-      aplicarReglasEstado(estadoModalSelect, estadoRaw, filaEstado && pedidoVencido(filaEstado.fecha, filaEstado.hora));
+      aplicarReglasEstado(estadoModalSelect, estadoRaw, filaEstado && pedidoVencido(filaEstado.fecha, filaEstado.hora), filaEstado && !!filaEstado.num_factura);
       estadoModalText.textContent = `Pedido #${(filaEstado && filaEstado.num_factura) || id}${nombre ? ` · ${nombre}` : ''}`;
       estadoModalError.textContent = '';
       estadoModalBackdrop.classList.add('is-open');

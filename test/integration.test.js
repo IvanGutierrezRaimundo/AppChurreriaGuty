@@ -694,7 +694,7 @@ test('el Nº de factura se asigna al pasar a Realizado/Cobrado, correlativo por 
   assert.equal(new Set([a, b, c].map((r) => r.body.id)).size, 3);
   assert.equal(db.state.pedidos.every((p) => p.numero === null && p.anio === null), true);
 
-  const anioActual = new Date().getFullYear();
+  const anioActual = 2000; // `vencer` fija la fecha del pedido en 2000: el año sale de la fecha del pedido
   const putB = await vencer(db, b.body.id);
   assert.equal(db.state.pedidos.find((p) => p.id === b.body.id).numero, 1);
   const putA = await vencer(db, a.body.id);
@@ -742,8 +742,8 @@ test('marcarPedidosVencidos pasa a Realizado los pendientes vencidos y les asign
   assert.equal(n, 2);
 
   const porId = (id) => db.state.pedidos.find((p) => p.id === id);
-  assert.deepEqual([porId(temprano.body.id).estado, porId(temprano.body.id).anio, porId(temprano.body.id).numero], ['Realizado', 2026, 1]);
-  assert.deepEqual([porId(tarde.body.id).estado, porId(tarde.body.id).anio, porId(tarde.body.id).numero], ['Realizado', 2026, 2]);
+  assert.deepEqual([porId(temprano.body.id).estado, porId(temprano.body.id).anio, porId(temprano.body.id).numero], ['Realizado', 2020, 1]);
+  assert.deepEqual([porId(tarde.body.id).estado, porId(tarde.body.id).anio, porId(tarde.body.id).numero], ['Realizado', 2020, 2]);
   assert.deepEqual([porId(futuro.body.id).estado, porId(futuro.body.id).numero], ['Pendiente', null]);
 
   // Una segunda pasada no repite ni renumera.
@@ -871,6 +871,24 @@ test('no se puede cambiar fecha/hora de un pedido con Nº de factura o vencido',
   assert.match(mal.body.error, /fecha ni la hora/);
   const igual = await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ fecha: '2000-01-01', hora: '19:00', nombre: 'Otro' });
   assert.equal(igual.status, 200);
+});
+
+test('un pedido Cancelado vencido sin Nº de factura no puede pasar a Realizado, solo eliminarse', async () => {
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+  const c = await request(app).post('/api/pedidos').send({
+    nombre: 'Ana García', telefono: '612345678', fecha: '2099-01-01', hora: '18:00',
+    metodo_pago: 'efectivo', personas: 10, churros_por_persona: 12, chocolates: 0,
+  });
+  await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ estado: 'Cancelado' });
+  db.state.pedidos.find((p) => p.id === c.body.id).fecha = '2000-01-01';
+  const aReal = await agent.put(`/admin/api/pedidos/${c.body.id}`).send({ estado: 'Realizado' });
+  assert.equal(aReal.status, 400);
+  assert.equal(db.state.pedidos.find((p) => p.id === c.body.id).numero, null);
+  const del = await agent.delete(`/admin/api/pedidos/${c.body.id}`);
+  assert.equal(del.status, 200);
 });
 
 test('GET /admin/api/pedidos soporta búsqueda y paginación', async () => {
