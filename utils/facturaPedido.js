@@ -152,19 +152,20 @@ async function downloadFacturaPdf(pedidoId){
   }
 
   const estado = String(pedido?.estado || '').trim().toLowerCase();
-  // Un pedido cancelado solo tiene factura (marcada CANCELADA) si llegó a numerarse al estar Realizado.
-  const cancelConNumero = estado === 'cancelado' && pedido?.numero != null;
-  if(estado !== 'realizado' && estado !== 'cobrado' && !cancelConNumero){
+  // Con Nº de factura se puede imprimir en cualquier estado (Pendiente el día del pedido, o Cancelado, marcada
+  // CANCELADA). Sin número solo es posible a posteriori en un pedido Realizado o Cobrado.
+  const tieneNumero = pedido?.numero != null;
+  if(!tieneNumero && estado !== 'realizado' && estado !== 'cobrado'){
     await showActionAlert({
       title: 'Aviso',
-      message: 'Sólo se pueden generar facturas con estado realizado o cobrado'
+      message: 'Este pedido aún no tiene número de factura. Se genera el día del pedido si solicita factura, o con estado realizado o cobrado.'
     });
     return false;
   }
 
   // Pedido sin Nº de factura (no la solicitó): solo se numera de forma excepcional, a petición del admin.
   let numeroRecienGenerado = false;
-  if(pedido?.numero == null && !cancelConNumero){
+  if(!tieneNumero){
     if(!pedido?.solicita_factura){
       await showActionAlert({
         title: 'Aviso',

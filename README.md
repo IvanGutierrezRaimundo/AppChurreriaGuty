@@ -208,7 +208,7 @@ Capacidades destacables:
 - Vistas adaptadas a escritorio y móvil.
 - Exportación CSV.
 - Impresión y generación de factura/PDF desde la vista de pedidos.
-- Numeración de facturas: el Nº (`numero/año`) se asigna automáticamente al pasar el pedido a Realizado/Cobrado solo si solicita factura. Si un pedido Realizado/Cobrado que no la pedía la necesita después, se activa "Solicita factura", se rellenan NIF y provincia y se pulsa el botón Factura (con aviso de confirmación): recibe el siguiente Nº del año en curso y el PDF muestra la fecha del pedido y la fecha de facturación.
+- Numeración de facturas: el Nº (`numero/año`) se asigna automáticamente a las 00:00 del día del pedido (el pedido sigue Pendiente hasta que pasa su hora) solo si solicita factura, por orden de hora, para poder imprimir la factura antes del servicio. Si un pedido Realizado/Cobrado que no la pedía la necesita después, se activa "Solicita factura", se rellenan NIF y provincia y se pulsa el botón Factura (con aviso de confirmación): recibe el siguiente Nº del año en curso y el PDF muestra la fecha del pedido y la fecha de facturación.
 - Recalculo del total del pedido según cantidades, envío y descuento.
 - Persistencia del precio usado en el pedido mediante snapshot para que facturas antiguas no cambien si se actualizan los precios globales.
 

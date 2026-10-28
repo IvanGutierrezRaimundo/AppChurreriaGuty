@@ -390,7 +390,7 @@ app.put('/admin/api/precios', ensureAdmin, async (req, res) => {
 });
 
 // Reserva el siguiente id interno del pedido (contador global, anio = 0). El pedido nace sin
-// Nº de factura: este se asigna cuando pasa a Realizado/Cobrado, solo si solicita factura (ver asignarNumeroFactura).
+// Nº de factura: este se asigna el día del pedido, solo si solicita factura (ver asignarNumeroFactura).
 // Debe llamarse dentro de una transacción.
 async function reservarIdPedido(conn) {
   await conn.execute('INSERT IGNORE INTO contador_facturas (anio, ultimo) VALUES (0, 0)');
@@ -436,26 +436,22 @@ function formatoFechaHoraLocal(d) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-// Pasa a Realizado los pedidos Pendientes cuya fecha y hora ya han pasado y, si solicitan factura, les asigna
-// su Nº de factura, en orden cronológico para que la numeración sea correlativa.
+// Cada minuto:
+// 1) Numera los pedidos Pendientes que solicitan factura y ya han llegado a su día (fecha <= hoy), sin cambiar su
+//    estado, para poder imprimir la factura antes del servicio. Se numera por orden de fecha y hora.
+// 2) Pasa a Realizado los pedidos Pendientes cuya fecha y hora ya han pasado.
+// Devuelve cuántos pedidos han pasado a Realizado.
 async function marcarPedidosVencidos(ahora = new Date()) {
-  const [vencidos] = await pool.execute(
-    `SELECT id FROM pedidos WHERE estado = 'Pendiente' AND TIMESTAMP(fecha, hora) <= ? ORDER BY fecha, hora, id`,
-    [formatoFechaHoraLocal(ahora)]
+  const hoy = formatoFechaHoraLocal(ahora).slice(0, 10);
+  const [paraNumerar] = await pool.execute(
+    `SELECT id FROM pedidos WHERE estado = 'Pendiente' AND solicita_factura = 1 AND numero IS NULL AND fecha <= ? ORDER BY fecha, hora, id`,
+    [hoy]
   );
-  let actualizados = 0;
-  for (const { id } of vencidos || []) {
+  for (const { id } of paraNumerar || []) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      const [upd] = await conn.execute(
-        `UPDATE pedidos SET estado = 'Realizado' WHERE id = ? AND estado = 'Pendiente'`,
-        [id]
-      );
-      if (upd && upd.affectedRows === 1) {
-        await asignarNumeroFactura(conn, id, ahora);
-        actualizados += 1;
-      }
+      await asignarNumeroFactura(conn, id, ahora);
       await conn.commit();
     } catch (err) {
       await conn.rollback();
@@ -463,6 +459,19 @@ async function marcarPedidosVencidos(ahora = new Date()) {
     } finally {
       conn.release();
     }
+  }
+
+  const [vencidos] = await pool.execute(
+    `SELECT id FROM pedidos WHERE estado = 'Pendiente' AND TIMESTAMP(fecha, hora) <= ? ORDER BY fecha, hora, id`,
+    [formatoFechaHoraLocal(ahora)]
+  );
+  let actualizados = 0;
+  for (const { id } of vencidos || []) {
+    const [upd] = await pool.execute(
+      `UPDATE pedidos SET estado = 'Realizado' WHERE id = ? AND estado = 'Pendiente'`,
+      [id]
+    );
+    if (upd && upd.affectedRows === 1) actualizados += 1;
   }
   return actualizados;
 }
@@ -1609,8 +1618,8 @@ app.put('/admin/api/pedidos/:id', ensureAdmin, async (req, res) => {
 
       const [result] = await conn.execute(sql, params);
 
-      // El Nº de factura se asigna al pasar el pedido a Realizado o Cobrado si solicita factura. Si ya estaba
-      // Realizado/Cobrado sin número (no la necesitaba), solo se genera con el botón Factura.
+      // Salvaguarda: el Nº de factura se asigna el día del pedido (ver marcarPedidosVencidos). Si un pedido llega a
+      // Realizado/Cobrado sin número y solicita factura, se numera; si no la pedía, solo con el botón Factura.
       if (esEstadoFacturable(merged.estado) && !esEstadoFacturable(current.estado) && current.numero == null) {
         await asignarNumeroFactura(conn, id);
       }
@@ -1898,7 +1907,8 @@ async function ensureSchema() {
     await ensureColumn('precio_envio', 'DECIMAL(10,2) DEFAULT NULL');
     await ensureColumn('descuento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
     await ensureColumn('suplemento', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
-    // Nº de factura: se asigna al pasar a Realizado/Cobrado; id es solo el identificador interno.
+    // Nº de factura: se asigna el día del pedido (aún Pendiente) si solicita factura, o al pasar a Realizado/Cobrado con el botón Factura.
+// id es solo el identificador interno.
     await ensureColumn('anio', 'SMALLINT DEFAULT NULL');
     await ensureColumn('numero', 'INT DEFAULT NULL');
     // Fecha de facturación: solo se rellena en facturas generadas a posteriori en pedidos que no la solicitaban.

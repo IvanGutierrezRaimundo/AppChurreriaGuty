@@ -138,6 +138,14 @@ function makeDbState() {
         return [{ affectedRows: 1 }];
       }
 
+      if (query.includes(`SELECT id FROM pedidos WHERE estado = 'Pendiente' AND solicita_factura = 1 AND numero IS NULL AND fecha <= ?`)) {
+        const hoy = String(params[0]);
+        const pendientes = state.pedidos
+          .filter((item) => item.estado === 'Pendiente' && item.solicita_factura === 1 && item.numero == null && String(item.fecha).slice(0, 10) <= hoy)
+          .sort((a, b) => `${a.fecha} ${a.hora}`.localeCompare(`${b.fecha} ${b.hora}`) || a.id - b.id);
+        return [pendientes.map((item) => ({ id: item.id }))];
+      }
+
       if (query.includes(`SELECT id FROM pedidos WHERE estado = 'Pendiente' AND TIMESTAMP(fecha, hora) <= ?`)) {
         const limite = String(params[0]);
         const vencidos = state.pedidos
@@ -963,6 +971,46 @@ test('un pedido que no solicita factura no se numera; el botón Factura la gener
   await agent.put(`/admin/api/pedidos/${idSin}`).send({ estado: 'Cancelado' });
   const borrar = await agent.delete(`/admin/api/pedidos/${idSin}`);
   assert.equal(borrar.status, 400);
+});
+
+test('el día del pedido se numera la factura (por orden de hora) con el pedido aún Pendiente', async () => {
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
+  const { marcarPedidosVencidos } = require('../server');
+  const base = {
+    ...FACTURA, nombre: 'Ana García', telefono: '612345678', fecha: '2026-06-15',
+    metodo_pago: 'efectivo', personas: 10, churros_por_persona: 12, chocolates: 0,
+  };
+  const tarde = await request(app).post('/api/pedidos').send({ ...base, hora: '20:00' });
+  const temprano = await request(app).post('/api/pedidos').send({ ...base, hora: '09:00' });
+  const sinFactura = await request(app).post('/api/pedidos').send({ ...base, hora: '12:00', solicita_factura: false });
+  const manana = await request(app).post('/api/pedidos').send({ ...base, fecha: '2026-06-16', hora: '08:00' });
+  const porId = (id) => db.state.pedidos.find((p) => p.id === id);
+
+  // Un minuto después de las 00:00 del día del pedido.
+  const n = await marcarPedidosVencidos(new Date(2026, 5, 15, 0, 1, 0));
+  assert.equal(n, 0);
+  assert.deepEqual([porId(temprano.body.id).estado, porId(temprano.body.id).numero], ['Pendiente', 1]);
+  assert.deepEqual([porId(tarde.body.id).estado, porId(tarde.body.id).numero], ['Pendiente', 2]);
+  assert.deepEqual([porId(sinFactura.body.id).estado, porId(sinFactura.body.id).numero], ['Pendiente', null]);
+  assert.equal(porId(manana.body.id).numero, null);
+  assert.equal(porId(temprano.body.id).anio, 2026);
+
+  // Al pasar la hora pasa a Realizado conservando el número, sin renumerar.
+  const m = await marcarPedidosVencidos(new Date(2026, 5, 15, 10, 0, 0));
+  assert.equal(m, 1);
+  assert.deepEqual([porId(temprano.body.id).estado, porId(temprano.body.id).numero], ['Realizado', 1]);
+  assert.deepEqual([porId(tarde.body.id).estado, porId(tarde.body.id).numero], ['Pendiente', 2]);
+  assert.equal(porId(sinFactura.body.id).numero, null);
+
+  // Un pedido Pendiente ya numerado no se puede eliminar, solo cancelar.
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+  const noBorrar = await agent.delete(`/admin/api/pedidos/${tarde.body.id}`);
+  assert.equal(noBorrar.status, 400);
+  const cancelar = await agent.put(`/admin/api/pedidos/${tarde.body.id}`).send({ estado: 'Cancelado' });
+  assert.equal(cancelar.status, 200);
+  assert.equal(cancelar.body.data.num_factura, '2/2026');
 });
 
 test('GET /admin/api/pedidos soporta búsqueda y paginación', async () => {

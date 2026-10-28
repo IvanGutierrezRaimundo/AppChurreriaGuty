@@ -122,7 +122,7 @@ DROP TABLE IF EXISTS `pedidos`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `pedidos` (
-  `id` int unsigned NOT NULL COMMENT 'Identificador interno; el Nº de factura (numero/anio) se asigna al pasar a Realizado/Cobrado si solicita factura, o al pulsar Factura a posteriori',
+  `id` int unsigned NOT NULL COMMENT 'Identificador interno; el Nº de factura (numero/anio) se asigna el dia del pedido (aun Pendiente) si solicita factura, o al pulsar Factura a posteriori',
   `anio` smallint DEFAULT NULL,
   `numero` int DEFAULT NULL,
   `fecha_facturacion` date DEFAULT NULL COMMENT 'Solo en facturas generadas a posteriori en pedidos que no la solicitaban',
@@ -164,7 +164,7 @@ CREATE TABLE `pedidos` (
 
 --
 -- Table structure for table `contador_facturas`
--- anio = 0: ultimo id interno de pedidos; anio = YYYY: ultimo Nº de factura de ese año (asignado al pasar a Realizado/Cobrado si solicita factura)
+-- anio = 0: ultimo id interno de pedidos; anio = YYYY: ultimo Nº de factura de ese año (asignado el dia del pedido si solicita factura)
 --
 
 DROP TABLE IF EXISTS `contador_facturas`;
