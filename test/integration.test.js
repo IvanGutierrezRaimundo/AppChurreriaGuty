@@ -6,6 +6,9 @@ function estadoClienteDuplicado(state, telefono) {
   return Boolean(telefono) && state.clientes.some((cliente) => cliente.telefono === telefono);
 }
 
+// Datos de un pedido que solicita factura (único caso en que se asigna Nº de factura automáticamente).
+const FACTURA = { solicita_factura: true, provincia: 'Asturias', nif: '12345678Z' };
+
 function makeDbState() {
   const state = {
     nextId: 1,
@@ -118,12 +121,13 @@ function makeDbState() {
         return [[{ max_num: maxNum }]];
       }
 
-      if (query.includes('UPDATE pedidos SET anio = ?, numero = ? WHERE id = ? AND numero IS NULL')) {
-        const [anio, numero, id] = params;
+      if (query.includes('UPDATE pedidos SET anio = ?, numero = ?, fecha_facturacion = ? WHERE id = ? AND numero IS NULL')) {
+        const [anio, numero, fechaFacturacion, id] = params;
         const pedido = state.pedidos.find((item) => item.id === Number(id) && item.numero == null);
         if (!pedido) return [{ affectedRows: 0 }];
         pedido.anio = anio;
         pedido.numero = numero;
+        pedido.fecha_facturacion = fechaFacturacion;
         return [{ affectedRows: 1 }];
       }
 
@@ -644,6 +648,7 @@ test('DELETE /admin/api/pedidos/:id no permite borrar pedidos con Nº de factura
   await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
 
   const payload = {
+    ...FACTURA,
     nombre: 'Ana García',
     telefono: '612345678',
     fecha: '2026-09-01',
@@ -677,6 +682,7 @@ test('el Nº de factura se asigna al pasar a Realizado/Cobrado, correlativo por 
   await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
 
   const base = {
+    ...FACTURA,
     nombre: 'Ana García',
     telefono: '612345678',
     hora: '18:00',
@@ -725,6 +731,7 @@ test('marcarPedidosVencidos pasa a Realizado los pendientes vencidos y les asign
   const { marcarPedidosVencidos } = require('../server');
 
   const base = {
+    ...FACTURA,
     nombre: 'Ana García',
     telefono: '612345678',
     hora: '18:00',
@@ -757,6 +764,7 @@ test('un pedido Realizado no puede volver a Pendiente, solo pasar a Cobrado o Ca
   await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
 
   const created = await request(app).post('/api/pedidos').send({
+    ...FACTURA,
     nombre: 'Ana García',
     telefono: '612345678',
     fecha: '2099-01-01',
@@ -779,6 +787,7 @@ test('un pedido Realizado no puede volver a Pendiente, solo pasar a Cobrado o Ca
   assert.ok(cancelar.body.data.num_factura);
 
   const otro = await request(app).post('/api/pedidos').send({
+    ...FACTURA,
     nombre: 'Ana García',
     telefono: '612345678',
     fecha: '2099-01-01',
@@ -799,6 +808,7 @@ test('un pedido Cancelado vuelve a Pendiente si no ha vencido, o a Realizado con
   const agent = request.agent(app);
   await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
   const base = {
+    ...FACTURA,
     nombre: 'Ana García',
     telefono: '612345678',
     fecha: '2099-01-01',
@@ -837,6 +847,7 @@ test('un pedido Cobrado solo puede pasar a Realizado o Cancelado, con el mismo N
   const agent = request.agent(app);
   await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
   const c = await request(app).post('/api/pedidos').send({
+    ...FACTURA,
     nombre: 'Ana García', telefono: '612345678', fecha: '2099-01-01', hora: '18:00',
     metodo_pago: 'efectivo', personas: 10, churros_por_persona: 12, chocolates: 0,
   });
@@ -889,6 +900,69 @@ test('un pedido Cancelado vencido sin Nº de factura no puede pasar a Realizado,
   assert.equal(db.state.pedidos.find((p) => p.id === c.body.id).numero, null);
   const del = await agent.delete(`/admin/api/pedidos/${c.body.id}`);
   assert.equal(del.status, 200);
+});
+
+test('un pedido que no solicita factura no se numera; el botón Factura la genera a posteriori con fecha de facturación', async () => {
+  const db = makeDbState();
+  const app = loadAppWithDb(db);
+  const agent = request.agent(app);
+  await agent.post('/admin/login').send({ username: 'admin', password: 'admin123' });
+  const base = {
+    nombre: 'Ana García', telefono: '612345678', fecha: '2099-01-01', hora: '18:00',
+    metodo_pago: 'efectivo', personas: 10, churros_por_persona: 12, chocolates: 0,
+  };
+  const porId = (id) => db.state.pedidos.find((p) => p.id === id);
+
+  const conFactura = await request(app).post('/api/pedidos').send({ ...base, ...FACTURA });
+  const sinFactura = await request(app).post('/api/pedidos').send(base);
+  const idSin = sinFactura.body.id;
+
+  // Un pedido Pendiente no admite factura a posteriori.
+  const pendiente = await agent.post(`/admin/api/pedidos/${idSin}/factura`);
+  assert.equal(pendiente.status, 400);
+
+  // Al vencer, solo el que solicita factura recibe número.
+  await vencer(db, idSin);
+  await vencer(db, conFactura.body.id);
+  assert.equal(porId(conFactura.body.id).numero, 1);
+  assert.equal(porId(idSin).estado, 'Realizado');
+  assert.equal(porId(idSin).numero, null);
+  assert.equal(porId(conFactura.body.id).fecha_facturacion ?? null, null);
+
+  // Pasar a Cobrado tampoco lo numera.
+  await agent.put(`/admin/api/pedidos/${idSin}`).send({ estado: 'Cobrado' });
+  assert.equal(porId(idSin).numero, null);
+
+  // Sin marcar "solicita factura" no se puede generar.
+  const sinCheck = await agent.post(`/admin/api/pedidos/${idSin}/factura`);
+  assert.equal(sinCheck.status, 400);
+  assert.match(sinCheck.body.error, /Solicita factura/);
+
+  // Marcar el check y guardar los datos tampoco la numera: hace falta el botón Factura.
+  const sinDatos = await agent.put(`/admin/api/pedidos/${idSin}`).send({ solicita_factura: true });
+  assert.equal(sinDatos.status, 400);
+  const conDatos = await agent.put(`/admin/api/pedidos/${idSin}`).send({ solicita_factura: true, provincia: 'Asturias', nif: '12345678Z' });
+  assert.equal(conDatos.status, 200);
+  assert.equal(porId(idSin).numero, null);
+
+  const generada = await agent.post(`/admin/api/pedidos/${idSin}/factura`);
+  assert.equal(generada.status, 200);
+  const anioActual = new Date().getFullYear();
+  // La serie es la del año de facturación (el pedido con factura automática es de otro año).
+  assert.equal(generada.body.data.num_factura, `1/${anioActual}`);
+  assert.equal(porId(idSin).anio, anioActual);
+  assert.match(String(porId(idSin).fecha_facturacion), /^\d{4}-\d{2}-\d{2}$/);
+
+  // Repetir no consume otro número.
+  const repetida = await agent.post(`/admin/api/pedidos/${idSin}/factura`);
+  assert.equal(repetida.status, 200);
+  assert.equal(porId(idSin).numero, 1);
+  assert.equal(db.state.contadores[anioActual], 1);
+
+  // Una vez numerada no se puede eliminar, solo cancelar.
+  await agent.put(`/admin/api/pedidos/${idSin}`).send({ estado: 'Cancelado' });
+  const borrar = await agent.delete(`/admin/api/pedidos/${idSin}`);
+  assert.equal(borrar.status, 400);
 });
 
 test('GET /admin/api/pedidos soporta búsqueda y paginación', async () => {

@@ -1,6 +1,7 @@
 // Generación de factura PDF de un pedido. Compartido por Pedidos e Historial de pedidos.
-// Requiere en la página (ámbito global): jsPDF (window.jspdf), showActionAlert, formatDate,
-// y los autoTable de jspdf-autotable.
+// Requiere en la página (ámbito global): jsPDF (window.jspdf), showActionAlert, askActionConfirm, formatDate,
+// y los autoTable de jspdf-autotable. downloadFacturaPdf devuelve true si ha generado un Nº de factura nuevo
+// (la página debe recargar su lista).
 
 const FACTURA_IVA_RATE_PRODUCTOS = 0.10;
 const FACTURA_IVA_RATE_ENVIO = 0.21;
@@ -158,18 +159,60 @@ async function downloadFacturaPdf(pedidoId){
       title: 'Aviso',
       message: 'Sólo se pueden generar facturas con estado realizado o cobrado'
     });
-    return;
+    return false;
+  }
+
+  // Pedido sin Nº de factura (no la solicitó): solo se numera de forma excepcional, a petición del admin.
+  let numeroRecienGenerado = false;
+  if(pedido?.numero == null && !cancelConNumero){
+    if(!pedido?.solicita_factura){
+      await showActionAlert({
+        title: 'Aviso',
+        message: 'Este pedido no solicita factura. Edita el pedido, activa "Solicita factura" y rellena el NIF y la provincia antes de generarla.'
+      });
+      return false;
+    }
+    if(!pedido?.nif || !pedido?.provincia){
+      await showActionAlert({
+        title: 'Aviso',
+        message: 'Faltan el NIF o la provincia del cliente. Edita el pedido y rellénalos antes de generar la factura.'
+      });
+      return false;
+    }
+    const confirmado = await askActionConfirm({
+      title: 'Importante',
+      message: 'Este pedido no necesitaba factura. ¿Está seguro de generarla?\n\nSi no es la última, después solo podrá cancelarla y no eliminarla.',
+      acceptText: 'Generar factura'
+    });
+    if(!confirmado) return false;
+    try {
+      const resp = await fetch(`/admin/api/pedidos/${pedidoId}/factura`, { method: 'POST', credentials: 'same-origin' });
+      if(resp.status === 401){
+        location.href = '/admin';
+        return false;
+      }
+      const data = await resp.json().catch(() => ({}));
+      if(!resp.ok || !data.ok || !data.data){
+        await showActionAlert({ title: 'Error', message: data?.error || 'No se pudo generar el número de factura.' });
+        return false;
+      }
+      pedido = data.data;
+      numeroRecienGenerado = true;
+    } catch(_err){
+      await showActionAlert({ title: 'Error', message: 'No se pudo generar el número de factura.' });
+      return false;
+    }
   }
 
   if(!window.jspdf || !window.jspdf.jsPDF || typeof window.jspdf.jsPDF !== 'function'){
     await showActionAlert({ title: 'Error', message: 'No se pudo cargar la librería PDF. Inténtalo de nuevo.' });
-    return;
+    return numeroRecienGenerado;
   }
 
   const items = await buildFacturaItems(pedido);
   if(items.length === 0){
     await showActionAlert({ title: 'Aviso', message: 'El pedido no tiene conceptos facturables para generar la factura.' });
-    return;
+    return numeroRecienGenerado;
   }
 
   const envioItem = items.find((item) => item.esEnvio);
@@ -245,14 +288,17 @@ async function downloadFacturaPdf(pedidoId){
   });
 
   const facturaNumero = generateFacturaNumero(pedido);
-  const fechaFactura = formatInvoiceDate(pedido.fecha);
-  const bloqueFacturaY = 170;
+  // Factura generada a posteriori: se muestran la fecha del pedido y, debajo, la fecha de facturación.
+  const fechaFacturacion = pedido.fecha_facturacion ? formatInvoiceDate(pedido.fecha_facturacion) : null;
+  const bloqueFacturaY = fechaFacturacion ? 152 : 170;
   doc.setFont('helvetica', 'bold');
   doc.text('Número de factura:', 40, bloqueFacturaY);
-  doc.text('Fecha:', 40, bloqueFacturaY + 18);
+  doc.text(fechaFacturacion ? 'Fecha del pedido:' : 'Fecha:', 40, bloqueFacturaY + 18);
+  if(fechaFacturacion) doc.text('Fecha de facturación:', 40, bloqueFacturaY + 36);
   doc.setFont('helvetica', 'normal');
   doc.text(facturaNumero, 170, bloqueFacturaY);
-  doc.text(fechaFactura, 170, bloqueFacturaY + 18);
+  doc.text(formatInvoiceDate(pedido.fecha), fechaFacturacion ? 190 : 170, bloqueFacturaY + 18);
+  if(fechaFacturacion) doc.text(fechaFacturacion, 190, bloqueFacturaY + 36);
 
   const clienteY = 210;
   doc.setDrawColor(210, 210, 210);
@@ -354,4 +400,5 @@ async function downloadFacturaPdf(pedidoId){
   const fileSafeAnio = String(pedido?.anio ?? new Date(pedido?.fecha || new Date()).getFullYear() ?? '').trim();
   const fileSafeCliente = String(pedido?.nombre || 'cliente').trim().replace(/[^A-Za-z0-9.-]/g, '_');
   doc.save(`${fileSafeNumero}-${fileSafeAnio}-${fileSafeCliente}.pdf`);
+  return numeroRecienGenerado;
 }

@@ -1094,7 +1094,8 @@
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');
           if(!id) return;
-          await downloadFacturaPdf(Number(id));
+          const nuevoNumero = await downloadFacturaPdf(Number(id));
+          if(nuevoNumero) await load();
         });
       });
       document.querySelectorAll('button.open').forEach(btn => {

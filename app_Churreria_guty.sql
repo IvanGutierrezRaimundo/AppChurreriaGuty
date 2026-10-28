@@ -122,9 +122,10 @@ DROP TABLE IF EXISTS `pedidos`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `pedidos` (
-  `id` int unsigned NOT NULL COMMENT 'Identificador interno; el Nº de factura (numero/anio) se asigna al pasar a Realizado/Cobrado',
+  `id` int unsigned NOT NULL COMMENT 'Identificador interno; el Nº de factura (numero/anio) se asigna al pasar a Realizado/Cobrado si solicita factura, o al pulsar Factura a posteriori',
   `anio` smallint DEFAULT NULL,
   `numero` int DEFAULT NULL,
+  `fecha_facturacion` date DEFAULT NULL COMMENT 'Solo en facturas generadas a posteriori en pedidos que no la solicitaban',
   `nombre` varchar(120) NOT NULL,
   `telefono` varchar(30) NOT NULL,
   `email` varchar(120) DEFAULT NULL,
@@ -163,7 +164,7 @@ CREATE TABLE `pedidos` (
 
 --
 -- Table structure for table `contador_facturas`
--- anio = 0: ultimo id interno de pedidos; anio = YYYY: ultimo Nº de factura de ese año (asignado al pasar a Realizado/Cobrado)
+-- anio = 0: ultimo id interno de pedidos; anio = YYYY: ultimo Nº de factura de ese año (asignado al pasar a Realizado/Cobrado si solicita factura)
 --
 
 DROP TABLE IF EXISTS `contador_facturas`;
@@ -183,7 +184,7 @@ LOCK TABLES `pedidos` WRITE;
 INSERT INTO `pedidos` (id, nombre, telefono, email, cp, direccion, ciudad, provincia, nif, solicita_factura, personas, churros_por_persona, chocolates, fecha, hora, requiere_envio, direccion_entrega, metodo_pago, comentarios, presupuesto_total, created_at, estado, precio_churro, precio_chocolate, precio_envio, descuento) VALUES (12,'Juan','600000000',NULL,NULL,NULL,NULL,NULL,'98561',0,11,6,70,'2026-05-31','18:00:00',1,NULL,'transferencia',NULL,146.50,'2026-06-03 11:33:03','Cobrado',0.25,1.50,25.00,0.00),(20,'San salvador','600456321','sansalvadorgmail.com',NULL,NULL,NULL,NULL,NULL,0,100,12,100,'2026-06-12','10:00:00',0,NULL,'local','no',450.00,'2026-06-03 16:03:55','Cobrado',0.25,1.50,25.00,0.00),(24,'Test','600000000',NULL,NULL,NULL,NULL,NULL,NULL,0,100,6,0,'2026-06-20','10:00:00',0,NULL,'local',NULL,150.00,'2026-06-05 11:00:57','Cobrado',0.25,1.50,25.00,0.00),(28,'kikoyu','600323636',NULL,NULL,NULL,NULL,NULL,NULL,0,100,4,100,'2026-07-18','18:45:00',0,NULL,'local',NULL,250.00,'2026-07-16 10:40:01','Realizado',0.25,1.50,25.00,0.00),(29,'bueni','600322369',NULL,NULL,NULL,NULL,NULL,NULL,0,80,6,80,'2026-07-30','18:53:00',0,NULL,'transferencia',NULL,240.00,'2026-07-16 10:43:09','Cobrado',0.25,1.50,25.00,0.00),(32,'Loli carabolo','600235419',NULL,NULL,NULL,NULL,NULL,NULL,0,100,4,100,'2026-07-26','14:50:00',1,'calle el salto nº3 gijon','entrega',NULL,275.00,'2026-07-22 11:51:02','Pendiente',0.25,1.50,25.00,0.00),(33,'curas residencia','698741235',NULL,NULL,NULL,NULL,NULL,NULL,0,75,4,75,'2026-07-26','08:00:00',1,'curas street 67','transferencia',NULL,175.00,'2026-07-22 13:10:08','Pendiente',0.25,1.50,25.00,0.00),(44,'curas residencia','698741235',NULL,NULL,NULL,NULL,NULL,NULL,0,75,6,75,'2026-08-02','08:00:00',1,'curas street 67','transferencia',NULL,200.00,'2026-07-30 16:30:50','Realizado',0.25,1.50,25.00,50.00),(45,'precionuevo1','654789321',NULL,NULL,NULL,NULL,NULL,NULL,0,100,4,100,'2026-08-29','08:00:00',1,'calle el salchichon23','transferencia',NULL,350.00,'2026-08-21 16:51:01','Pendiente',NULL,NULL,NULL,0.00),(46,'precionuevo2','987456321',NULL,NULL,NULL,NULL,NULL,NULL,0,100,4,100,'2026-08-26','14:00:00',1,'calle riudd 21','transferencia',NULL,275.00,'2026-08-21 17:05:06','Pendiente',0.25,1.50,25.00,0.00),(47,'precionuevo3','789654123',NULL,NULL,NULL,NULL,NULL,NULL,0,100,4,100,'2026-08-22','23:00:00',1,'calel el jik 89','transferencia',NULL,350.00,'2026-08-21 17:08:51','Pendiente',0.30,2.00,30.00,0.00),(49,'pruebaDescuento1','698547124',NULL,NULL,NULL,NULL,NULL,NULL,0,100,4,100,'2026-08-26','12:00:00',1,'Calle el melini 23','transferencia',NULL,200.00,'2026-08-21 18:26:25','Pendiente',0.25,1.50,25.00,75.00),(50,'bueni','600322369',NULL,NULL,NULL,NULL,NULL,NULL,0,80,6,80,'2026-09-01','18:53:00',0,NULL,'transferencia',NULL,480.00,'2026-08-21 18:53:50','Pendiente',0.50,3.00,30.00,0.00);
 /*!40000 ALTER TABLE `pedidos` ENABLE KEYS */;
 UNLOCK TABLES;
-UPDATE `pedidos` p JOIN (SELECT id, YEAR(fecha) AS a, ROW_NUMBER() OVER (PARTITION BY YEAR(fecha) ORDER BY fecha, hora, id) AS n FROM `pedidos` WHERE estado IN ('Realizado','Cobrado')) t ON t.id = p.id SET p.anio = t.a, p.numero = t.n;
+UPDATE `pedidos` p JOIN (SELECT id, YEAR(fecha) AS a, ROW_NUMBER() OVER (PARTITION BY YEAR(fecha) ORDER BY fecha, hora, id) AS n FROM `pedidos` WHERE solicita_factura = 1 AND estado IN ('Realizado','Cobrado')) t ON t.id = p.id SET p.anio = t.a, p.numero = t.n;
 
 --
 -- Table structure for table `precios`
